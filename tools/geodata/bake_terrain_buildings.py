@@ -10,7 +10,7 @@ Inputs
   MDT5 tif   IGN 5 m elevation model (fills what the LiDAR tiles do not cover)
 
 Writes
-  public/maps/villarcayo.terrain.bin   Int16 heights (cm, relative to the plaza) on a 2 m grid
+  public/maps/villarcayo.terrain.png   16-bit heights (cm, relative to the plaza) on a 2 m grid, see heightpng.py
   map JSON                             + meta.terrain, building ground/eave/top heights
                                        (LiDAR), buildings missing from OSM, river surface levels
 
@@ -25,6 +25,8 @@ import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
 from skimage import measure
+
+from heightpng import write_height_png
 
 TERRAIN_CELL = 2  # m, runtime heightmap resolution
 MIN_ROOF_CELLS = 4
@@ -275,7 +277,7 @@ def carve_water(m, dtm, H0):
         sub[mask] = np.minimum(sub[mask], (level - 0.2 - depth)[mask])
 
 
-def write_terrain(m, dtm, H0, out_bin):
+def write_terrain(m, dtm, H0, out_png):
     minX, minZ, W, H = game_grid(m)
     s = TERRAIN_CELL
     cols, rows = W // s + 1, H // s + 1
@@ -285,10 +287,10 @@ def write_terrain(m, dtm, H0, out_bin):
     rr = np.clip(np.arange(rows) * s, 0, H - 1)
     cc = np.clip(np.arange(cols) * s, 0, W - 1)
     grid = sm[np.ix_(rr, cc)] - H0
-    q = np.clip(np.round(grid * 100), -32768, 32767).astype("<i2")
-    q.tofile(out_bin)
+    q = np.clip(np.round(grid * 100), -32768, 32767).astype(np.int16)
+    write_height_png(q, out_png)
     m["meta"]["terrain"] = {
-        "file": os.path.basename(out_bin),
+        "file": os.path.basename(out_png),
         "cols": int(cols),
         "rows": int(rows),
         "cell": s,
@@ -296,7 +298,7 @@ def write_terrain(m, dtm, H0, out_bin):
         "minZ": minZ,
         "scale": 0.01,
         "datum": round(float(H0), 2),
-        "note": "Int16 little-endian, row-major (z rows, x columns); height = value * scale; absolute = height + datum (m, orthometric)",
+        "note": "16-bit PNG: value = R*256 + G - 32768, row-major (z rows, x columns); height = value * scale; absolute = height + datum (m, orthometric)",
     }
     return grid
 
@@ -319,8 +321,8 @@ def main(map_path, lidar_path, mdt_path):
     trees = lidar_trees(m, dtm, H0)
     river_levels(m, dtm, H0)
     carve_water(m, dtm, H0)
-    out_bin = os.path.join(os.path.dirname(map_path), os.path.splitext(os.path.basename(map_path))[0] + ".terrain.bin")
-    grid = write_terrain(m, dtm, H0, out_bin)
+    out_png = os.path.join(os.path.dirname(map_path), os.path.splitext(os.path.basename(map_path))[0] + ".terrain.png")
+    grid = write_terrain(m, dtm, H0, out_png)
     m["meta"]["sources"] = [
         "OpenStreetMap contributors (ODbL 1.0)",
         "PNOA-LiDAR 2025 © Instituto Geográfico Nacional / Junta de Castilla y León (CC BY 4.0)",

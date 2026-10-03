@@ -180,36 +180,53 @@ export function parseMap(raw: unknown, source = 'map'): MapData {
   return m as MapData;
 }
 
-/** Decodes the Int16 heightmap (cm) that tools/geodata writes next to the map. */
-export function decodeHeights(map: MapData, buffer: ArrayBuffer): Float32Array {
-  const t = map.meta.terrain;
-  if (!t) throw new Error('map has no meta.terrain');
-  const raw = new Int16Array(buffer);
-  if (raw.length !== t.cols * t.rows) throw new Error(`${t.file}: expected ${t.cols * t.rows} samples, got ${raw.length}`);
-  const out = new Float32Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw[i] * t.scale;
+/**
+ * Decodes a 16-bit heightmap image (tools/geodata/heightpng.py): RGBA pixels,
+ * value = R * 256 + G - 32768, row-major (z rows of x columns).
+ */
+export function decodeHeightPixels(rgba: ArrayLike<number>, cols: number, rows: number, scale: number, name: string): Float32Array {
+  if (rgba.length !== cols * rows * 4) throw new Error(`${name}: expected ${cols}×${rows} pixels, got ${rgba.length / 4}`);
+  const out = new Float32Array(cols * rows);
+  for (let i = 0; i < out.length; i++) out[i] = (rgba[i * 4] * 256 + rgba[i * 4 + 1] - 32768) * scale;
   return out;
 }
 
-/** Fetches and validates a map file served from public/maps/, with its heightmap. */
+/** Decodes the map heightmap (cm on the meta.terrain grid). */
+export function decodeHeights(map: MapData, rgba: ArrayLike<number>): Float32Array {
+  const t = map.meta.terrain;
+  if (!t) throw new Error('map has no meta.terrain');
+  return decodeHeightPixels(rgba, t.cols, t.rows, t.scale, t.file);
+}
+
+/** Fetches a heightmap PNG and returns its exact RGBA bytes (no colour management, no premultiplication). */
+async function fetchPixels(url: string): Promise<Uint8ClampedArray> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const bmp = await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+  const canvas = document.createElement('canvas');
+  canvas.width = bmp.width;
+  canvas.height = bmp.height;
+  const g = canvas.getContext('2d', { willReadFrequently: true });
+  if (!g) throw new Error(`${url}: no 2D canvas to decode the heightmap`);
+  g.drawImage(bmp, 0, 0);
+  bmp.close();
+  return g.getImageData(0, 0, canvas.width, canvas.height).data;
+}
+
+/** Fetches and validates a map file served from public/maps/, with its heightmaps. */
 export async function loadMap(url: string): Promise<MapData> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   const map = parseMap(await res.json(), url);
   map.baseUrl = new URL('.', new URL(url, location.href)).href;
-  if (map.meta.terrain) {
-    const hurl = new URL(map.meta.terrain.file, new URL(url, location.href)).href;
-    const hr = await fetch(hurl);
-    if (!hr.ok) throw new Error(`${hurl}: HTTP ${hr.status}`);
-    map.heights = decodeHeights(map, await hr.arrayBuffer());
-  }
+  const t = map.meta.terrain;
   const s = map.meta.surroundings;
-  if (s) {
-    const sr = await fetch(new URL(s.file, map.baseUrl).href);
-    if (sr.ok) {
-      const raw = new Int16Array(await sr.arrayBuffer());
-      map.surroundings = Float32Array.from(raw, (v) => v * s.scale);
-    }
-  }
+  const [heights, far] = await Promise.all([
+    t ? fetchPixels(new URL(t.file, map.baseUrl).href) : null,
+    // The horizon is optional: without it the game falls back to a stylised backdrop.
+    s ? fetchPixels(new URL(s.file, map.baseUrl).href).catch(() => null) : null,
+  ]);
+  if (heights) map.heights = decodeHeights(map, heights);
+  if (s && far) map.surroundings = decodeHeightPixels(far, s.cols, s.rows, s.scale, s.file);
   return map;
 }

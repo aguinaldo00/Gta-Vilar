@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { decodeHeights, type MapData, parseMap } from '@/world/mapData';
+import { decodeHeightPixels, decodeHeights, type MapData, parseMap } from '@/world/mapData';
 import { TerrainModel } from '@/world/Terrain';
+import { readPng } from './png';
+
+/** Encodes heights (integer units) the way tools/geodata/heightpng.py does. */
+const rgba = (values: number[]) => new Uint8Array(values.flatMap((v) => [(v + 32768) >> 8, (v + 32768) & 255, 0, 255]));
 
 /** Minimal map: 3x3 height grid (2 m cells) rising 1 m per column, a river and a bridge. */
 function tinyMap(): MapData {
@@ -32,11 +36,17 @@ function tinyMap(): MapData {
     roads: [{ p: [0, 2, 4, 2], k: 'residential', w: 4, b: 1 }],
     rivers: [{ p: [0, 0, 4, 0], w: 2, wl: [-1, -2] }],
   } as unknown as MapData;
-  m.heights = decodeHeights(m, new Int16Array([0, 100, 200, 0, 100, 200, 0, 100, 200]).buffer);
+  m.heights = decodeHeights(m, rgba([0, 100, 200, 0, 100, 200, 0, 100, 200]));
   return m;
 }
 
 describe('TerrainModel on a heightmap', () => {
+  it('decodes negative and positive 16-bit heights exactly', () => {
+    const h = decodeHeightPixels(rgba([-32768, -1, 0, 1, 32767]), 5, 1, 0.01, 't');
+    expect(Array.from(h, (v) => Math.round(v * 100))).toEqual([-32768, -1, 0, 1, 32767]);
+    expect(() => decodeHeightPixels(rgba([0, 1]), 3, 1, 1, 't')).toThrow(/expected 3×1/);
+  });
+
   it('samples the ground bilinearly', () => {
     const t = new TerrainModel(tinyMap());
     expect(t.ground(0, 1)).toBeCloseTo(0);
@@ -56,8 +66,7 @@ describe('TerrainModel on a heightmap', () => {
 
   it('decodes the shipped heightmap: the plaza is the datum, the relief is real', () => {
     const map = parseMap(JSON.parse(readFileSync('public/maps/villarcayo.json', 'utf8')));
-    const buf = readFileSync('public/maps/villarcayo.terrain.bin');
-    map.heights = decodeHeights(map, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+    map.heights = decodeHeights(map, readPng(`public/maps/${map.meta.terrain?.file}`).rgba);
     const t = new TerrainModel(map);
     expect(Math.abs(t.ground(0, 0))).toBeLessThan(1);
     let lo = Infinity,

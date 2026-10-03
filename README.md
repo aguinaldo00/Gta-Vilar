@@ -43,7 +43,7 @@ The data pipeline runs in two steps. The browser never parses OSM.
 3. **`tools/geodata/`** (Python: laspy, numpy, scipy, scikit-image, pillow) bakes the IGN data into the same map. `bake_all.sh` runs every step; the raw downloads stay in `raw/`, which is not committed.
    - `lidar_rasters.py`: the **PNOA-LiDAR 2025** classified point clouds (LAZ, 1 km tiles around the town) → 1 m rasters: bare ground (class 2), surface, building roofs (class 6) and vegetation (class 5).
    - `bake_terrain_buildings.py`:
-     - ground model: LiDAR blended over a 25 m feather into the **MDT05** where there is no point cloud → `public/maps/villarcayo.terrain.bin` (Int16 cm, 2 m grid)
+     - ground model: LiDAR blended over a 25 m feather into the **MDT05** where there is no point cloud → `public/maps/villarcayo.terrain.png` (2 m grid, 16-bit heights in cm stored losslessly in the red and green channels, see `tools/geodata/heightpng.py`)
      - every OSM building measured from its roof points (ground level, eave height, ridge height)
      - buildings that exist in the LiDAR but not in OSM traced from the roof raster (202 added)
      - 10,452 tree crowns detected in the canopy model, with their height and radius
@@ -118,8 +118,8 @@ The game is split so that gameplay never depends on a concrete engine or on hard
 ```
 public/
 ├── config/                  game.json · vehicles.json · quality.json · input.json (runtime data)
-└── maps/                    villarcayo.json (OSM + LiDAR measurements), villarcayo.terrain.bin (heightmap),
-                             ortho/ (orthophoto tiles), surroundings.bin/.jpg (MDT25 horizon), fetched at boot
+└── maps/                    villarcayo.json (OSM + LiDAR measurements), villarcayo.terrain.png (heightmap),
+                             ortho/ (orthophoto tiles), surroundings.heights.png/.jpg (MDT25 horizon), fetched at boot
 tools/geodata/               Python bake of the IGN data (LiDAR, MDT, orthophoto) into public/maps
 src/
 ├── main.ts                  Boot: loads config + map + Rapier, then builds the Game

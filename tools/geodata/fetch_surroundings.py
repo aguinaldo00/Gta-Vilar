@@ -4,8 +4,8 @@ on the horizon) from IGN services: MDT 25 m (WCS) and the PNOA orthophoto (WMS).
 
     python3 tools/geodata/fetch_surroundings.py public/maps/villarcayo.json
 
-Writes public/maps/surroundings.bin (Int16, decimetres relative to the map
-datum, row-major z rows x columns) and surroundings.jpg, plus meta.surroundings.
+Writes public/maps/surroundings.heights.png (16-bit heights in decimetres
+relative to the map datum, row-major z rows x columns, see heightpng.py) and surroundings.jpg, plus meta.surroundings.
 """
 
 import io
@@ -17,6 +17,8 @@ import urllib.request
 import numpy as np
 from PIL import Image
 from scipy import ndimage
+
+from heightpng import write_height_png
 
 HALF = 12000  # m around the origin
 DEM_CELL = 25
@@ -44,16 +46,16 @@ def main(map_path):
     s = scale[0]
     minX = tie[3] + s / 2 - E0
     minZ = N0 - (tie[4] - s / 2)
-    q = np.clip(np.round((a - datum) * 10), -32768, 32767).astype("<i2")
+    q = np.clip(np.round((a - datum) * 10), -32768, 32767).astype(np.int16)
     out_dir = os.path.dirname(map_path)
-    q.tofile(os.path.join(out_dir, "surroundings.bin"))
+    write_height_png(q, os.path.join(out_dir, "surroundings.heights.png"))
     img = get(
         "https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage"
         f"&STYLES=&CRS=EPSG:25830&BBOX={e0},{n0},{e1},{n1}&WIDTH={IMG_PX}&HEIGHT={IMG_PX}&FORMAT=image/jpeg"
     )
     Image.open(io.BytesIO(img)).convert("RGB").save(os.path.join(out_dir, "surroundings.jpg"), quality=82)
     m["meta"]["surroundings"] = {
-        "file": "surroundings.bin",
+        "file": "surroundings.heights.png",
         "image": "surroundings.jpg",
         "cols": int(a.shape[1]),
         "rows": int(a.shape[0]),
