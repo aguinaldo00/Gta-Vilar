@@ -9,6 +9,7 @@ import type { VehicleKind } from './entities/vehicleSpecs';
 import { clamp } from './core/math';
 import { CollisionWorld, type Contact, Layer } from './physics/CollisionWorld';
 import { HUD } from './ui/HUD';
+import { Pipeline } from './render/Pipeline';
 import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
 import { type Quality, World } from './world/World';
@@ -70,26 +71,30 @@ export class Game {
   private time = 0;
   private jumpQueued = false;
   private running = false;
+  readonly quality: Quality;
+  readonly pipeline: Pipeline;
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const isTouch = TouchControls.supported();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.25 : 1.5));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 0.65;
     container.appendChild(this.renderer.domElement);
 
     this.input = new Input(this.renderer.domElement);
     this.touch = isTouch ? new TouchControls(this.input) : null;
     // Draw distance is the main performance knob: phones see less far.
     const quality: Quality = isTouch
-      ? { groundTexture: 2048, fogNear: 100, fogFar: 380, shadowMapSize: 1024, treeShadows: false }
-      : { groundTexture: 4096, fogNear: 160, fogFar: 560, shadowMapSize: 2048, treeShadows: true };
+      ? { groundTexture: 2048, fogDensity: 0.003, drawDistance: 420, shadowMapSize: 1024, treeShadows: false, grassRadius: 24, grassSpacing: 0.8, treeBudget: 1800, postFX: false }
+      : { groundTexture: 4096, fogDensity: 0.0019, drawDistance: 620, shadowMapSize: 4096, treeShadows: true, grassRadius: 40, grassSpacing: 0.5, treeBudget: 4200, postFX: true };
     quality.groundTexture = Math.min(quality.groundTexture, this.renderer.capabilities.maxTextureSize);
-    this.camera = new THREE.PerspectiveCamera(62, 1, 0.25, quality.fogFar + 40);
-    this.world = new World(this.scene, this.collision, quality);
+    this.quality = quality;
+    this.camera = new THREE.PerspectiveCamera(62, 1, 0.25, quality.drawDistance);
+    this.world = new World(this.scene, this.renderer, this.collision, quality);
+    this.pipeline = new Pipeline(this.renderer, this.scene, this.camera, this.world.env, quality.postFX);
     this.skids = new SkidMarks(this.scene);
     this.followCam = new FollowCamera(this.camera);
     this.minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement);
@@ -139,6 +144,7 @@ export class Game {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
+    this.pipeline.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -149,7 +155,7 @@ export class Game {
     const dt = this.last < 0 ? FIXED_STEP : Math.min(0.1, now - this.last);
     this.last = now;
     this.update(dt, now);
-    this.renderer.render(this.scene, this.camera);
+    this.pipeline.render();
   };
 
   /** Advances the simulation by `dt` seconds (also used by automated tests). */

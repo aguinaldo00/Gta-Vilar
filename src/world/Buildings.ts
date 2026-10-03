@@ -15,6 +15,7 @@ const MODERN_TINTS = ['#e9e6df', '#cfc8bb', '#d8cdb8', '#bfb6a6'].map((c) => new
 const STONE_TINT = new THREE.Color('#d8c49c');
 const WHITE = new THREE.Color('#ffffff');
 const FLAT_ROOF = new THREE.Color('#8f8a84');
+const TERRACE = new THREE.Color('#b3a998');
 const INDUSTRIAL_TINTS = ['#e4e6e1', '#d8d4c8', '#c9d0d4', '#e8e0cf'].map((c) => new THREE.Color(c));
 
 /** Height in metres from OSM tags, with sensible defaults per building type. */
@@ -83,15 +84,22 @@ function oriented(r: Pt[], hole: boolean): Pt[] {
   return ccw !== hole ? r : r.slice().reverse();
 }
 
-function walls(m: Mesh3, ring: Pt[], h: number, color: THREE.Color, tileU: number, tileV: number): void {
+/** Edge i (vertex i → i+1) of a ring becomes edge n-2-i once the ring is reversed. */
+function remapEdges(edges: number[] | undefined, n: number, reversed: boolean): Set<number> {
+  return new Set((edges ?? []).map((i) => (reversed ? (n - 2 - i + n) % n : i)));
+}
+
+function walls(m: Mesh3, ring: Pt[], y0: number, y1: number, color: THREE.Color, tileU: number, tileV: number, hidden?: Set<number>): void {
   let u = 0;
   for (let i = 0; i < ring.length; i++) {
     const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
     const len = Math.hypot(bx - ax, bz - az);
     if (len < 0.05) continue;
-    const n = [(bz - az) / len, 0, -(bx - ax) / len];
-    const u0 = u / tileU, u1 = (u + len) / tileU, v1 = h / tileV;
-    m.quad([ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], [u0, 0], [u1, 0], [u1, v1], [u0, v1], n, color);
+    if (!hidden?.has(i)) {
+      const n = [(bz - az) / len, 0, -(bx - ax) / len];
+      const u0 = u / tileU, u1 = (u + len) / tileU, v0 = y0 / tileV, v1 = y1 / tileV;
+      m.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], [u0, v0], [u1, v0], [u1, v1], [u0, v1], n, color);
+    }
     u += len;
   }
 }
@@ -203,17 +211,27 @@ export function buildBuildings(ctx: BuildContext): void {
   let idx = 0;
   for (const b of MAP.buildings) {
     idx++;
-    if (CUSTOM.has(b.t)) continue;
-    const outer = oriented(toPts(b.o), false);
+    // Landmarks get their own models; outlines described by parts are drawn through their parts.
+    if (CUSTOM.has(b.t) || b.hp) continue;
+    const raw = toPts(b.o);
+    const reversed = signedArea(raw) <= 0;
+    const outer = oriented(raw, false);
+    const hidden = remapEdges(b.hid, outer.length, reversed);
     const holes = (b.h ?? []).map((h) => oriented(toPts(h), true));
     const [cx, cz] = centroid(outer);
     const distC = Math.hypot(cx, cz);
-    const h = buildingHeight(b, distC);
+    const y0 = (b.mlv ?? 0) * FLOOR_H;
+    const h = y0 + buildingHeight(b, distC);
     const area = signedArea(outer);
     const rnd = hash01(idx);
 
+    if (b.t === 'canopy') {
+      canopy(ctx, outer, h > 6 ? 3.2 : h);
+      continue;
+    }
     const industrial = b.t === 'industrial';
-    const church = b.t === 'church' || b.mat === 'stone' || b.t === 'station';
+    const ruins = b.t === 'ruins';
+    const church = b.t === 'church' || b.mat === 'stone' || b.t === 'station' || ruins;
     const wallsMesh = new Mesh3();
     const roofMesh = new Mesh3();
     let tint: THREE.Color;
@@ -221,29 +239,39 @@ export function buildBuildings(ctx: BuildContext): void {
     else if (b.t === 'block' || distC > 650) tint = MODERN_TINTS[Math.floor(rnd * MODERN_TINTS.length)];
     else tint = FACADE_TINTS[Math.floor(rnd * FACADE_TINTS.length)];
     if (b.t === 'station') tint = new THREE.Color('#d8b98a');
-
     if (industrial) tint = INDUSTRIAL_TINTS[Math.floor(rnd * INDUSTRIAL_TINTS.length)];
-    for (const ring of [outer, ...holes]) walls(wallsMesh, ring, h, tint, industrial ? 2 : 3.4, industrial ? 2 : FLOOR_H);
+    const top = ruins ? y0 + Math.min(h - y0, 3.5) : h;
 
-    if (industrial || b.t === 'block' && area > 600) {
-      for (const [p, q, s] of triangulate(outer, holes)) {
-        const A = [p[0], h, p[1]], B = [q[0], h, q[1]], C = [s[0], h, s[1]];
-        roofMesh.tri(A, B, C, [A[0] / 2, -A[2] / 2], [B[0] / 2, -B[2] / 2], [C[0] / 2, -C[2] / 2], [0, 1, 0], FLAT_ROOF);
-      }
-    } else if (isConvexQuad(outer) && !holes.length && area < 900) {
-      const short = Math.min(...[0, 1, 2, 3].map((i) => Math.hypot(outer[(i + 1) % 4][0] - outer[i][0], outer[(i + 1) % 4][1] - outer[i][1])));
-      hipRoof(roofMesh, outer, h, Math.min(4.5, short * 0.32), WHITE);
-    } else {
-      skirtRoof(roofMesh, outer, holes, h, WHITE, b.t === 'small' ? FLAT_ROOF : WHITE);
+    for (const [k, ring] of [outer, ...holes].entries()) {
+      walls(wallsMesh, ring, y0, top, tint, industrial ? 2 : 3.4, industrial ? 2 : FLOOR_H, k === 0 ? hidden : undefined);
     }
 
-    batch.addWorld(wallsMesh.geometry(), industrial ? mats.corrugatedVC : church ? mats.stoneVC : mats.facadeVC);
+    // Roofs. Low annexes (one storey, small) get flat terraces, like the patios and garages of the old town.
+    const lowAnnex = b.part && (b.lv ?? 1) <= 1 && area < 140;
+    if (ruins) {
+      // Roofless.
+    } else if (b.t === 'greenhouse') {
+      flatRoof(roofMesh, outer, holes, top, new THREE.Color('#cfe0e4'));
+    } else if (industrial || (b.t === 'block' && area > 600) || lowAnnex) {
+      flatRoof(roofMesh, outer, holes, top, lowAnnex ? TERRACE : FLAT_ROOF);
+    } else if (isConvexQuad(outer) && !holes.length && area < 900) {
+      const short = Math.min(...[0, 1, 2, 3].map((i) => Math.hypot(outer[(i + 1) % 4][0] - outer[i][0], outer[(i + 1) % 4][1] - outer[i][1])));
+      // A small overhang (alero) beyond the walls, as on the real houses.
+      const eave = inset(outer, -0.35) ?? outer;
+      hipRoof(roofMesh, eave, top - 0.05, Math.min(4.5, short * 0.32), WHITE);
+    } else {
+      skirtRoof(roofMesh, outer, holes, top, WHITE, b.t === 'small' ? FLAT_ROOF : WHITE);
+    }
+
+    const wallMat = b.t === 'greenhouse' ? mats.galeria : industrial ? mats.corrugatedVC : church ? mats.stoneVC : mats.facadeVC;
+    batch.addWorld(wallsMesh.geometry(), wallMat);
     if (!roofMesh.empty) batch.addWorld(roofMesh.geometry(), industrial ? mats.corrugatedVC : mats.roofVC);
 
     // White glazed galería on the street-facing side of old-town houses (as in the plaza photos).
-    if (!church && !industrial && distC < OLD_TOWN_RADIUS && h > 2 * FLOOR_H && rnd < 0.5) {
+    if (!church && !industrial && distC < OLD_TOWN_RADIUS && h - y0 > 2 * FLOOR_H && y0 === 0 && rnd < 0.5) {
       let best: { i: number; len: number } | null = null;
       for (let i = 0; i < outer.length; i++) {
+        if (hidden.has(i)) continue;
         const [ax, az] = outer[i], [bx, bz] = outer[(i + 1) % outer.length];
         const len = Math.hypot(bx - ax, bz - az);
         if (len < 5) continue;
@@ -270,19 +298,37 @@ export function buildBuildings(ctx: BuildContext): void {
       }
     }
 
-    // Collision: one thin box per wall, set just inside the footprint.
-    const top = h + 2;
-    for (const ring of [outer, ...holes]) {
+    // Collision: one thin box per visible wall, set just inside the footprint.
+    for (const [k, ring] of [outer, ...holes].entries()) {
       for (let i = 0; i < ring.length; i++) {
+        if (k === 0 && hidden.has(i)) continue;
         const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
         const len = Math.hypot(bx - ax, bz - az);
         if (len < 0.2) continue;
         const nx = (bz - az) / len, nz = -(bx - ax) / len; // outward
         const t = 0.5;
         collision.addBox((ax + bx) / 2 - nx * (t / 2), (az + bz) / 2 - nz * (t / 2), len + 0.15, t, {
-          rot: Math.atan2(-(bz - az), bx - ax), top, mask: Layer.Solid,
+          rot: Math.atan2(-(bz - az), bx - ax), bottom: y0, top: top + 2, mask: Layer.Solid,
         });
       }
     }
+  }
+}
+
+function flatRoof(m: Mesh3, outer: Pt[], holes: Pt[][], h: number, color: THREE.Color): void {
+  for (const [p, q, s] of triangulate(outer, holes)) {
+    const A = [p[0], h, p[1]], B = [q[0], h, q[1]], C = [s[0], h, s[1]];
+    m.tri(A, B, C, [A[0] / 2, -A[2] / 2], [B[0] / 2, -B[2] / 2], [C[0] / 2, -C[2] / 2], [0, 1, 0], color);
+  }
+}
+
+/** Open shelter (building=roof): a slab on posts at the corners. */
+function canopy(ctx: BuildContext, ring: Pt[], h: number): void {
+  const roof = new Mesh3();
+  flatRoof(roof, ring, [], h, new THREE.Color('#9a958c'));
+  ctx.batch.addWorld(roof.geometry(), ctx.mats.roofVC);
+  for (const [x, z] of ring) {
+    ctx.batch.add(new THREE.BoxGeometry(0.25, h, 0.25), ctx.mats.iron, x, h / 2, z);
+    ctx.collision.addCircle(x, z, 0.2, { top: h, mask: Layer.Solid });
   }
 }

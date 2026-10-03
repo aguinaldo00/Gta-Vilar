@@ -15,6 +15,14 @@ export const Unit = {
   sphere: new THREE.SphereGeometry(0.5, 10, 8),
 };
 
+/** Unit leaf card mapped onto the leaf region of the tree atlas. */
+const LEAF_CARD = (() => {
+  const g = new THREE.PlaneGeometry(1, 1);
+  const uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * 0.75);
+  return g;
+})();
+
 /** Pollarded plane tree ("plátano") — knobbly trunk with short sprouting branches. */
 export function planeTree(ctx: BuildContext, x: number, z: number, y0: number): void {
   const { batch, mats, rng } = ctx;
@@ -31,8 +39,11 @@ export function planeTree(ctx: BuildContext, x: number, z: number, y0: number): 
     const ez = sz + Math.cos(a) * Math.sin(tilt) * len;
     batch.addMatrix(Unit.cyl, mats.bark, beamMatrix(sx, sy, sz, ex, ey, ez, 0.26));
     batch.add(Unit.blob, mats.bark, ex, ey, ez, 0, 0.2, 0.2, 0.2);
-    const s = rng.range(0.55, 0.85);
-    batch.add(Unit.blob, mats.springLeaf, ex, ey + s * 0.5, ez, rng.range(0, 3), s, s * 0.8, s);
+    // Sprouting foliage: a few crossed leaf cards at each knob.
+    for (let k = 0; k < 3; k++) {
+      const s = rng.range(1.1, 1.6);
+      batch.add(LEAF_CARD, mats.leaves, ex + rng.range(-0.3, 0.3), ey + 0.45 + rng.range(-0.2, 0.3), ez + rng.range(-0.3, 0.3), rng.range(0, Math.PI), s, s, s, rng.range(-0.5, 0.5));
+    }
   }
   ctx.collision.addCircle(x, z, 0.35, { top: y0 + h, mask: Layer.Bodies });
 }
@@ -52,7 +63,7 @@ export function bench(ctx: BuildContext, x: number, z: number, y0: number, rotY:
 export function signBoard(
   ctx: BuildContext, tex: THREE.Texture, x: number, z: number, y0: number, rotY: number, w = 3.4, h = 0.65, postH = 1.6,
 ): void {
-  const mat = new THREE.MeshLambertMaterial({ map: tex });
+  const mat = new THREE.MeshStandardMaterial({ map: tex });
   const board = new THREE.Mesh(boxGeo(w, h, 0.08), mat);
   board.position.set(x, y0 + postH + h / 2, z);
   board.rotation.y = rotY;
@@ -82,7 +93,7 @@ export function flag(
   const fw = 1.5, fh = 1.0;
   const geo = new THREE.PlaneGeometry(fw, fh, 12, 6);
   geo.translate(fw / 2, 0, 0);
-  const mat = new THREE.MeshLambertMaterial({ map: flagTexture(kind), side: THREE.DoubleSide });
+  const mat = new THREE.MeshStandardMaterial({ map: flagTexture(kind), side: THREE.DoubleSide });
   const cloth = new THREE.Mesh(geo, mat);
   cloth.position.set(0.04, poleH - fh / 2 - 0.05, 0);
   group.add(cloth);

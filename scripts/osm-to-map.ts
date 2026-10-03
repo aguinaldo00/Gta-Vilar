@@ -303,7 +303,21 @@ for (const r of rels.values()) {
 
 // ---------------------------------------------------------------- buildings
 
-interface BuildingOut { o: number[]; h?: number[][]; lv?: number; ht?: number; t: string; n?: string; mat?: string }
+/**
+ * Buildings come in two flavours in Villarcayo's OSM data:
+ * - outlines (building=*), often without levels;
+ * - parts (building:part=*, from the Spanish cadastre) that split an outline
+ *   into bodies with their own building:levels (Simple 3D Buildings).
+ * When an outline has parts, the game renders the parts and uses the outline
+ * only for the map (`hp`). Part walls shared with an equal or taller part are
+ * listed in `hid` so the game does not build invisible walls.
+ */
+interface BuildingOut {
+  o: number[]; h?: number[][]; lv?: number; mlv?: number; ht?: number; t: string; n?: string; mat?: string;
+  /** Outline whose volume is described by parts. */ hp?: 1;
+  /** This is a part. */ part?: 1;
+  /** Hidden wall indices (edge i joins vertex i and i+1). */ hid?: number[];
+}
 const buildings: BuildingOut[] = [];
 const buildingCentroids: Pt[] = [];
 
@@ -313,14 +327,23 @@ function buildingType(t: Tags): string {
   const b = t.building;
   if (t.name === 'Torre del Corregimiento') return 'torre';
   if (t['historic'] === 'railway_station' || t['disused:railway'] === 'station') return 'station';
-  if (b === 'church' || b === 'chapel' || b === 'cathedral') return 'church';
-  if (['industrial', 'warehouse', 'factory', 'manufacture', 'barn', 'farm_auxiliary', 'hangar', 'storage_tank'].includes(b)) return 'industrial';
-  if (['garage', 'garages', 'shed', 'roof', 'carport', 'hut', 'kiosk', 'cabin', 'toilets', 'service', 'transformer_tower'].includes(b)) return 'small';
+  if (b === 'church' || b === 'chapel' || b === 'cathedral' || b === 'monastery') return 'church';
+  if (b === 'roof' || b === 'carport' || b === 'grandstand' || t.location === 'roof') return 'canopy';
+  if (b === 'ruins') return 'ruins';
+  if (b === 'greenhouse') return 'greenhouse';
+  if (['industrial', 'warehouse', 'factory', 'manufacture', 'barn', 'farm_auxiliary', 'hangar', 'storage_tank', 'silo', 'livestock', 'farm'].includes(b)) return 'industrial';
+  if (['garage', 'garages', 'shed', 'hut', 'kiosk', 'cabin', 'toilets', 'service', 'transformer_tower'].includes(b)) return 'small';
   if (b === 'tower') return 'tower';
   if (['apartments', 'retail', 'commercial', 'office', 'public', 'government', 'civic', 'school', 'hospital', 'sports_hall', 'supermarket', 'hotel'].includes(b)) return 'block';
   return 'house';
 }
 
+const num = (v: string | undefined) => {
+  const n = parseFloat(v ?? '');
+  return Number.isFinite(n) ? n : undefined;
+};
+
+const outlines: { b: BuildingOut; ring: Ring; bb: [number, number, number, number] }[] = [];
 for (const p of polygons) {
   const t = p.tags;
   if (!t.building || t.building === 'no' || t['building:part'] || t.leisure === 'bandstand') continue;
@@ -335,14 +358,61 @@ for (const p of polygons) {
   if (townhallPt && pointInRing(townhallPt, p.outer)) type = 'townhall';
   const b: BuildingOut = { o: flat(p.outer), t: type };
   if (p.holes.length) b.h = p.holes.map(flat);
-  const lv = parseFloat(t['building:levels']);
-  if (Number.isFinite(lv) && lv > 0) b.lv = lv;
-  const ht = parseFloat(t.height);
-  if (Number.isFinite(ht) && ht > 0) b.ht = ht;
+  const lv = num(t['building:levels']);
+  if (lv && lv > 0) b.lv = lv;
+  const ht = num(t.height);
+  if (ht && ht > 0) b.ht = ht;
   if (t.name) b.n = t.name;
   if (t['building:material']) b.mat = t['building:material'];
   buildings.push(b);
   buildingCentroids.push(centroid(p.outer));
+  const xs = p.outer.map((q) => q[0]), zs = p.outer.map((q) => q[1]);
+  outlines.push({ b, ring: p.outer, bb: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)] });
+}
+
+// Parts: exact cadastral geometry (no simplification) so shared walls can be matched by node id.
+interface PartTmp { out: BuildingOut; ids: string[]; bottom: number; top: number }
+const partsTmp: PartTmp[] = [];
+const CUSTOM_MODELS = new Set(['townhall', 'torre']);
+for (const [, w] of ways) {
+  const t = w.tags;
+  if (!t['building:part'] || t['building:part'] === 'no') continue;
+  if (w.nds.length < 4 || w.nds[0] !== w.nds[w.nds.length - 1]) continue;
+  const ids = w.nds.slice(0, -1);
+  const pts = ids.map(nodePt);
+  if (pts.some((q) => !q) || !(pts as Pt[]).every((q) => inB(q))) continue;
+  const ring = pts as Pt[];
+  if (Math.abs(signedArea(ring)) < 2) continue;
+  const c = centroid(ring);
+  const parent = outlines.find((o) => c[0] >= o.bb[0] && c[0] <= o.bb[2] && c[1] >= o.bb[1] && c[1] <= o.bb[3] && pointInRing(c, o.ring));
+  if (parent && CUSTOM_MODELS.has(parent.b.t)) continue;
+  if (parent) parent.b.hp = 1;
+  const lv = num(t['building:levels']) ?? 1;
+  const mlv = num(t['building:min_level']) ?? 0;
+  const out: BuildingOut = { o: flat(ring), t: parent?.b.t ?? buildingType({ ...t, building: t['building:part'] }), lv, part: 1 };
+  if (mlv > 0) out.mlv = mlv;
+  const ht = num(t.height);
+  if (ht) out.ht = ht;
+  if (parent?.b.mat) out.mat = parent.b.mat;
+  if (parent?.b.n) out.n = parent.b.n;
+  partsTmp.push({ out, ids, bottom: mlv, top: ht ?? mlv + lv });
+}
+const edgeOwners = new Map<string, PartTmp[]>();
+const edgeKey = (a: string, b: string) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+for (const p of partsTmp) {
+  for (let i = 0; i < p.ids.length; i++) {
+    const k = edgeKey(p.ids[i], p.ids[(i + 1) % p.ids.length]);
+    (edgeOwners.get(k) ?? edgeOwners.set(k, []).get(k)!).push(p);
+  }
+}
+for (const p of partsTmp) {
+  const hid: number[] = [];
+  for (let i = 0; i < p.ids.length; i++) {
+    const others = edgeOwners.get(edgeKey(p.ids[i], p.ids[(i + 1) % p.ids.length]))!.filter((q) => q !== p);
+    if (others.some((q) => q.top >= p.top && q.bottom <= p.bottom)) hid.push(i);
+  }
+  if (hid.length) p.out.hid = hid;
+  buildings.push(p.out);
 }
 
 // ---------------------------------------------------------------- areas
@@ -564,6 +634,6 @@ mkdirSync(dirname(OUT), { recursive: true });
 const json = JSON.stringify(out);
 writeFileSync(OUT, json);
 console.log(`origin ${lat0.toFixed(6)}, ${lon0.toFixed(6)}  bounds ${JSON.stringify(B)}`);
-console.log(`buildings ${buildings.length}  areas ${areas.length}  roads ${roads.length}  rails ${rails.length}  rivers ${rivers.length}  streams ${streams.length}  weirs ${weirs.length}`);
+console.log(`buildings ${buildings.length} (parts ${partsTmp.length}, outlines with parts ${outlines.filter((o) => o.b.hp).length})  areas ${areas.length}  roads ${roads.length}  rails ${rails.length}  rivers ${rivers.length}  streams ${streams.length}  weirs ${weirs.length}`);
 console.log(`trees ${trees.length / 2}  lamps ${lamps.length / 2}  benches ${benches.length / 2}  crossings ${crossings.length / 3}  pois ${pois.length}`);
 console.log(`→ ${OUT} (${(json.length / 1024).toFixed(0)} KB)`);

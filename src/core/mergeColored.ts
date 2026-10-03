@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const shared = new Map<string, THREE.MeshLambertMaterial>();
+const shared = new Map<string, THREE.MeshStandardMaterial>();
 
 /** Shared vertex-coloured material (one per transparency setting). */
-function colouredMaterial(opacity: number): THREE.MeshLambertMaterial {
+function colouredMaterial(opacity: number): THREE.MeshStandardMaterial {
   const key = String(opacity);
   let m = shared.get(key);
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: opacity < 1, opacity });
+    m = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: opacity < 1, opacity, roughness: opacity < 1 ? 0.1 : 0.55, metalness: 0.05 });
     shared.set(key, m);
   }
   return m;
@@ -24,7 +24,7 @@ export function mergeColoured(group: THREE.Object3D, keep: (m: THREE.Mesh) => bo
   const parts = group.children.filter((c): c is THREE.Mesh => (c as THREE.Mesh).isMesh && !keep(c as THREE.Mesh));
   const byOpacity = new Map<number, THREE.BufferGeometry[]>();
   for (const mesh of parts) {
-    const mat = mesh.material as THREE.MeshLambertMaterial;
+    const mat = mesh.material as THREE.MeshStandardMaterial;
     mesh.updateMatrix();
     const g = (mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone()).applyMatrix4(mesh.matrix);
     for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);

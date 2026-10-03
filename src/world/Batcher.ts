@@ -63,7 +63,7 @@ export class Batcher {
       g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
       mat = redirect.mat;
     }
-    const wantColor = (mat as THREE.MeshLambertMaterial).vertexColors === true;
+    const wantColor = (mat as THREE.MeshStandardMaterial).vertexColors === true;
     const extra = (mat.userData.attributes as string[] | undefined) ?? [];
     for (const name of Object.keys(g.attributes)) {
       if (name !== 'position' && name !== 'normal' && name !== 'uv' && !(name === 'color' && wantColor) && !extra.includes(name)) g.deleteAttribute(name);
@@ -91,6 +91,7 @@ export class Batcher {
       const mesh = new THREE.Mesh(merged, mat);
       mesh.castShadow = mat.userData.castShadow !== false;
       mesh.receiveShadow = mat.userData.receiveShadow !== false;
+      if (mat.userData.depthMaterial) mesh.customDepthMaterial = mat.userData.depthMaterial;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       parent.add(mesh);

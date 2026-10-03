@@ -7,8 +7,16 @@ export interface MapBuilding {
   o: Coords;
   h?: Coords[];
   lv?: number;
+  /** building:min_level (parts raised above the ground). */
+  mlv?: number;
   ht?: number;
-  t: 'house' | 'block' | 'industrial' | 'small' | 'church' | 'tower' | 'torre' | 'townhall' | 'station';
+  /** Outline whose volume is drawn through its building:parts. */
+  hp?: 1;
+  /** This is a building:part. */
+  part?: 1;
+  /** Hidden wall indices (walls shared with an equal or taller part). */
+  hid?: number[];
+  t: 'house' | 'block' | 'industrial' | 'small' | 'church' | 'tower' | 'torre' | 'townhall' | 'station' | 'canopy' | 'ruins' | 'greenhouse';
   n?: string;
   mat?: string;
 }

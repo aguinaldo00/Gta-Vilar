@@ -20,7 +20,7 @@ export interface VehicleRig {
   /** Everything above the wheels; tilted for body roll / pitch. */
   body: THREE.Group;
   wheels: WheelRig[];
-  brakeMat: THREE.MeshLambertMaterial;
+  brakeMat: THREE.MeshStandardMaterial;
   driver: THREE.Group;
   /** All four wheels in one InstancedMesh; matrices come from the pivots each frame. */
   wheelMesh: THREE.InstancedMesh;
@@ -31,15 +31,15 @@ let shared: Record<'tire' | 'glass' | 'dark' | 'chrome' | 'headlight' | 'plate' 
 function sharedMats() {
   if (!shared) {
     shared = {
-      tire: new THREE.MeshLambertMaterial({ color: '#1c1c1c' }),
-      glass: new THREE.MeshLambertMaterial({ color: '#1f2a36', emissive: '#0d1520', emissiveIntensity: 0.3 }),
-      dark: new THREE.MeshLambertMaterial({ color: '#2a2a2c' }),
-      chrome: new THREE.MeshLambertMaterial({ color: '#c9ccd0' }),
-      headlight: new THREE.MeshLambertMaterial({ color: '#fffbe8', emissive: '#fff2c4', emissiveIntensity: 0.6 }),
-      plate: new THREE.MeshLambertMaterial({ color: '#f4f4f4' }),
-      skin: new THREE.MeshLambertMaterial({ color: '#d9a47e' }),
-      shirt: new THREE.MeshLambertMaterial({ color: '#f1f1ec' }),
-      hair: new THREE.MeshLambertMaterial({ color: '#2b1d14' }),
+      tire: new THREE.MeshStandardMaterial({ color: '#1c1c1c' }),
+      glass: new THREE.MeshStandardMaterial({ color: '#1f2a36', emissive: '#0d1520', emissiveIntensity: 0.3 }),
+      dark: new THREE.MeshStandardMaterial({ color: '#2a2a2c' }),
+      chrome: new THREE.MeshStandardMaterial({ color: '#c9ccd0' }),
+      headlight: new THREE.MeshStandardMaterial({ color: '#fffbe8', emissive: '#fff2c4', emissiveIntensity: 0.6 }),
+      plate: new THREE.MeshStandardMaterial({ color: '#f4f4f4' }),
+      skin: new THREE.MeshStandardMaterial({ color: '#d9a47e' }),
+      shirt: new THREE.MeshStandardMaterial({ color: '#f1f1ec' }),
+      hair: new THREE.MeshStandardMaterial({ color: '#2b1d14' }),
     };
   }
   return shared;
@@ -80,7 +80,7 @@ function unitWheel(rim: THREE.Color): THREE.BufferGeometry {
   ])!;
 }
 
-const wheelMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+const wheelMaterial = new THREE.MeshStandardMaterial({ vertexColors: true });
 const _m = new THREE.Matrix4();
 const _s = new THREE.Matrix4();
 
@@ -106,12 +106,12 @@ function driverBust(): THREE.Group {
   return g;
 }
 
-function paint(color: string): THREE.MeshLambertMaterial {
-  return new THREE.MeshLambertMaterial({ color });
+function paint(color: string): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color });
 }
 
-function brake(): THREE.MeshLambertMaterial {
-  return new THREE.MeshLambertMaterial({ color: '#7a0d0d', emissive: '#ff2a1a', emissiveIntensity: 0.15 });
+function brake(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: '#7a0d0d', emissive: '#ff2a1a', emissiveIntensity: 0.15 });
 }
 
 function buildSedan(color: string): VehicleRig {
@@ -201,7 +201,7 @@ function buildTractor(color: string): VehicleRig {
   box(body, 1.4, 0.14, 1.4, M.dark, 0, 1.25, -0.55);
   for (const [px, pz] of [[-0.65, 0.1], [0.65, 0.1], [-0.65, -1.2], [0.65, -1.2]]) box(body, 0.08, 1.55, 0.08, M.dark, px, 2.05, pz);
   box(body, 1.5, 0.12, 1.55, p, 0, 2.85, -0.55);
-  const cabGlass = new THREE.MeshLambertMaterial({ color: '#9fb6c8', transparent: true, opacity: 0.35 });
+  const cabGlass = new THREE.MeshStandardMaterial({ color: '#9fb6c8', transparent: true, opacity: 0.35 });
   box(body, 1.25, 1.1, 0.03, cabGlass, 0, 2.15, 0.1);
   box(body, 0.6, 0.12, 0.55, M.dark, 0, 1.55, -0.75); // seat
   for (const s of [-1, 1]) {

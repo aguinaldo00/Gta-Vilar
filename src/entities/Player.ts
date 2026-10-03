@@ -52,7 +52,7 @@ export class Player {
   private readonly contacts: Contact[] = [];
 
   constructor() {
-    const mat = (c: string) => new THREE.MeshLambertMaterial({ color: c });
+    const mat = (c: string) => new THREE.MeshStandardMaterial({ color: c });
     const skin = mat('#d9a47e');
     const shirt = mat('#f1f1ec');
     const jacket = mat('#7c2d22');

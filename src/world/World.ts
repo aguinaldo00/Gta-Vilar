@@ -13,15 +13,26 @@ import { Materials } from './Materials';
 import { RoadNetwork, VEHICLE_ROADS, buildRoads } from './Roads';
 import { TerrainModel, buildGround, groundMaterial } from './Terrain';
 import { buildVegetation } from './Vegetation';
+import { Grass } from './Grass';
 import { waterTime } from './Water';
 
 /** Per-device rendering budget (draw distance is the main knob). */
 export interface Quality {
+  /** Land-use texture resolution (px). */
   groundTexture: number;
-  fogNear: number;
-  fogFar: number;
+  /** Exponential fog density (haze); also sets the town draw distance. */
+  fogDensity: number;
+  /** Camera far plane for the town (the sky and mountains are drawn separately). */
+  drawDistance: number;
   shadowMapSize: number;
   treeShadows: boolean;
+  /** Grass blades around the camera: radius (m) and spacing (m). */
+  grassRadius: number;
+  grassSpacing: number;
+  /** Infill trees in woods, parks and orchards (mapped trees are always drawn). */
+  treeBudget: number;
+  /** Multisampled HDR composer with bloom and colour grading. */
+  postFX: boolean;
 }
 
 interface NamedArea {
@@ -38,6 +49,7 @@ interface NamedArea {
  */
 export class World {
   readonly env: Environment;
+  readonly grass: Grass;
   readonly terrain = new TerrainModel(MAP);
   readonly roads = new RoadNetwork();
   readonly bounds = BOUNDS;
@@ -46,20 +58,21 @@ export class World {
   private readonly named: NamedArea[] = [];
   private readonly landmarkZones: { name: string; x: number; z: number; r: number }[] = [];
 
-  constructor(scene: THREE.Scene, collision: CollisionWorld, quality: Quality) {
+  constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer, collision: CollisionWorld, quality: Quality) {
     const rng = new Rng(1971);
     const mats = new Materials();
     const batch = new Batcher();
     const ctx: BuildContext = {
       scene, batch, mats, collision, animators: this.animators, rng, terrain: this.terrain, roads: this.roads, quality,
     };
-    this.env = new Environment(scene, rng, quality);
+    this.env = new Environment(scene, renderer, rng, quality);
     buildGround(this.terrain, batch, groundMaterial(quality.groundTexture, mats.detail));
     buildRoads(ctx);
     buildBuildings(ctx);
     buildHydro(ctx);
     buildVegetation(ctx);
     buildLandmarks(ctx);
+    this.grass = new Grass(scene, quality.grassRadius, quality.grassSpacing, quality.groundTexture >= 4096 ? 4096 : 2048);
     this.stats.triangles = Math.round(batch.triangles);
     this.stats.meshes = batch.build(scene);
     this.buildBounds(collision);
@@ -135,9 +148,10 @@ export class World {
     return { x: hit.x - hit.dz * lane, z: hit.z + hit.dx * lane, heading: Math.atan2(hit.dx, hit.dz) };
   }
 
-  update(dt: number, time: number, focus: THREE.Vector3, camera: THREE.Camera): void {
+  update(dt: number, time: number, focus: THREE.Vector3, camera: THREE.PerspectiveCamera): void {
     waterTime.value = time;
     for (const a of this.animators) a(time, dt);
-    this.env.update(dt, focus, camera);
+    this.env.update(time, focus, camera);
+    this.grass.update(camera);
   }
 }

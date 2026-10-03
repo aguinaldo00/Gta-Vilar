@@ -42,6 +42,7 @@ export class Minimap {
       add({ kind: 'line', pts: r.p, color: ROAD_COLOR[r.k] ?? '#9d9a92', width: Math.max(1.5, r.w + (r.sw ? 2 : 0)), layer: big ? 4 : 3 }, bboxOf(r.p, r.w));
     }
     for (const b of MAP.buildings) {
+      if (b.part) continue;
       const color = b.t === 'townhall' || b.t === 'torre' ? '#e2b65c' : b.t === 'church' ? '#c9a77a' : b.t === 'industrial' ? '#8e8f93' : '#6f6a62';
       add({ kind: 'fill', pts: b.o, color, layer: 5 }, bboxOf(b.o));
     }

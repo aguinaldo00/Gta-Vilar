@@ -257,7 +257,7 @@ function buildFountain(ctx: BuildContext): void {
   P.add(new THREE.CylinderGeometry(r, r + 0.15, 0.7, 24, 1, true), mats.stone, 0, 0.35, 0);
   P.add(new THREE.CylinderGeometry(r - 0.35, r - 0.35, 0.7, 24, 1, true), mats.stone, 0, 0.35, 0);
   P.add(new THREE.RingGeometry(r - 0.35, r, 24).rotateX(-Math.PI / 2), mats.stoneTrim, 0, 0.71, 0);
-  const water = new THREE.Mesh(new THREE.CircleGeometry(r - 0.35, 24).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#4a9ab0' }));
+  const water = new THREE.Mesh(new THREE.CircleGeometry(r - 0.35, 24).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#4a9ab0' }));
   water.position.y = 0.55;
   P.group.add(water);
   P.add(Unit.cyl, mats.stone, 0, h * 0.4, 0, 0, 0.6, h * 0.8, 0.6);
@@ -308,14 +308,14 @@ function buildMikado(ctx: BuildContext): void {
   const rot = hit ? Math.atan2(hit.dx, hit.dz) : 0;
   const P = new Placer(ctx, l.x, l.z, rot);
   const { mats } = ctx;
-  const black = new THREE.MeshLambertMaterial({ color: '#1f2022' });
+  const black = new THREE.MeshStandardMaterial({ color: '#1f2022' });
   const red = mats.redPaint;
   P.add(boxGeo(3.4, 0.3, 26, 2), mats.gravel, 0, 0.15, 0);
   for (let z = -12.6; z <= 12.6; z += 0.75) P.add(Unit.box, mats.sleeper, 0, 0.36, z, 0, 2.4, 0.12, 0.24);
   for (const s of [-0.5, 0.5]) P.add(Unit.box, mats.rail, s, 0.47, 0, 0, 0.08, 0.14, 26);
   const y0 = 0.55;
   P.add(Unit.cyl16, black, 0, y0 + 1.75, 1.4, 0, 1.7, 7.4, 1.7, Math.PI / 2);
-  P.add(Unit.cyl16, new THREE.MeshLambertMaterial({ color: '#2b2c2f' }), 0, y0 + 1.75, 5.15, 0, 1.75, 0.3, 1.75, Math.PI / 2);
+  P.add(Unit.cyl16, new THREE.MeshStandardMaterial({ color: '#2b2c2f' }), 0, y0 + 1.75, 5.15, 0, 1.75, 0.3, 1.75, Math.PI / 2);
   P.add(Unit.cyl, black, 0, y0 + 2.95, 4.2, 0, 0.45, 0.9, 0.45);
   P.add(Unit.cyl, black, 0, y0 + 2.75, 1.6, 0, 0.75, 0.6, 0.75);
   P.add(Unit.cyl, black, 0, y0 + 2.7, -0.4, 0, 0.6, 0.5, 0.6);

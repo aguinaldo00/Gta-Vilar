@@ -205,9 +205,9 @@ export function groundTexture(size: number): THREE.CanvasTexture {
 }
 
 /** Ground material: land-use colour map × a tiling detail texture (world scale). */
-export function groundMaterial(size: number, detail: THREE.Texture): THREE.MeshLambertMaterial {
+export function groundMaterial(size: number, detail: THREE.Texture): THREE.MeshStandardMaterial {
   const B = MAP.meta.bounds;
-  const mat = new THREE.MeshLambertMaterial({ map: groundTexture(size) });
+  const mat = new THREE.MeshStandardMaterial({ map: groundTexture(size), roughness: 1, metalness: 0 });
   mat.name = 'ground';
   mat.userData.castShadow = false;
   const repeat = new THREE.Vector2((B.maxX - B.minX) / 5, (B.maxZ - B.minZ) / 5);
@@ -218,7 +218,7 @@ export function groundMaterial(size: number, detail: THREE.Texture): THREE.MeshL
       .replace('#include <common>', '#include <common>\nuniform sampler2D detailMap;\nuniform vec2 detailRepeat;')
       .replace(
         '#include <map_fragment>',
-        '#include <map_fragment>\n  diffuseColor.rgb *= texture2D(detailMap, vMapUv * detailRepeat).rgb * 1.18;',
+        '#include <map_fragment>\n  diffuseColor.rgb *= texture2D(detailMap, vMapUv * detailRepeat).rgb * 1.45;',
       );
   };
   return mat;

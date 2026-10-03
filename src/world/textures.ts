@@ -364,3 +364,265 @@ export function signTexture(text: string, bg: string, fg: string, w = 512, h = 9
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 }
+
+/**
+ * Tangent-space normal map from a texture's luminance (bright = raised):
+ * window recesses sink, frames and tile ridges stand out.
+ */
+export function normalMapFrom(tex: THREE.CanvasTexture, strength = 2): THREE.CanvasTexture {
+  const src = tex.image as HTMLCanvasElement;
+  const w = src.width, h = src.height;
+  const data = src.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const lum = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) lum[i] = (data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114) / 255;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d')!;
+  const out = g.createImageData(w, h);
+  const at = (x: number, y: number) => lum[((y + h) % h) * w + ((x + w) % w)];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const len = Math.hypot(dx, dy, 1);
+      const i = (y * w + x) * 4;
+      out.data[i] = (-dx / len * 0.5 + 0.5) * 255;
+      out.data[i + 1] = (dy / len * 0.5 + 0.5) * 255;
+      out.data[i + 2] = (1 / len * 0.5 + 0.5) * 255;
+      out.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(out, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+/**
+ * Facade atlas, two cells of one bay (3.4 m x 3.1 m):
+ * left = upper storey (window with stone surround, wooden shutters, iron
+ * balcony rail, sill and weathering); right = ground floor (sandstone plinth,
+ * doorway or shop front). The facade shader picks the cell by storey.
+ */
+export function facadeAtlasTexture(): THREE.CanvasTexture {
+  const rng = new Rng(17);
+  const C = 256;
+  return canvasTexture(C * 4, C, (g) => {
+    const plaster = (x0: number) => {
+      g.fillStyle = '#f2eee6';
+      g.fillRect(x0, 0, C, C);
+      for (let i = 0; i < 1800; i++) {
+        g.fillStyle = rng.pick(['rgba(0,0,0,0.035)', 'rgba(255,255,255,0.06)', 'rgba(140,110,70,0.04)', 'rgba(90,80,60,0.03)']);
+        const s = rng.range(1, 4);
+        g.fillRect(x0 + rng.range(0, C), rng.range(0, C), s, s);
+      }
+      // Faint damp stains near the ground and under the cornice.
+      const grad = g.createLinearGradient(0, C * 0.75, 0, C);
+      grad.addColorStop(0, 'rgba(90,80,60,0)');
+      grad.addColorStop(1, 'rgba(90,80,60,0.10)');
+      g.fillStyle = grad;
+      g.fillRect(x0, C * 0.75, C, C * 0.25);
+    };
+    const stoneFrame = (x: number, y: number, w: number, h: number, t: number) => {
+      g.fillStyle = '#d9cba9';
+      g.fillRect(x - t, y - t, w + 2 * t, h + 2 * t);
+      g.strokeStyle = 'rgba(80,60,30,0.35)';
+      g.lineWidth = 1;
+      for (let yy = y - t; yy < y + h + t; yy += 18) g.strokeRect(x - t, yy, w + 2 * t, 18);
+    };
+
+    // ---- Upper storey.
+    plaster(0);
+    const wx = 78, wy = 40, ww = 100, wh = 150;
+    stoneFrame(wx, wy, ww, wh, 10);
+    // Shutters (contraventanas), opened against the wall.
+    const shutter = rng.pick(['#5a3b22', '#3f5a3a', '#6b4a2b']);
+    for (const sx of [wx - 52, wx + ww + 12]) {
+      g.fillStyle = shutter;
+      g.fillRect(sx, wy - 6, 40, wh + 8);
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      for (let yy = wy; yy < wy + wh; yy += 8) g.fillRect(sx + 3, yy, 34, 2);
+    }
+    g.fillStyle = '#3b3229';
+    g.fillRect(wx, wy, ww, wh);
+    const glass = g.createLinearGradient(wx, wy, wx + ww, wy + wh);
+    glass.addColorStop(0, '#8aa2b6');
+    glass.addColorStop(0.45, '#33424f');
+    glass.addColorStop(1, '#1b232b');
+    g.fillStyle = glass;
+    g.fillRect(wx + 6, wy + 6, ww - 12, wh - 12);
+    g.fillStyle = '#efe9dd';
+    g.fillRect(wx + ww / 2 - 3, wy + 6, 6, wh - 12);
+    g.fillRect(wx + 6, wy + 58, ww - 12, 5);
+    // Sill and wrought-iron balcony rail.
+    g.fillStyle = '#cfc3a6';
+    g.fillRect(wx - 18, wy + wh + 8, ww + 36, 10);
+    g.fillStyle = '#1f1f1f';
+    g.fillRect(wx - 14, wy + 100, ww + 28, 4);
+    g.fillRect(wx - 14, wy + wh + 2, ww + 28, 4);
+    for (let x = wx - 12; x <= wx + ww + 12; x += 9) g.fillRect(x, wy + 100, 3, wh - 98);
+    // Weathering streaks below the sill.
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle = 'rgba(110,95,70,0.08)';
+      g.fillRect(wx + rng.range(0, ww), wy + wh + 18, rng.range(2, 5), rng.range(15, 50));
+    }
+
+    // ---- Ground floor.
+    plaster(C);
+    // Sandstone plinth (zócalo).
+    g.fillStyle = '#c9b48a';
+    g.fillRect(C, C - 64, C, 64);
+    g.strokeStyle = 'rgba(70,55,30,0.45)';
+    for (let yy = C - 64; yy < C; yy += 21) {
+      for (let xx = C + ((yy / 21) % 2) * 20; xx < C * 2; xx += 40) g.strokeRect(xx, yy, 40, 21);
+    }
+    // Doorway / shop front with a stone frame.
+    const dx = C + 70, dy = 30, dw = 116, dh = C - 30;
+    stoneFrame(dx, dy, dw, dh, 12);
+    const door = rng.pick(['#4a2f1c', '#5b3a22', '#2f3d2f']);
+    g.fillStyle = door;
+    g.fillRect(dx, dy, dw, dh);
+    g.fillStyle = 'rgba(255,255,255,0.08)';
+    for (const px of [dx + 10, dx + dw / 2 + 4]) {
+      g.fillRect(px, dy + 14, dw / 2 - 14, dh * 0.4);
+      g.fillRect(px, dy + 26 + dh * 0.4, dw / 2 - 14, dh * 0.45);
+    }
+    const fan = g.createLinearGradient(0, dy, 0, dy + 26);
+    fan.addColorStop(0, '#9fb2c0');
+    fan.addColorStop(1, '#3b4855');
+    g.fillStyle = fan;
+    g.fillRect(dx + 6, dy + 2, dw - 12, 10);
+
+    // ---- Ground floor variant: barred window over the stone plinth.
+    const X = C * 2;
+    plaster(X);
+    g.fillStyle = '#c9b48a';
+    g.fillRect(X, C - 64, C, 64);
+    g.strokeStyle = 'rgba(70,55,30,0.45)';
+    for (let yy = C - 64; yy < C; yy += 21) {
+      for (let xx = X + ((yy / 21) % 2) * 20; xx < X + C; xx += 40) g.strokeRect(xx, yy, 40, 21);
+    }
+    const bx = X + 84, by = 56, bw = 88, bh = 110;
+    stoneFrame(bx, by, bw, bh, 10);
+    const gl = g.createLinearGradient(bx, by, bx + bw, by + bh);
+    gl.addColorStop(0, '#7f96a8');
+    gl.addColorStop(1, '#1f2830');
+    g.fillStyle = gl;
+    g.fillRect(bx, by, bw, bh);
+    g.fillStyle = '#1b1b1b';
+    for (let x = bx + 6; x < bx + bw; x += 14) g.fillRect(x, by - 4, 4, bh + 8);
+    g.fillRect(bx - 4, by + bh / 2 - 2, bw + 8, 4);
+    // Unused 4th cell: plain plaster (kept so the atlas is a power of two wide).
+    plaster(C * 3);
+  });
+}
+
+/** Terracotta "teja árabe": staggered curved tiles with moss and soot. */
+export function roofTilesTexture(): THREE.CanvasTexture {
+  const rng = new Rng(93);
+  return canvasTexture(256, 256, (g, w, h) => {
+    g.fillStyle = '#7d3a22';
+    g.fillRect(0, 0, w, h);
+    for (let row = 0; row < 16; row++) {
+      const off = row % 2 ? 8 : 0;
+      for (let x = -off; x < w; x += 16) {
+        const k = rng.range(0.82, 1.1);
+        const grad = g.createLinearGradient(x, 0, x + 16, 0);
+        grad.addColorStop(0, `rgb(${110 * k},${46 * k},${26 * k})`);
+        grad.addColorStop(0.45, `rgb(${196 * k},${98 * k},${60 * k})`);
+        grad.addColorStop(1, `rgb(${104 * k},${42 * k},${24 * k})`);
+        g.fillStyle = grad;
+        g.fillRect(x + 1, row * 16 + 1, 14, 15);
+        g.fillStyle = 'rgba(40,20,10,0.35)';
+        g.fillRect(x + 1, row * 16 + 14, 14, 2);
+      }
+    }
+    for (let i = 0; i < 70; i++) {
+      g.fillStyle = rng.pick(['rgba(90,100,50,0.18)', 'rgba(40,35,30,0.15)', 'rgba(230,200,160,0.10)']);
+      g.beginPath();
+      g.ellipse(rng.range(0, w), rng.range(0, h), rng.range(4, 18), rng.range(3, 10), 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+}
+
+/** Ground detail: grass blades, soil and pebbles, neutral enough to be tinted by land use. */
+export function grassDetailTexture(): THREE.CanvasTexture {
+  const rng = new Rng(63);
+  return canvasTexture(512, 512, (g, w, h) => {
+    g.fillStyle = '#d0d0d0';
+    g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 60; i++) {
+      g.fillStyle = rng.pick(['rgba(255,255,255,0.10)', 'rgba(110,110,110,0.10)']);
+      g.beginPath();
+      g.arc(rng.range(0, w), rng.range(0, h), rng.range(10, 60), 0, Math.PI * 2);
+      g.fill();
+    }
+    g.lineCap = 'round';
+    for (let i = 0; i < 14000; i++) {
+      const x = rng.range(0, w), y = rng.range(0, h);
+      const l = rng.range(3, 9);
+      const a = rng.range(-0.6, 0.6) - Math.PI / 2;
+      g.strokeStyle = rng.pick(['#e8e8e8', '#b8b8b8', '#f4f4f4', '#a0a0a0', '#cccccc']);
+      g.lineWidth = rng.range(0.6, 1.4);
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      g.stroke();
+    }
+    for (let i = 0; i < 300; i++) {
+      g.fillStyle = rng.pick(['#9a9a9a', '#e0e0e0', '#888888']);
+      g.beginPath();
+      g.ellipse(rng.range(0, w), rng.range(0, h), rng.range(1, 3), rng.range(1, 2.5), rng.range(0, 3), 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+}
+
+/**
+ * Tree atlas: an alpha-tested cluster of leaves (u < 0.75) for crown cards and
+ * an opaque bark strip (u > 0.8) for trunks, so a whole tree is one material.
+ */
+export function treeAtlasTexture(): THREE.CanvasTexture {
+  const rng = new Rng(77);
+  const t = canvasTexture(256, 256, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    const cw = w * 0.75;
+    for (let i = 0; i < 1500; i++) {
+      const r = Math.sqrt(rng.next()) * (cw * 0.47);
+      const a = rng.range(0, Math.PI * 2);
+      const x = cw / 2 + Math.cos(a) * r, y = h / 2 + Math.sin(a) * r * 0.95;
+      const k = rng.range(0.55, 1.2) * (1.05 - (r / cw) * 0.5);
+      g.fillStyle = `rgb(${Math.round(112 * k)},${Math.round(150 * k)},${Math.round(62 * k)})`;
+      g.beginPath();
+      g.ellipse(x, y, rng.range(3.5, 7), rng.range(2, 3.6), rng.range(0, Math.PI), 0, Math.PI * 2);
+      g.fill();
+    }
+    for (let y = 0; y < h; y++) {
+      const k = 0.75 + 0.25 * Math.sin(y * 0.7) + rng.range(-0.1, 0.1);
+      g.fillStyle = `rgb(${Math.round(92 * k)},${Math.round(76 * k)},${Math.round(58 * k)})`;
+      g.fillRect(w * 0.8, y, w * 0.2, 1);
+    }
+  });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
+/** River stones seen through shallow water. */
+export function riverbedTexture(): THREE.CanvasTexture {
+  const rng = new Rng(55);
+  return canvasTexture(256, 256, (g, w, h) => {
+    g.fillStyle = '#8a7c63';
+    g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 700; i++) {
+      const k = rng.range(0.7, 1.25);
+      g.fillStyle = `rgb(${Math.round(150 * k)},${Math.round(138 * k)},${Math.round(118 * k)})`;
+      g.beginPath();
+      g.ellipse(rng.range(0, w), rng.range(0, h), rng.range(2, 9), rng.range(2, 6), rng.range(0, 3), 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+}

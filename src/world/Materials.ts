@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import * as T from './textures';
+import { waterTime } from './Water';
 
-type Lambert = THREE.MeshLambertMaterial;
+type Lambert = THREE.MeshStandardMaterial;
 
 /** Storey height used for window tiling and default building heights. */
 export const FLOOR_H = 3.1;
 
-function lambert(params: THREE.MeshLambertMaterialParameters, shadows: { cast?: boolean; receive?: boolean } = {}): Lambert {
-  const m = new THREE.MeshLambertMaterial(params);
+/** PBR material (rough, non-metallic by default) with shadow flags read by the batcher. */
+function lambert(params: THREE.MeshStandardMaterialParameters, shadows: { cast?: boolean; receive?: boolean } = {}): Lambert {
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, ...params });
   m.userData.castShadow = shadows.cast ?? true;
   m.userData.receiveShadow = shadows.receive ?? true;
   return m;
@@ -62,6 +64,10 @@ export class Materials {
   readonly roofVC: Lambert;
   readonly corrugatedVC: Lambert;
   readonly treeVC: Lambert;
+  /** Leaf cards + bark (alpha-tested). `leavesWind` sways in the wind (instanced trees). */
+  readonly leaves: Lambert;
+  readonly leavesWind: Lambert;
+  readonly leavesDepth: THREE.MeshDepthMaterial;
   /** Every plain-coloured prop material is folded into this one by the batcher. */
   readonly propsVC: Lambert;
   readonly detail: THREE.Texture;
@@ -73,7 +79,8 @@ export class Materials {
     this.facades = ['#f2ede2', '#e7d6b4', '#f6f4ef', '#dcc39a', '#e9cdb8', '#d8d0c0'].map((c) => lambert({ color: c, map: facade }));
 
     const ashlar = T.ashlarTexture();
-    this.stone = lambert({ map: ashlar });
+    const ashlarN = T.normalMapFrom(ashlar, 3);
+    this.stone = lambert({ map: ashlar, normalMap: ashlarN });
     this.stoneTrim = lambert({ color: '#e6d6b0' });
     this.plinth = lambert({ map: ashlar, color: '#b8a888' });
 
@@ -82,9 +89,11 @@ export class Materials {
     this.asphalt = lambert({ map: T.asphaltTexture() }, { cast: false });
     this.marking = lambert({ color: '#efefe6', polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }, { cast: false });
 
-    this.roof = lambert({ map: T.roofTexture(), side: THREE.DoubleSide });
+    const tiles = T.roofTilesTexture();
+    const tilesN = T.normalMapFrom(tiles, 4);
+    this.roof = lambert({ map: tiles, normalMap: tilesN, side: THREE.DoubleSide, roughness: 0.8 });
     this.galeria = lambert({ map: T.galeriaTexture() }, { cast: false });
-    this.glass = lambert({ color: '#2a3642' });
+    this.glass = lambert({ color: '#2a3642', roughness: 0.15, metalness: 0.3 });
     this.darkWood = lambert({ color: '#4a2f1f' });
     this.wood = lambert({ map: T.woodTexture() });
     this.iron = lambert({ color: '#2b2f2e' });
@@ -92,7 +101,7 @@ export class Materials {
     this.ironwork = lambert({ map: T.ironworkTexture(), alphaTest: 0.5, side: THREE.DoubleSide, transparent: false }, { cast: false });
     this.clock = lambert({ map: T.clockTexture() }, { cast: false });
 
-    this.terrain = lambert({ map: T.groundDetailTexture(), vertexColors: true }, { cast: false });
+    this.terrain = lambert({ map: T.grassDetailTexture(), vertexColors: true }, { cast: false });
     this.dirt = lambert({ map: T.dirtTexture() }, { cast: false });
     this.gravel = lambert({ map: T.gravelTexture() }, { cast: false });
     this.rail = lambert({ color: '#6d4a35' });
@@ -121,12 +130,18 @@ export class Materials {
     this.redPaint = lambert({ color: '#b33228' });
     this.coachGreen = lambert({ color: '#4e6b55' });
 
-    this.facadeVC = lambert({ map: facade, vertexColors: true });
-    this.stoneVC = lambert({ map: ashlar, vertexColors: true });
-    this.roofVC = lambert({ map: this.roof.map, vertexColors: true, side: THREE.DoubleSide });
+    const atlas = T.facadeAtlasTexture();
+    this.facadeVC = storeyAtlas(lambert({ map: atlas, normalMap: T.normalMapFrom(atlas, 2.5), vertexColors: true }));
+    this.stoneVC = lambert({ map: ashlar, normalMap: ashlarN, vertexColors: true });
+    this.roofVC = lambert({ map: tiles, normalMap: tilesN, vertexColors: true, side: THREE.DoubleSide, roughness: 0.8 });
     this.corrugatedVC = lambert({ map: corr, vertexColors: true, side: THREE.DoubleSide });
-    this.treeVC = lambert({ vertexColors: true, flatShading: true });
+    this.treeVC = lambert({ vertexColors: true, flatShading: true, roughness: 1 });
     this.propsVC = lambert({ vertexColors: true });
+    const treeAtlas = T.treeAtlasTexture();
+    this.leaves = lambert({ map: treeAtlas, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85 });
+    this.leavesWind = windSway(lambert({ map: treeAtlas, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85 }));
+    this.leavesDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: treeAtlas, alphaTest: 0.5 });
+    this.leaves.userData.depthMaterial = this.leavesDepth;
 
     for (const [name, value] of Object.entries(this)) {
       if (value instanceof THREE.Material) value.name = name;
@@ -194,6 +209,52 @@ function roadAtlasMaterial(tiles: (THREE.Texture | null)[]): Lambert {
   vec4 sampledDiffuseColor = textureGrad(map, auv, dFdx(vMapUv) * scale, dFdy(vMapUv) * scale);
   diffuseColor *= sampledDiffuseColor;`,
       );
+  };
+  return m;
+}
+
+/**
+ * Facade shader: UV.y counts storeys from the ground (1 unit = FLOOR_H), so
+ * the ground floor (v < 1) samples the right atlas cell (plinth, doorway) and
+ * upper storeys the left one (windows). Applied to both colour and normals.
+ */
+function storeyAtlas(m: Lambert): Lambert {
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+vec2 storeyCell(vec2 uv) {
+  // Ground floor: doorway (cell 1) or barred window (cell 2), chosen per bay.
+  float ground = step(uv.y, 0.999);
+  float door = step(fract(sin(floor(uv.x) * 12.9898 + 4.1) * 43758.5453), 0.4);
+  float cell = ground * (2.0 - door);
+  return vec2((cell + 0.01 + fract(uv.x) * 0.98) * 0.25, 0.01 + fract(uv.y) * 0.98);
+}`)
+      .replace('#include <map_fragment>', `
+  vec2 cellUv = storeyCell(vMapUv);
+  vec2 gscale = vec2(0.245, 0.98);
+  vec4 sampledDiffuseColor = textureGrad(map, cellUv, dFdx(vMapUv) * gscale, dFdy(vMapUv) * gscale);
+  diffuseColor *= sampledDiffuseColor;`)
+      .replace('vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
+        'vec3 mapN = textureGrad( normalMap, storeyCell(vNormalMapUv), dFdx(vNormalMapUv) * vec2(0.245, 0.98), dFdy(vNormalMapUv) * vec2(0.245, 0.98) ).xyz * 2.0 - 1.0;');
+  };
+  return m;
+}
+
+/** Crowns bend with the wind: displacement grows with height above the trunk, phase varies per tree. */
+function windSway(m: Lambert): Lambert {
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = waterTime;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+  #ifdef USE_INSTANCING
+    vec2 treePos = vec2(instanceMatrix[3].x, instanceMatrix[3].z);
+  #else
+    vec2 treePos = vec2(0.0);
+  #endif
+  float sway = max(0.0, position.y - 2.0) * 0.045;
+  transformed.x += sin(uTime * 1.5 + treePos.x * 0.21 + position.y * 0.35) * sway;
+  transformed.z += cos(uTime * 1.2 + treePos.y * 0.17) * sway * 0.7;`);
   };
   return m;
 }
