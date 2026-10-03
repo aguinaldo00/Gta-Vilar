@@ -2,7 +2,7 @@
   "desktop": {
     "pixelRatio": 1.5,
     "groundTexture": 4096,
-    "fogDensity": 0.0019,
+    "fogDensity": 0.0011,
     "drawDistance": 620,
     "shadowMapSize": 4096,
     "treeShadows": true,
@@ -15,7 +15,7 @@
   "touch": {
     "pixelRatio": 1.25,
     "groundTexture": 2048,
-    "fogDensity": 0.0033,
+    "fogDensity": 0.002,
     "drawDistance": 380,
     "shadowMapSize": 1024,
     "treeShadows": false,

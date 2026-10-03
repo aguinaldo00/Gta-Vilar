@@ -1,6 +1,6 @@
 # Villarcayo Sandbox
 
-A browser-based 3D open-world sandbox in the spirit of the early 3D-era *Grand Theft Auto* games, set in **Villarcayo de Merindad de Castilla la Vieja (Burgos, Spain)**. The town is built **from real OpenStreetMap data**: the actual streets, the footprint and height of each of its 1,592 buildings, the course of the Río Nela, parks, trees, street lamps and pedestrian crossings. Built with **TypeScript + Three.js + Rapier** and bundled with Vite.
+A browser-based 3D open-world sandbox in the spirit of the early 3D-era *Grand Theft Auto* games, set in **Villarcayo de Merindad de Castilla la Vieja (Burgos, Spain)**. The town is built **from real open data**: OpenStreetMap streets and footprints, the real relief and building heights measured by the **PNOA-LiDAR** point cloud, and the **PNOA orthophoto** on the ground, the roofs and the surrounding hills of Las Merindades. It also includes the course of the Río Nela, parks, trees, street lamps and pedestrian crossings. Built with **TypeScript + Three.js + Rapier** and bundled with Vite.
 
 ```bash
 npm install
@@ -9,6 +9,7 @@ npm run build      # typecheck + production bundle in dist/
 npm run check      # typecheck + Biome lint/format check + unit tests (Vitest)
 npm run test:e2e   # real-browser tests (Playwright, after npm run build)
 npm run map        # regenerate public/maps/villarcayo.json from data/villarcayo.osm
+bash tools/geodata/bake_all.sh   # full geodata bake (OSM + LiDAR + MDT + orthophoto), see below
 ```
 
 ![Aerial view of central Villarcayo](docs/vista-aerea.jpg)
@@ -30,14 +31,25 @@ npm run map        # regenerate public/maps/villarcayo.json from data/villarcayo
 The data pipeline runs in two steps. The browser never parses OSM.
 
 1. **`data/villarcayo.osm`**: an OpenStreetMap export of the bounding box 42.92577–42.95111 N, 3.59137–3.55109 W (≈ 3.3 × 2.8 km).
-2. **`scripts/osm-to-map.ts`** (Node, no dependencies) reads the XML, projects coordinates and writes **`public/maps/villarcayo.json`** (loaded at runtime) (≈ 390 KB). Its processing steps:
+2. **`scripts/osm-to-map.ts`** (Node, no dependencies) reads the XML, projects coordinates and writes **`public/maps/villarcayo.json`** (loaded at runtime; ≈ 1.3 MB once the LiDAR measurements and tree crowns are baked in). Its processing steps:
    - simplifies geometry (Douglas–Peucker, 0.25–0.5 m)
    - clips everything to the bounds
    - assembles multipolygons (buildings with courtyards, the Plaza Mayor, farmland)
    - infers sidewalks
    - marks road junctions
 
-**Projection.** Equirectangular around the **centroid of the Plaza Mayor** (`place=square`, 42.939036 N, 3.571694 W). +X is east, +Z is south, in metres: `x = (lon − lon0)·cos(lat0)·π/180·R`, `z = −(lat − lat0)·π/180·R`, with R = 6 371 008.8 m. At town scale the distortion is negligible.
+**Projection.** Exact transverse Mercator into **ETRS89 / UTM 30N (EPSG:25830)**, the grid of the Spanish IGN data, with a local origin at E 453 356, N 4 754 203 (the Plaza Mayor): `x = E − 453356` (east), `z = 4754203 − N` (south), in metres. Heights are metres above a datum of 595.94 m (the ground of the plaza), so the OSM, LiDAR, MDT and orthophoto layers line up without any resampling.
+
+3. **`tools/geodata/`** (Python: laspy, numpy, scipy, scikit-image, pillow) bakes the IGN data into the same map. `bake_all.sh` runs every step; the raw downloads stay in `raw/`, which is not committed.
+   - `lidar_rasters.py`: the **PNOA-LiDAR 2025** classified point clouds (LAZ, 1 km tiles around the town) → 1 m rasters: bare ground (class 2), surface, building roofs (class 6) and vegetation (class 5).
+   - `bake_terrain_buildings.py`:
+     - ground model: LiDAR blended over a 25 m feather into the **MDT05** where there is no point cloud → `public/maps/villarcayo.terrain.bin` (Int16 cm, 2 m grid)
+     - every OSM building measured from its roof points (ground level, eave height, ridge height)
+     - buildings that exist in the LiDAR but not in OSM traced from the roof raster (202 added)
+     - 10,452 tree crowns detected in the canopy model, with their height and radius
+     - Río Nela water levels sampled along the channel, flowing monotonically downstream, with the bed carved under them
+   - `fetch_ortho.py`: **PNOA orthophoto** tiles (WMS) → `public/maps/ortho/{i}_{j}.jpg`, 256 m tiles, draped on the ground and on the roofs.
+   - `fetch_surroundings.py`: 24 × 24 km of **MDT25** + orthophoto → `public/maps/surroundings.*`, the real valley and hills on the horizon.
 
 ### What comes from OSM and what is assumed
 
@@ -57,7 +69,7 @@ The data pipeline runs in two steps. The browser never parses OSM.
 | Sports | 29 pitches with their sport: football (Campo El Soto, Campo Genín), futsal, basketball, tennis, pádel, frontones, Bolera Nela, petanque, table tennis; Polideportivo; sports-ground fences | Court markings, goals, hoops, nets, frontón walls, the nine bolos; the polideportivo's vaulted roof |
 | Parkings, fuel, buses | 37 car parks (with `orientation`), Estación de Servicio Rivera, Estación de Autobuses, bus stops | Bay layout and parked cars; canopy, pumps and totem; bus shelters |
 | Picnic, playgrounds, pines | 7 picnic tables + picnic sites (riverside tables in El Soto), 13 playgrounds, conifers (`leaf_type=needleleaved`) | Extra tables around each picnic site; swings and slide; hedges on field boundaries; field patchwork where OSM has no land use |
-| Terrain | — | **Flat.** The OSM export carries no elevation, so only the river channel is carved |
+| Terrain and heights | — (from the **PNOA-LiDAR** and **MDT05/MDT25**) | Real relief at 2 m; building walls up to the measured eave and roofs up to the measured ridge; river levels and bed depth from the LiDAR ground. Façades are still stylised (no open data on façade colour or window layout); the orthophoto on roofs has some relief displacement; the NW LiDAR tile is missing, so that corner uses the 5 m MDT |
 
 ## Graphics and quality levels
 
@@ -76,7 +88,7 @@ The look is inspired by modern open-world games (warm low sun, hazy distance, wi
 | Post-processing | MSAA ×4, bloom, colour grade | No (direct render with tone mapping) |
 | Shadow map | 4096 px, trees cast shadows | 1024 px, no tree shadows |
 | Grass | 40 m radius, 0.5 m spacing | 24 m radius, 0.9 m spacing |
-| Infill trees | 4,200 | 1,800 (lighter crowns) |
+| Trees (of the 10,452 LiDAR crowns) | about 8,400 | about 3,600 (lighter crowns) |
 | Parked cars | about 2 of 3 bays taken | about 1 of 2 bays taken |
 | Haze / draw distance | 620 m | 380 m |
 | Pixel ratio | up to 1.5 | up to 1.25 |
@@ -87,44 +99,12 @@ Measured with `renderer.info` (Chromium, 1280×720 desktop; Pixel 7 emulation), 
 
 | View | Desktop: draw calls (total) | Desktop: triangles (main / shadows) | Mobile: draw calls (total) | Mobile: triangles (main / shadows) |
 | --- | --- | --- | --- | --- |
-| Plaza Mayor | 196 | 522k / 192k | 158 | 295k / 145k |
-| Densest street in the centre | 195 | 507k / 132k | 157 | 299k / 111k |
-| El Soto (river and pools) | 130 | 377k / 107k | 107 | 226k / 45k |
-| Old station | 128 | 257k / 25k | 93 | 98k / 17k |
+| Plaza Mayor | 220 | 864k / 202k | 171 | 365k / 124k |
+| Densest street in the centre | 217 | 815k / 144k | 171 | 361k / 92k |
+| El Soto (river and pools) | 153 | 702k / 152k | 116 | 272k / 42k |
+| Old station | 150 | 571k / 38k | 106 | 168k / 16k |
 
-On phones the main (visible) pass stays within the budget of fewer than 150 draw calls and fewer than 300k triangles in every view; counting the shadow pass, the two densest views reach 157–158 calls. The desktop "high" level spends more on grass, trees and shadows and is meant for a desktop GPU. The figures were measured in a software renderer; frame rates have to be checked on real hardware.
-
-How the budget is met:
-
-- **Merged static geometry:** the batcher merges geometry per material in 384 m chunks, so distant chunks are culled by the frustum.
-- **Vertex colours:** buildings, roofs and every plain-coloured prop share vertex-coloured materials.
-- **Road atlas:** asphalt, sidewalk, paving, dirt, gravel and paint share one texture atlas (one draw call per chunk).
-- **Instancing:** trees and riverside rocks are `InstancedMesh`es in cells; so are the four wheels of each vehicle. Grass is one instanced draw.
-- **Merged vehicles and player:** each vehicle and the player are merged into a handful of meshes.
-- **Hidden walls:** walls shared between building parts are not built.
-- **Background pass:** the sky and mountains live in a separate pass with their own far plane.
-
-**Collision** follows the building footprints. Each wall is a thin box collider in Rapier; the visual geometry is never used for collision. The ground is a Rapier heightfield.
-
-## Verification
-
-The `.osm` file rendered directly (without the converter), the in-game minimap, and an overlay of the OSM street centre lines on the minimap:
-
-![Comparison of OpenStreetMap and the minimap](docs/comparacion-osm-minimapa.jpg)
-
-The Plaza Mayor, framed like the reference photos:
-
-| Ayuntamiento | Templete and Ayuntamiento |
-| --- | --- |
-| ![Ayuntamiento](docs/plaza-ayuntamiento.jpg) | ![Templete](docs/plaza-templete.jpg) |
-
-| Santa Marina | Calle San Roque (shops, Correos, Carrefour, Pub Ghost, Rivera petrol station) |
-| --- | --- |
-| ![Santa Marina](docs/santa-marina.jpg) | ![Calle San Roque](docs/calle-san-roque.jpg) |
-
-| Sports grounds | Car park |
-| --- | --- |
-| ![Pitches](docs/pistas-deportivas.jpg) | ![Parking](docs/parking.jpg) |
+The real relief costs geometry: the orthophoto ground patches, the 10,000 LiDAR tree crowns and the MDT25 landscape on the horizon added about 70k triangles to the mobile main pass, which now goes over the 300k budget in the two densest views (365k) while staying under 150 draw calls. The biggest remaining items there are the merged props (parked cars, lamps, furniture: about 107k) and the trees; they are the first candidates for LODs in the graphics phase. The desktop "high" level spends more on grass, trees and shadows and is meant for a desktop GPU. The figures were measured in a software renderer; frame rates have to be checked on real hardware.
 
 ## Architecture
 
@@ -138,7 +118,9 @@ The game is split so that gameplay never depends on a concrete engine or on hard
 ```
 public/
 ├── config/                  game.json · vehicles.json · quality.json · input.json (runtime data)
-└── maps/villarcayo.json     Map generated from OSM (scripts/osm-to-map.ts), fetched at boot
+└── maps/                    villarcayo.json (OSM + LiDAR measurements), villarcayo.terrain.bin (heightmap),
+                             ortho/ (orthophoto tiles), surroundings.bin/.jpg (MDT25 horizon), fetched at boot
+tools/geodata/               Python bake of the IGN data (LiDAR, MDT, orthophoto) into public/maps
 src/
 ├── main.ts                  Boot: loads config + map + Rapier, then builds the Game
 ├── Game.ts                  Composition root: renderer, world, entities, systems, frame loop
@@ -152,7 +134,7 @@ src/
 ├── world/
 │   ├── mapData.ts           Map types, validation and runtime loading
 │   ├── World.ts             Builds everything; heightAt / heightGrid / waterAt / zoneAt / roadSpawn
-│   ├── Terrain.ts           Heights (river channel, pools, bridge decks), ground mesh and land-use texture
+│   ├── Terrain.ts           TerrainModel (heightmap sampling, bridge decks, river levels), orthophoto tiles, ground mesh
 │   ├── Roads.ts             Streets, sidewalks, markings, zebra crossings, bridges; road network index
 │   ├── Buildings.ts         Footprint extrusion, roofs, galerías, wall colliders
 │   ├── Hydro.ts             Río Nela, pools, streams, swimming pools, weirs
@@ -177,4 +159,8 @@ tests/
 
 ## Licence and attribution
 
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database License (ODbL 1.0). The attribution is also shown on the game's start screen.
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database License (ODbL 1.0).
+
+Elevation, LiDAR and orthophoto: PNOA-LiDAR 2025, MDT05, MDT25 and PNOA orthophoto © [Instituto Geográfico Nacional](https://www.ign.es) (CNIG), with the Junta de Castilla y León for the LiDAR, under CC BY 4.0 ([scne.es](https://www.scne.es)).
+
+Both attributions are also shown on the game's start screen.

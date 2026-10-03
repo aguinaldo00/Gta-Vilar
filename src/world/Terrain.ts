@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { lerp, smoothstep } from '../core/math';
+import { lerp } from '../core/math';
 import type { Batcher } from './Batcher';
 import {
   type Bounds2,
@@ -16,81 +16,127 @@ import {
 } from './geo';
 import type { MapData } from './mapData';
 
-export const WATER_LEVEL = -0.45;
-const RIVER_BED = -1.4;
-const POOL_BED = -2.8;
 const BANK = 5;
-const DECK = 0.35;
+/** Bridge decks sit this far above the approach ground at either end. */
+const DECK_LIFT = 0.35;
 
 interface Pool {
   ring: Pt[];
   b: Bounds2;
+  level: number;
+}
+
+interface LevelSegment extends Segment<number> {
+  /** Water surface (rivers) or deck height (bridges) at a and b. */
+  ha: number;
+  hb: number;
 }
 
 /**
- * Ground heights derived from the map: flat town, river channel carved along
- * the Río Nela centre line, the natural pools dug deeper, and bridge decks.
+ * Ground and water heights. The relief comes from the baked heightmap
+ * (PNOA-LiDAR ground returns, IGN MDT05 outside the LiDAR tiles; river beds
+ * already carved), sampled bilinearly. Rivers and pools carry their own
+ * surface levels; bridge decks span between the ground at their two ends.
+ * Without a heightmap (tests, old map files) the ground is flat at y = 0.
  */
 export class TerrainModel {
-  private readonly river = new SpatialGrid<Segment<number>>(40);
-  private readonly bridges = new SpatialGrid<Segment<number>>(40);
+  private readonly river = new SpatialGrid<LevelSegment>(40);
+  private readonly bridges = new SpatialGrid<LevelSegment>(40);
   readonly pools: Pool[] = [];
-  private readonly found: Segment<number>[] = [];
+  private readonly found: LevelSegment[] = [];
+  private readonly grid: MapData['meta']['terrain'];
+  private readonly heights: Float32Array | undefined;
 
   constructor(map: MapData) {
+    this.grid = map.meta.terrain;
+    this.heights = map.heights;
     map.rivers.forEach((r, i) => {
-      for (const s of segmentsOf(toPts(r.p), r.w / 2, i)) this.river.insert(s, segBounds(s, BANK + 4));
+      const pts = toPts(r.p);
+      segmentsOf(pts, r.w / 2, i).forEach((s, k) => {
+        const seg: LevelSegment = { ...s, ha: r.wl?.[k] ?? -0.45, hb: r.wl?.[k + 1] ?? -0.45 };
+        this.river.insert(seg, segBounds(s, BANK + 4));
+      });
     });
     map.roads.forEach((r, i) => {
       if (!r.b) return;
-      for (const s of segmentsOf(toPts(r.p), r.w / 2 + 0.3, i)) this.bridges.insert(s, segBounds(s, 1));
+      const pts = toPts(r.p);
+      // Deck: straight between the ground at the two ends of the bridge.
+      const h0 = this.ground(pts[0][0], pts[0][1]) + DECK_LIFT;
+      const h1 = this.ground(pts[pts.length - 1][0], pts[pts.length - 1][1]) + DECK_LIFT;
+      let total = 0;
+      for (let k = 1; k < pts.length; k++) total += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+      let run = 0;
+      segmentsOf(pts, r.w / 2 + 0.3, i).forEach((s) => {
+        const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
+        const seg: LevelSegment = { ...s, ha: lerp(h0, h1, run / (total || 1)), hb: lerp(h0, h1, (run + len) / (total || 1)) };
+        run += len;
+        this.bridges.insert(seg, segBounds(s, 1));
+      });
     });
     for (const a of map.areas) {
       if (a.k !== 'water') continue;
       const ring = toPts(a.o);
-      this.pools.push({ ring, b: ringBounds(ring) });
+      this.pools.push({ ring, b: ringBounds(ring), level: a.wl ?? -0.45 });
     }
+  }
+
+  /** Bilinear heightmap sample (the natural ground, river beds included). */
+  ground(x: number, z: number): number {
+    const g = this.grid,
+      h = this.heights;
+    if (!g || !h) return 0;
+    const fx = Math.min(Math.max((x - g.minX) / g.cell, 0), g.cols - 1.001);
+    const fz = Math.min(Math.max((z - g.minZ) / g.cell, 0), g.rows - 1.001);
+    const c = Math.floor(fx),
+      r = Math.floor(fz);
+    const tx = fx - c,
+      tz = fz - r;
+    const i = r * g.cols + c;
+    const top = h[i] + (h[i + 1] - h[i]) * tx;
+    const bot = h[i + g.cols] + (h[i + g.cols + 1] - h[i + g.cols]) * tx;
+    return top + (bot - top) * tz;
   }
 
   /** Distance to the river centre line and the river half-width there. */
   riverDistance(x: number, z: number): { d: number; hw: number } {
-    let d = Infinity,
-      hw = 0;
-    for (const s of this.river.query(x, z, x, z, this.found)) {
-      const dd = segDist(x, z, s.ax, s.az, s.bx, s.bz);
-      if (dd < d) {
-        d = dd;
-        hw = s.hw;
-      }
-    }
-    return { d, hw };
+    const n = this.nearestRiver(x, z);
+    return n ? { d: n.d, hw: n.seg.hw } : { d: Infinity, hw: 0 };
   }
 
-  private poolAt(x: number, z: number, pad: number): { inside: boolean; edge: number } | null {
+  private nearestRiver(x: number, z: number): { seg: LevelSegment; d: number; t: number } | null {
+    let best: { seg: LevelSegment; d: number; t: number } | null = null;
+    for (const s of this.river.query(x, z, x, z, this.found)) {
+      const d = segDist(x, z, s.ax, s.az, s.bx, s.bz);
+      if (best && d >= best.d) continue;
+      const dx = s.bx - s.ax,
+        dz = s.bz - s.az;
+      const t = Math.max(0, Math.min(1, ((x - s.ax) * dx + (z - s.az) * dz) / (dx * dx + dz * dz || 1)));
+      best = { seg: s, d, t };
+    }
+    return best;
+  }
+
+  private poolAt(x: number, z: number, pad: number): Pool | null {
     for (const p of this.pools) {
       if (x < p.b.minX - pad || x > p.b.maxX + pad || z < p.b.minZ - pad || z > p.b.maxZ + pad) continue;
-      return { inside: pointInRing(x, z, p.ring), edge: ringDist(x, z, p.ring) };
+      if (pointInRing(x, z, p.ring) || ringDist(x, z, p.ring) < pad) return p;
     }
     return null;
   }
 
   /** Natural ground (no bridges). */
   base(x: number, z: number): number {
-    let h = 0;
-    const { d, hw } = this.riverDistance(x, z);
-    if (d < hw + 2) h = lerp(RIVER_BED, 0, smoothstep(hw - 3, hw + 2, d));
-    const pool = this.poolAt(x, z, 4);
-    if (pool) {
-      const ph = pool.inside ? lerp(-0.25, POOL_BED, smoothstep(0, 5, pool.edge)) : lerp(-0.25, 0, Math.min(1, pool.edge / 3));
-      h = Math.min(h, ph);
-    }
-    return h;
+    return this.ground(x, z);
   }
 
   /** Bridge deck height at (x, z), or -Infinity. */
   deck(x: number, z: number): number {
     for (const s of this.bridges.query(x, z, x, z, this.found)) {
-      if (segDist(x, z, s.ax, s.az, s.bx, s.bz) <= s.hw) return DECK;
+      if (segDist(x, z, s.ax, s.az, s.bx, s.bz) > s.hw) continue;
+      const dx = s.bx - s.ax,
+        dz = s.bz - s.az;
+      const t = Math.max(0, Math.min(1, ((x - s.ax) * dx + (z - s.az) * dz) / (dx * dx + dz * dz || 1)));
+      return lerp(s.ha, s.hb, t);
     }
     return -Infinity;
   }
@@ -99,21 +145,26 @@ export class TerrainModel {
     return Math.max(this.base(x, z), this.deck(x, z));
   }
 
+  /** Water surface at (x, z) if it is on the river or a pool and below the surface, else null. */
   waterAt(x: number, z: number): number | null {
-    const { d, hw } = this.riverDistance(x, z);
-    if (d < hw + 1) return WATER_LEVEL;
+    const r = this.nearestRiver(x, z);
+    if (r && r.d < r.seg.hw + 1) return lerp(r.seg.ha, r.seg.hb, r.t);
     const pool = this.poolAt(x, z, 1);
-    if (pool && (pool.inside || pool.edge < 1)) return WATER_LEVEL;
-    return null;
+    return pool ? pool.level : null;
   }
 
-  /** Does the channel (or a pool) influence the square tile centred at (x, z)? */
-  affects(x: number, z: number, half: number): boolean {
-    const reach = half * 1.42 + 12;
-    for (const s of this.river.query(x - reach, z - reach, x + reach, z + reach, this.found)) {
-      if (segDist(x, z, s.ax, s.az, s.bx, s.bz) < reach + s.hw) return true;
-    }
-    return this.pools.some((p) => x + half > p.b.minX - 6 && x - half < p.b.maxX + 6 && z + half > p.b.minZ - 6 && z - half < p.b.maxZ + 6);
+  /** River surface level along the nearest river segment (for water meshes). */
+  riverLevel(x: number, z: number): number {
+    const r = this.nearestRiver(x, z);
+    return r ? lerp(r.seg.ha, r.seg.hb, r.t) : -0.45;
+  }
+
+  /** Slope (rise over run) of the ground at (x, z). */
+  slope(x: number, z: number): number {
+    const e = 1;
+    const gx = (this.ground(x + e, z) - this.ground(x - e, z)) / (2 * e);
+    const gz = (this.ground(x, z + e) - this.ground(x, z - e)) / (2 * e);
+    return Math.hypot(gx, gz);
   }
 }
 
@@ -308,57 +359,125 @@ export function groundMaterial(map: MapData, size: number, detail: THREE.Texture
 }
 
 /**
- * Ground mesh in 50 m tiles: flat quads where the ground is flat, a 2.5 m
- * heightfield where the river channel or the pools carve it.
+ * Real orthophoto (PNOA) on the ground, one texture and material per 256 m
+ * tile, with the grass/grain detail map multiplied in for close-ups. Roofs
+ * reuse the same materials (their UVs are world positions too), so a tile of
+ * ground and every roof on it is a single draw call.
  */
-export function buildGround(map: MapData, terrain: TerrainModel, batch: Batcher, mat: THREE.Material, fine = true): void {
+export class OrthoTiles {
+  private readonly mats = new Map<string, THREE.MeshStandardMaterial>();
+  private readonly loader = new THREE.TextureLoader();
+
+  constructor(
+    private readonly cfg: NonNullable<MapData['meta']['ortho']>,
+    private readonly baseUrl: string,
+    private readonly detail: THREE.Texture,
+  ) {}
+
+  /** Tile indices containing (x, z), clamped to the grid. */
+  tileOf(x: number, z: number): [number, number] {
+    const c = this.cfg;
+    const i = Math.min(c.nx - 1, Math.max(0, Math.floor((x - c.minX) / c.tile)));
+    const j = Math.min(c.nz - 1, Math.max(0, Math.floor((z - c.minZ) / c.tile)));
+    return [i, j];
+  }
+
+  /** UV of world (x, z) inside tile (i, j). */
+  uv(i: number, j: number, x: number, z: number): [number, number] {
+    const c = this.cfg;
+    return [(x - (c.minX + i * c.tile)) / c.tile, 1 - (z - (c.minZ + j * c.tile)) / c.tile];
+  }
+
+  material(i: number, j: number): THREE.MeshStandardMaterial {
+    const key = `${i}_${j}`;
+    let m = this.mats.get(key);
+    if (m) return m;
+    const tex = this.loader.load(`${this.baseUrl}${this.cfg.dir}/${key}.jpg`);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0 });
+    m.name = `ortho_${key}`;
+    m.userData.castShadow = false;
+    const detail = this.detail;
+    const tile = this.cfg.tile;
+    m.onBeforeCompile = (shader) => {
+      shader.uniforms.detailMap = { value: detail };
+      shader.uniforms.detailRepeat = { value: new THREE.Vector2(tile / 3, tile / 3) };
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform sampler2D detailMap;\nuniform vec2 detailRepeat;')
+        .replace(
+          '#include <map_fragment>',
+          // The orthophoto was shot in sunlight: tone it down so our own lighting does not double it.
+          '#include <map_fragment>\n  diffuseColor.rgb *= mix(vec3(1.0), texture2D(detailMap, vMapUv * detailRepeat).rgb * 1.45, 0.35) * 0.95;',
+        );
+    };
+    this.mats.set(key, m);
+    return m;
+  }
+}
+
+/**
+ * Ground mesh: one heightfield patch per orthophoto tile (or 128 m patches
+ * with the land-use texture when the map has no orthophoto).
+ */
+export function buildGround(
+  map: MapData,
+  terrain: TerrainModel,
+  batch: Batcher,
+  fallback: THREE.Material,
+  ortho: OrthoTiles | null,
+  segments: number,
+): void {
   const B = map.meta.bounds;
-  const TILE = 50;
+  const TILE = map.meta.ortho?.tile ?? 128;
+  const x0 = map.meta.ortho?.minX ?? B.minX,
+    z0 = map.meta.ortho?.minZ ?? B.minZ;
+  const nx = Math.ceil((B.maxX - x0) / TILE),
+    nz = Math.ceil((B.maxZ - z0) / TILE);
   const W = B.maxX - B.minX,
     H = B.maxZ - B.minZ;
-  const nx = Math.ceil(W / TILE),
-    nz = Math.ceil(H / TILE);
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < nz; j++) {
-      const x0 = B.minX + i * TILE,
-        z0 = B.minZ + j * TILE;
-      const x1 = Math.min(B.maxX, x0 + TILE),
-        z1 = Math.min(B.maxZ, z0 + TILE);
-      const detailed = terrain.affects((x0 + x1) / 2, (z0 + z1) / 2, TILE / 2);
-      const seg = detailed ? (fine ? 20 : 12) : 1;
-      batch.addWorld(tile(terrain, x0, z0, x1, z1, seg, detailed, B, W, H), mat);
+      const ax = x0 + i * TILE,
+        az = z0 + j * TILE;
+      const bx = Math.min(B.maxX, ax + TILE),
+        bz = Math.min(B.maxZ, az + TILE);
+      const uv = ortho
+        ? (x: number, z: number) => ortho.uv(i, j, x, z)
+        : (x: number, z: number) => [(x - B.minX) / W, 1 - (z - B.minZ) / H];
+      batch.addWorld(patch(terrain, ax, az, bx, bz, segments, uv), ortho ? ortho.material(i, j) : fallback);
     }
   }
 }
 
-function tile(
+function patch(
   terrain: TerrainModel,
   x0: number,
   z0: number,
   x1: number,
   z1: number,
   seg: number,
-  detailed: boolean,
-  B: { minX: number; minZ: number },
-  W: number,
-  H: number,
+  uvOf: (x: number, z: number) => number[],
 ): THREE.BufferGeometry {
   const pos: number[] = [],
     uv: number[] = [],
     idx: number[] = [];
-  for (let j = 0; j <= seg; j++) {
-    for (let i = 0; i <= seg; i++) {
-      const x = x0 + ((x1 - x0) * i) / seg;
-      const z = z0 + ((z1 - z0) * j) / seg;
-      pos.push(x, detailed ? terrain.base(x, z) : 0, z);
-      uv.push((x - B.minX) / W, 1 - (z - B.minZ) / H);
+  const sx = Math.max(1, Math.round((seg * (x1 - x0)) / 256)),
+    sz = Math.max(1, Math.round((seg * (z1 - z0)) / 256));
+  for (let j = 0; j <= sz; j++) {
+    for (let i = 0; i <= sx; i++) {
+      const x = x0 + ((x1 - x0) * i) / sx;
+      const z = z0 + ((z1 - z0) * j) / sz;
+      pos.push(x, terrain.base(x, z), z);
+      uv.push(...uvOf(x, z));
     }
   }
-  for (let j = 0; j < seg; j++) {
-    for (let i = 0; i < seg; i++) {
-      const a = j * (seg + 1) + i,
+  for (let j = 0; j < sz; j++) {
+    for (let i = 0; i < sx; i++) {
+      const a = j * (sx + 1) + i,
         b = a + 1,
-        c = a + seg + 1,
+        c = a + sx + 1,
         d = c + 1;
       idx.push(a, c, b, b, c, d);
     }

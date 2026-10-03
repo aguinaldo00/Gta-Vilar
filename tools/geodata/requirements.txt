@@ -1,0 +1,7 @@
+# Offline geodata tools (python3 -m pip install -r tools/geodata/requirements.txt)
+laspy==2.7.0
+lazrs
+numpy
+scipy
+pillow
+scikit-image

@@ -16,9 +16,9 @@ export interface DriveControls {
 
 export const PARKED: DriveControls = { throttle: 0, steer: 0, handbrake: true };
 
-/** Terrain the wheels refuse: river channel and steep edge hills. */
-const MIN_DRIVABLE = -0.35;
-const MAX_DRIVABLE = 1.6;
+/** Water deeper than this, or ground steeper than this (rise/run), stops the wheels. */
+const MAX_WADE = 0.35;
+const MAX_SLOPE = 0.6;
 const RESTITUTION = 0.25;
 
 /**
@@ -202,13 +202,19 @@ export class Vehicle {
     return -vn;
   }
 
-  /** Keeps the wheels out of the river and off the steep boundary hills. */
+  /** Keeps the wheels out of deep water and off slopes too steep to drive. */
   private resolveTerrain(world: World, px: number, pz: number, ph: number): void {
     const s = this.spec;
     const fx = Math.sin(this.heading),
       fz = Math.cos(this.heading);
     const hl = s.length / 2,
       hw = s.width / 2;
+    const blocked = (x: number, z: number) => {
+      const w = world.waterAt(x, z);
+      if (w !== null && w - world.heightAt(x, z) > MAX_WADE) return true;
+      // Bridge decks are always drivable, whatever the bank below them does.
+      return world.terrain.deck(x, z) === -Infinity && world.terrain.slope(x, z) > MAX_SLOPE;
+    };
     for (const [a, b] of [
       [hl, hw],
       [hl, -hw],
@@ -217,24 +223,23 @@ export class Vehicle {
     ]) {
       const x = this.x + fx * a - fz * b;
       const z = this.z + fz * a + fx * b;
-      const h = world.heightAt(x, z);
-      if (h >= MIN_DRIVABLE && h <= MAX_DRIVABLE) continue;
-      // Normal from the height gradient: uphill out of the river, downhill off the hills.
-      const e = 0.5;
-      let nx = world.heightAt(x + e, z) - world.heightAt(x - e, z);
-      let nz = world.heightAt(x, z + e) - world.heightAt(x, z - e);
-      if (h > MAX_DRIVABLE) {
-        nx = -nx;
-        nz = -nz;
-      }
+      if (!blocked(x, z)) continue;
+      // Push back the way we came (out of the water, or off the bank).
+      let nx = px - x,
+        nz = pz - z;
       const len = Math.hypot(nx, nz) || 1;
       nx /= len;
       nz /= len;
-      const prevH = world.heightAt(px, pz);
-      if (prevH < MIN_DRIVABLE || prevH > MAX_DRIVABLE) {
+      if (blocked(px, pz)) {
         // Already off the drivable ground (e.g. dropped into the riverbed): crawl out uphill.
-        this.x += nx * 0.08;
-        this.z += nz * 0.08;
+        const e = 0.5;
+        let gx = world.heightAt(x + e, z) - world.heightAt(x - e, z);
+        let gz = world.heightAt(x, z + e) - world.heightAt(x, z - e);
+        const gl = Math.hypot(gx, gz) || 1;
+        gx /= gl;
+        gz /= gl;
+        this.x += gx * 0.08;
+        this.z += gz * 0.08;
         this.vx *= 0.9;
         this.vz *= 0.9;
         return;

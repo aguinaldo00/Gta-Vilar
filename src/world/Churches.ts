@@ -82,7 +82,9 @@ function frame(ctx: BuildContext, ring: Pt[], front: Pt): { lb: LocalBatch; L: n
   }
   // Local +X in world is (cos rot, -sin rot); flip if the front lies behind.
   if ((front[0] - o.cx) * Math.cos(rot) - (front[1] - o.cz) * Math.sin(rot) < 0) rot += Math.PI;
-  return { lb: new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot), L, W, rot, cx: o.cx, cz: o.cz };
+  // Stand on the lowest ground under the building so no corner floats.
+  const y = Math.min(...ring.map(([x, z]) => ctx.terrain.heightAt(x, z)));
+  return { lb: new LocalBatch(ctx.batch, o.cx, y, o.cz, rot), L, W, rot, cx: o.cx, cz: o.cz };
 }
 
 function solid(ctx: BuildContext, f: { lb: LocalBatch; rot: number }, x: number, z: number, w: number, d: number, top: number): void {
@@ -171,7 +173,7 @@ function santaMarina(ctx: BuildContext): void {
 
 /** Free-standing concrete bell tower: two blades, one opening for two bells and a small one, three crosses. */
 function campanile(ctx: BuildContext, x: number, z: number, rot: number): void {
-  const lb = new LocalBatch(ctx.batch, x, 0, z, rot);
+  const lb = new LocalBatch(ctx.batch, x, ctx.terrain.heightAt(x, z), z, rot);
   const { mats } = ctx;
   const concrete = mats.tint('#cfcac0');
   const H = 24;

@@ -257,7 +257,9 @@ export function buildCommerce(ctx: BuildContext): Signs {
   for (const s of ctx.map.shops) {
     const h = hash01(s.x * 1.7, s.z * 2.3);
     const st = styleOf(s, h);
-    const lb = new LocalBatch(batch, s.x, 0, s.z, s.a);
+    // The shop front stands on the pavement in front of the wall.
+    const ground = ctx.terrain.heightAt(s.x + Math.sin(s.a) * 1.5, s.z + Math.cos(s.a) * 1.5);
+    const lb = new LocalBatch(batch, s.x, ground, s.z, s.a);
     const W = s.w;
     const frame = mats.tint(st.frame);
     const half = W / 2;
@@ -316,7 +318,7 @@ export function buildCommerce(ctx: BuildContext): Signs {
       // Casa cuartel: the flag over the door and a lamp on each side.
       const c = Math.cos(s.a),
         sn = Math.sin(s.a);
-      flag(ctx, 'es', s.x + sn * 0.15, sy + 0.5, s.z + c * 0.15, 2.4, s.a, 0.8);
+      flag(ctx, 'es', s.x + sn * 0.15, ground + sy + 0.5, s.z + c * 0.15, 2.4, s.a, 0.8);
       for (const x of [-1.6, 1.6]) {
         lb.add(B, mats.iron, x, 2.6, 0.18, 0, 0.05, 0.05, 0.35);
         lb.add(B, mats.glow('#ffe2a0'), x, 2.45, 0.35, 0, 0.18, 0.28, 0.18);

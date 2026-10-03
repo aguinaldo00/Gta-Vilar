@@ -193,3 +193,34 @@ export function hash01(a: number, b = 0): number {
   const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return s - Math.floor(s);
 }
+
+/** Splits 2D triangles until no edge is longer than `maxEdge`, so they can follow the terrain. */
+export function subdivideTris(tris: Pt[][], maxEdge: number): Pt[][] {
+  const out: Pt[][] = [];
+  const stack = [...tris];
+  while (stack.length) {
+    const t = stack.pop()!;
+    const [a, b, c] = t;
+    const lab = Math.hypot(b[0] - a[0], b[1] - a[1]),
+      lbc = Math.hypot(c[0] - b[0], c[1] - b[1]),
+      lca = Math.hypot(a[0] - c[0], a[1] - c[1]);
+    const longest = Math.max(lab, lbc, lca);
+    if (longest <= maxEdge || stack.length + out.length > 2_000_000) {
+      out.push(t);
+      continue;
+    }
+    // Split the longest edge at its midpoint.
+    const mid = (p: Pt, q: Pt): Pt => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    if (longest === lab) {
+      const m = mid(a, b);
+      stack.push([a, m, c], [m, b, c]);
+    } else if (longest === lbc) {
+      const m = mid(b, c);
+      stack.push([a, b, m], [a, m, c]);
+    } else {
+      const m = mid(c, a);
+      stack.push([a, b, m], [m, b, c]);
+    }
+  }
+  return out;
+}

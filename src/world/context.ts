@@ -5,7 +5,7 @@ import type { Batcher } from './Batcher';
 import type { Materials } from './Materials';
 import type { MapData } from './mapData';
 import type { RoadNetwork } from './Roads';
-import type { TerrainModel } from './Terrain';
+import type { OrthoTiles, TerrainModel } from './Terrain';
 import type { Quality } from './World';
 
 export type Animator = (time: number, dt: number) => void;
@@ -14,6 +14,8 @@ export type Animator = (time: number, dt: number) => void;
 export interface BuildContext {
   /** The map being built (loaded from public/maps/). */
   map: MapData;
+  /** Orthophoto tiles (ground and roofs), when the map has them. */
+  ortho: OrthoTiles | null;
   scene: THREE.Scene;
   batch: Batcher;
   mats: Materials;

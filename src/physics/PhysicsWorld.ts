@@ -23,6 +23,12 @@ export interface ColliderOptions {
   bottom?: number;
   top: number;
   mask?: number;
+  /**
+   * World builders give `bottom`/`top` relative to the ground under the
+   * collider (a bench is 0.5 m tall wherever it stands); `absolute` marks
+   * heights already in world space (walls measured by LiDAR, bridge decks).
+   */
+  absolute?: boolean;
 }
 
 /** Write-only sink for static level geometry (what world builders need). */

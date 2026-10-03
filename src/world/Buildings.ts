@@ -12,7 +12,10 @@ import { VEHICLE_ROADS } from './Roads';
 const CUSTOM = new Set(['townhall', 'torre']);
 const OLD_TOWN_RADIUS = 450;
 
-const FACADE_TINTS = ['#f3eee3', '#e8d7b5', '#f7f5f0', '#dcc39b', '#ead0bb', '#d9d1c1', '#e3dccb'].map((c) => new THREE.Color(c));
+// Plaster and stone tones seen around the old town (cream, ochre, sand, brick, white).
+const FACADE_TINTS = ['#f3eee3', '#e8d7b5', '#f7f5f0', '#dcc39b', '#ead0bb', '#d9d1c1', '#e3dccb', '#d9b48c', '#c98f6b', '#e6c9a3'].map(
+  (c) => new THREE.Color(c),
+);
 const MODERN_TINTS = ['#e9e6df', '#cfc8bb', '#d8cdb8', '#bfb6a6'].map((c) => new THREE.Color(c));
 const STONE_TINT = new THREE.Color('#d8c49c');
 const WHITE = new THREE.Color('#ffffff');
@@ -113,7 +116,32 @@ function remapEdges(edges: number[] | undefined, n: number, reversed: boolean): 
   return new Set((edges ?? []).map((i) => (reversed ? (n - 2 - i + n) % n : i)));
 }
 
-function walls(m: Mesh3, ring: Pt[], y0: number, y1: number, color: THREE.Color, tileU: number, tileV: number, hidden?: Set<number>): void {
+/** Walls from y0 to y1 whose texture rows (storeys) start at `vBase`. */
+function wallsLocal(
+  m: Mesh3,
+  ring: Pt[],
+  y0: number,
+  y1: number,
+  vBase: number,
+  color: THREE.Color,
+  tileU: number,
+  tileV: number,
+  hidden?: Set<number>,
+): void {
+  walls(m, ring, y0, y1, color, tileU, tileV, hidden, vBase);
+}
+
+function walls(
+  m: Mesh3,
+  ring: Pt[],
+  y0: number,
+  y1: number,
+  color: THREE.Color,
+  tileU: number,
+  tileV: number,
+  hidden?: Set<number>,
+  vBase = 0,
+): void {
   let u = 0;
   for (let i = 0; i < ring.length; i++) {
     const [ax, az] = ring[i],
@@ -124,8 +152,8 @@ function walls(m: Mesh3, ring: Pt[], y0: number, y1: number, color: THREE.Color,
       const n = [(bz - az) / len, 0, -(bx - ax) / len];
       const u0 = u / tileU,
         u1 = (u + len) / tileU,
-        v0 = y0 / tileV,
-        v1 = y1 / tileV;
+        v0 = (y0 - vBase) / tileV,
+        v1 = (y1 - vBase) / tileV;
       m.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], [u0, v0], [u1, v0], [u1, v1], [u0, v1], n, color);
     }
     u += len;
@@ -205,7 +233,7 @@ function inset(ring: Pt[], d: number): Pt[] | null {
 }
 
 /** Tiled roof skirt sloping up from the eaves to a flat top (irregular footprints). */
-function skirtRoof(m: Mesh3, ring: Pt[], holes: Pt[][], h: number, color: THREE.Color, flatColor: THREE.Color): void {
+function skirtRoof(m: Mesh3, ring: Pt[], holes: Pt[][], h: number, color: THREE.Color, flatColor: THREE.Color, rise = 1.3): void {
   const inner = holes.length ? null : inset(ring, 2.2);
   const uvOf = (p: number[]) => [p[0] / 2, -p[2] / 2 + p[1]];
   if (!inner) {
@@ -217,7 +245,6 @@ function skirtRoof(m: Mesh3, ring: Pt[], holes: Pt[][], h: number, color: THREE.
     }
     return;
   }
-  const rise = 1.3;
   const c = centroid(ring);
   for (let i = 0; i < ring.length; i++) {
     const j = (i + 1) % ring.length;
@@ -251,8 +278,24 @@ function isConvexQuad(r: Pt[]): boolean {
   return true;
 }
 
+/** Replaces roof UVs with orthophoto coordinates and returns the tile material (roofs show the real tiles). */
+function orthoRoof(ctx: BuildContext, m: Mesh3, cx: number, cz: number): THREE.Material | null {
+  const o = ctx.ortho;
+  if (!o || m.empty) return null;
+  const [i, j] = o.tileOf(cx, cz);
+  for (let k = 0, v = 0; k < m.pos.length; k += 3, v += 2) {
+    const [u, w] = o.uv(i, j, m.pos[k], m.pos[k + 2]);
+    m.uv[v] = u;
+    m.uv[v + 1] = w;
+  }
+  return o.material(i, j);
+}
+
 /**
- * Real footprints from OSM, extruded to building:levels. Walls carry a
+ * Real footprints (OSM / cadastre, plus buildings traced from the LiDAR)
+ * standing on the terrain, extruded to the heights measured by PNOA-LiDAR
+ * (walls up to the eaves, roof up to the ridge) or, without LiDAR, to
+ * building:levels. Walls carry a
  * per-building tint (vertex colour) on a shared window texture; roofs are
  * hipped on rectangular plots and skirted elsewhere. Collision follows the
  * footprint with one thin box per wall.
@@ -271,13 +314,21 @@ export function buildBuildings(ctx: BuildContext): void {
     const holes = (b.h ?? []).map((h) => oriented(toPts(h), true));
     const [cx, cz] = centroid(outer);
     const distC = Math.hypot(cx, cz);
-    const y0 = (b.mlv ?? 0) * FLOOR_H;
-    const h = y0 + buildingHeight(b, distC);
+    // Ground under the walls (LiDAR-baked, or sampled); raised parts start mlv storeys up.
+    const ground = b.gy ?? ctx.terrain.heightAt(cx, cz);
+    const y0 = ground + (b.mlv ?? 0) * FLOOR_H;
+    // Measured volume: walls to the eaves, roof to the ridge. Otherwise from the storeys.
+    const measured = b.top !== undefined && b.eave !== undefined && b.top > y0 + 1.5;
+    const h = measured ? b.top! : y0 + buildingHeight(b, distC);
+    const eaveY = measured ? Math.min(h, Math.max(y0 + 1.8, b.eave!)) : h;
+    const rise = measured ? h - eaveY : -1;
+    // Walls reach a little below the ground on slopes so they never float.
+    const footY = (b.mlv ?? 0) > 0 ? y0 : ground - 1.2;
     const area = signedArea(outer);
     const rnd = hash01(idx);
 
     if (b.t === 'canopy') {
-      canopy(ctx, outer, h > 6 ? 3.2 : h);
+      canopy(ctx, outer, ground, Math.min(h - ground, 6) > 1.5 ? Math.min(h - ground, 6) : 3.2);
       continue;
     }
     const industrial = b.t === 'industrial';
@@ -291,10 +342,17 @@ export function buildBuildings(ctx: BuildContext): void {
     else tint = FACADE_TINTS[Math.floor(rnd * FACADE_TINTS.length)];
     if (b.t === 'station') tint = new THREE.Color('#d8b98a');
     if (industrial) tint = INDUSTRIAL_TINTS[Math.floor(rnd * INDUSTRIAL_TINTS.length)];
-    const top = ruins ? y0 + Math.min(h - y0, 3.5) : h;
+    // Pitched roofs start at the measured eaves; flat roofs (small rise) at the top.
+    const pitched = measured ? rise > 0.9 : true;
+    const top = ruins ? y0 + Math.min(h - y0, 3.5) : measured && pitched ? eaveY : h;
 
+    // Facade rhythm: storeys fitted to the measured wall height (real floor count), bay width varies per building.
+    const storeys = Math.max(1, Math.round((top - y0) / FLOOR_H));
+    const storeyH = industrial ? 2 : measured && !ruins ? Math.min(3.6, Math.max(2.6, (top - y0) / storeys)) : FLOOR_H;
+    const bayW = industrial ? 2 : 2.9 + hash01(idx, 3.3) * 1.2;
     for (const [k, ring] of [outer, ...holes].entries()) {
-      walls(wallsMesh, ring, y0, top, tint, industrial ? 2 : 3.4, industrial ? 2 : FLOOR_H, k === 0 ? hidden : undefined);
+      // Window rows are counted from the storey base, so the ground floor stays at street level.
+      wallsLocal(wallsMesh, ring, footY, top, y0, tint, bayW, storeyH, k === 0 ? hidden : undefined);
     }
 
     // Roofs. Low annexes (one storey, small) get flat terraces, like the patios and garages of the old town.
@@ -303,7 +361,7 @@ export function buildBuildings(ctx: BuildContext): void {
       // Roofless.
     } else if (b.t === 'greenhouse') {
       flatRoof(roofMesh, outer, holes, top, new THREE.Color('#cfe0e4'));
-    } else if (industrial || (b.t === 'block' && area > 600) || lowAnnex) {
+    } else if (measured ? !pitched : industrial || (b.t === 'block' && area > 600) || lowAnnex) {
       flatRoof(roofMesh, outer, holes, top, lowAnnex ? TERRACE : FLAT_ROOF);
     } else if (isConvexQuad(outer) && !holes.length && area < 900) {
       const short = Math.min(
@@ -311,17 +369,21 @@ export function buildBuildings(ctx: BuildContext): void {
       );
       // A small overhang (alero) beyond the walls, as on the real houses.
       const eave = inset(outer, -0.35) ?? outer;
-      hipRoof(roofMesh, eave, top - 0.05, Math.min(4.5, short * 0.32), WHITE);
+      hipRoof(roofMesh, eave, top - 0.05, measured ? Math.min(rise, short * 0.6) : Math.min(4.5, short * 0.32), WHITE);
     } else {
-      skirtRoof(roofMesh, outer, holes, top, WHITE, b.t === 'small' ? FLAT_ROOF : WHITE);
+      skirtRoof(roofMesh, outer, holes, top, WHITE, b.t === 'small' ? FLAT_ROOF : WHITE, measured ? Math.min(rise, 4) : 1.3);
     }
 
     const wallMat = b.t === 'greenhouse' ? mats.galeria : industrial ? mats.corrugatedVC : church ? mats.stoneVC : mats.facadeVC;
     batch.addWorld(wallsMesh.geometry(), wallMat);
-    if (!roofMesh.empty) batch.addWorld(roofMesh.geometry(), industrial ? mats.corrugatedVC : mats.roofVC);
+    if (!roofMesh.empty) {
+      // Real roofs from the orthophoto (except glasshouses); stock tiles when there is none.
+      const real = b.t !== 'greenhouse' ? orthoRoof(ctx, roofMesh, cx, cz) : null;
+      batch.addWorld(roofMesh.geometry(), real ?? (industrial ? mats.corrugatedVC : mats.roofVC));
+    }
 
     // White glazed galería on the street-facing side of old-town houses (as in the plaza photos).
-    if (!church && !industrial && distC < OLD_TOWN_RADIUS && h - y0 > 2 * FLOOR_H && y0 === 0 && rnd < 0.5) {
+    if (!church && !industrial && distC < OLD_TOWN_RADIUS && top - y0 > 2 * FLOOR_H && !b.mlv && rnd < 0.5) {
       let best: { i: number; len: number } | null = null;
       for (let i = 0; i < outer.length; i++) {
         if (hidden.has(i)) continue;
@@ -341,18 +403,18 @@ export function buildBuildings(ctx: BuildContext): void {
         const nx = (bz - az) / len,
           nz = -(bx - ax) / len;
         const gw = Math.min(len - 1.6, 3 + hash01(idx, 7) * 4);
-        const gh = h - FLOOR_H - 0.9;
+        const gh = top - y0 - FLOOR_H - 0.9;
         const gd = 0.9;
         const mx = (ax + bx) / 2 + nx * (gd / 2),
           mz = (az + bz) / 2 + nz * (gd / 2);
         const rot = Math.atan2(-(bz - az), bx - ax);
-        const gy = FLOOR_H + 0.3 + gh / 2;
+        const gy = y0 + FLOOR_H + 0.3 + gh / 2;
         const geo = new THREE.BoxGeometry(gw, gh, gd);
         const uv = geo.attributes.uv as THREE.BufferAttribute;
         for (let k = 0; k < uv.count; k++) uv.setXY(k, (uv.getX(k) * gw) / 1.0, (uv.getY(k) * gh) / 1.4);
         batch.add(geo, mats.galeria, mx, gy, mz, rot);
         batch.add(new THREE.BoxGeometry(gw + 0.2, 0.15, gd + 0.2), mats.roof, mx, gy + gh / 2 + 0.07, mz, rot);
-        collision.addBox(mx, mz, gw, gd, { rot, bottom: gy - gh / 2, top: gy + gh / 2, mask: Layer.Camera });
+        collision.addBox(mx, mz, gw, gd, { rot, bottom: gy - gh / 2, top: gy + gh / 2, mask: Layer.Camera, absolute: true });
       }
     }
 
@@ -369,9 +431,10 @@ export function buildBuildings(ctx: BuildContext): void {
         const t = 0.5;
         collision.addBox((ax + bx) / 2 - nx * (t / 2), (az + bz) / 2 - nz * (t / 2), len + 0.15, t, {
           rot: Math.atan2(-(bz - az), bx - ax),
-          bottom: y0,
-          top: top + 2,
+          bottom: footY,
+          top: h + 2,
           mask: Layer.Solid,
+          absolute: true,
         });
       }
     }
@@ -388,12 +451,12 @@ function flatRoof(m: Mesh3, outer: Pt[], holes: Pt[][], h: number, color: THREE.
 }
 
 /** Open shelter (building=roof): a slab on posts at the corners. */
-function canopy(ctx: BuildContext, ring: Pt[], h: number): void {
+function canopy(ctx: BuildContext, ring: Pt[], ground: number, h: number): void {
   const roof = new Mesh3();
-  flatRoof(roof, ring, [], h, new THREE.Color('#9a958c'));
+  flatRoof(roof, ring, [], ground + h, new THREE.Color('#9a958c'));
   ctx.batch.addWorld(roof.geometry(), ctx.mats.roofVC);
   for (const [x, z] of ring) {
-    ctx.batch.add(new THREE.BoxGeometry(0.25, h, 0.25), ctx.mats.iron, x, h / 2, z);
-    ctx.collision.addCircle(x, z, 0.2, { top: h, mask: Layer.Solid });
+    ctx.batch.add(new THREE.BoxGeometry(0.25, h + 1, 0.25), ctx.mats.iron, x, ground + (h - 1) / 2, z);
+    ctx.collision.addCircle(x, z, 0.2, { bottom: ground - 1, top: ground + h, mask: Layer.Solid, absolute: true });
   }
 }

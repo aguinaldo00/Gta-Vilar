@@ -3,7 +3,7 @@ import { Layer } from '../physics/PhysicsWorld';
 import type { BuildContext } from './context';
 import { hash01, type Pt, pointInRing, ringBounds, toPts, triangulate } from './geo';
 import { Unit } from './props';
-import { type TerrainModel, WATER_LEVEL } from './Terrain';
+import type { TerrainModel } from './Terrain';
 import { createWaterMaterial } from './Water';
 
 /** Water surface with an `aDepth` attribute (metres of water below each vertex). */
@@ -11,11 +11,11 @@ class WaterMesh {
   pos: number[] = [];
   depth: number[] = [];
 
-  tri(a: Pt, b: Pt, c: Pt, y: number, depthAt: (x: number, z: number) => number): void {
+  tri(a: Pt, b: Pt, c: Pt, y: (x: number, z: number) => number, depthAt: (x: number, z: number) => number): void {
     // Upward-facing winding.
     if ((b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) < 0) [b, c] = [c, b];
     for (const p of [a, b, c]) {
-      this.pos.push(p[0], y, p[1]);
+      this.pos.push(p[0], y(p[0], p[1]), p[1]);
       this.depth.push(depthAt(p[0], p[1]));
     }
   }
@@ -60,6 +60,7 @@ function riverSurface(
   cols: number,
   keep: (x: number, z: number) => boolean,
   depthAt: (x: number, z: number) => number,
+  level: (x: number, z: number) => number,
 ): void {
   const { left, right } = offsets(pts, hw);
   const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -82,15 +83,16 @@ function riverSurface(
           b = lerp(L0, R0, (c + 1) / cols);
         const d = lerp(L1, R1, c / cols),
           e = lerp(L1, R1, (c + 1) / cols);
-        m.tri(a, b, e, WATER_LEVEL, depthAt);
-        m.tri(a, e, d, WATER_LEVEL, depthAt);
+        m.tri(a, b, e, level, depthAt);
+        m.tri(a, e, d, level, depthAt);
       }
     }
   }
 }
 
 /** Polygon water (the natural pools) as a 2 m grid clipped to the polygon. */
-function gridSurface(m: WaterMesh, ring: Pt[], y: number, depthAt: (x: number, z: number) => number): void {
+function gridSurface(m: WaterMesh, ring: Pt[], level: number, depthAt: (x: number, z: number) => number): void {
+  const y = () => level;
   const b = ringBounds(ring);
   const s = 2;
   for (let x = b.minX - s; x < b.maxX + s; x += s) {
@@ -148,7 +150,8 @@ function riverRocks(ctx: BuildContext, terrain: TerrainModel): void {
         const key = `${Math.floor(x / 256)},${Math.floor(z / 256)}`;
         if (!cells.has(key)) cells.set(key, []);
         cells.get(key)!.push(m.compose(p.set(x, terrain.base(x, z) + size * 0.15, z), q, s.set(size, size, size)).clone());
-        if (size > 0.9) ctx.collision.addCircle(x, z, size * 0.9, { top: terrain.base(x, z) + size * 0.6, mask: Layer.Bodies });
+        if (size > 0.9)
+          ctx.collision.addCircle(x, z, size * 0.9, { top: terrain.base(x, z) + size * 0.6, mask: Layer.Bodies, absolute: true });
       }
     }
   }
@@ -180,15 +183,21 @@ export function buildHydro(ctx: BuildContext): void {
     mesh.renderOrder = order;
     ctx.scene.add(mesh);
   };
-  const depthAt = (x: number, z: number) => Math.max(0, WATER_LEVEL - terrain.base(x, z));
+  // Water surfaces follow the baked levels: the Nela drops several metres across the map.
+  const riverLevel = (x: number, z: number) => terrain.riverLevel(x, z);
+  const riverDepth = (x: number, z: number) => Math.max(0, riverLevel(x, z) - terrain.base(x, z));
 
-  const poolRings = ctx.map.areas.filter((a) => a.k === 'water').map((a) => toPts(a.o));
+  const waterAreas = ctx.map.areas.filter((a) => a.k === 'water');
+  const poolRings = waterAreas.map((a) => toPts(a.o));
   const outsidePools = (x: number, z: number) => !poolRings.some((r) => pointInRing(x, z, r));
   const riverMesh = new WaterMesh();
-  for (const r of ctx.map.rivers) riverSurface(riverMesh, toPts(r.p), r.w / 2 + 2, 8, outsidePools, depthAt);
+  for (const r of ctx.map.rivers) riverSurface(riverMesh, toPts(r.p), r.w / 2 + 2, 8, outsidePools, riverDepth, riverLevel);
   add(riverMesh.geometry(), river);
   const poolMesh = new WaterMesh();
-  for (const ring of poolRings) gridSurface(poolMesh, ring, WATER_LEVEL + 0.005, depthAt);
+  waterAreas.forEach((a, i) => {
+    const level = (a.wl ?? -0.45) + 0.005;
+    gridSurface(poolMesh, poolRings[i], level, (x, z) => Math.max(0, level - terrain.base(x, z)));
+  });
   add(poolMesh.geometry(), pools);
 
   const streamMesh = new WaterMesh();
@@ -200,18 +209,25 @@ export function buildHydro(ctx: BuildContext): void {
       1,
       () => true,
       () => 0.25,
+      // Streams are not carved: just above the ground.
+      (x, z) => terrain.heightAt(x, z) + 0.04,
     );
-  // Streams are not carved: lift them just above the ground.
-  const sg = streamMesh.geometry();
-  if (sg) {
-    sg.translate(0, 0.03 - WATER_LEVEL, 0);
-    add(sg, stream);
-  }
+  add(streamMesh.geometry(), stream);
 
   const swimMesh = new WaterMesh();
   for (const a of ctx.map.areas) {
     if (a.k !== 'pool') continue;
-    for (const [p, q, s] of triangulate(toPts(a.o))) swimMesh.tri(p, q, s, 0.06, () => 1.6);
+    const ring = toPts(a.o);
+    const c = ring.reduce((acc, p) => [acc[0] + p[0] / ring.length, acc[1] + p[1] / ring.length], [0, 0]);
+    const y = terrain.heightAt(c[0], c[1]) + 0.06;
+    for (const [p, q, s] of triangulate(ring))
+      swimMesh.tri(
+        p,
+        q,
+        s,
+        () => y,
+        () => 1.6,
+      );
   }
   add(swimMesh.geometry(), swim, 2);
 
@@ -231,9 +247,10 @@ export function buildHydro(ctx: BuildContext): void {
       const rot = Math.atan2(bx - ax, bz - az);
       const mx = (ax + bx) / 2,
         mz = (az + bz) / 2;
-      ctx.batch.add(new THREE.BoxGeometry(1.4, 2.6, len + 1), ctx.mats.stone, mx, -1.6, mz, rot);
-      ctx.batch.add(Unit.box, ctx.mats.concrete, mx, WATER_LEVEL + 0.12, mz, rot, 1.5, 0.2, len + 1);
-      ctx.collision.addBox(mx, mz, 1.4, len + 1, { rot, bottom: -3, top: -0.3, mask: Layer.Player });
+      const wl = terrain.riverLevel(mx, mz);
+      ctx.batch.add(new THREE.BoxGeometry(1.4, 2.6, len + 1), ctx.mats.stone, mx, wl - 1.15, mz, rot);
+      ctx.batch.add(Unit.box, ctx.mats.concrete, mx, wl + 0.12, mz, rot, 1.5, 0.2, len + 1);
+      ctx.collision.addBox(mx, mz, 1.4, len + 1, { rot, bottom: wl - 2.5, top: wl + 0.15, mask: Layer.Player, absolute: true });
       // Spill on both faces: a steep sheet of white water and a foam apron.
       for (const side of [-1, 1]) {
         const g = new THREE.PlaneGeometry(len + 1, 1.6, 1, 1);
@@ -243,7 +260,7 @@ export function buildHydro(ctx: BuildContext): void {
           g,
           foam,
           mx + Math.cos(rot) * side * 1.3,
-          WATER_LEVEL + 0.02,
+          wl + 0.02,
           mz - Math.sin(rot) * side * 1.3,
           rot + Math.PI / 2,
           1,

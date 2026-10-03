@@ -17,6 +17,8 @@ const BASE = 0.03; // plaza paving level
 class Placer {
   readonly lb: LocalBatch;
   readonly group = new THREE.Group();
+  /** World height of the model's origin. */
+  readonly y: number;
 
   constructor(
     private readonly ctx: BuildContext,
@@ -25,8 +27,10 @@ class Placer {
     readonly rot: number,
     y = 0,
   ) {
-    this.lb = new LocalBatch(ctx.batch, x, y, z, rot);
-    this.group.position.set(x, y, z);
+    // `y` is relative to the ground under the model's origin.
+    this.y = ctx.terrain.heightAt(x, z) + y;
+    this.lb = new LocalBatch(ctx.batch, x, this.y, z, rot);
+    this.group.position.set(x, this.y, z);
     this.group.rotation.y = rot;
     ctx.scene.add(this.group);
   }
@@ -195,7 +199,7 @@ function buildAyuntamiento(ctx: BuildContext): void {
     ['eu', 2.2],
   ] as const) {
     const [fx, fz] = P.lb.point(ox, front + 0.7);
-    flag(ctx, kind, fx, fy, fz, 2.8, rot, 0.45);
+    flag(ctx, kind, fx, P.y + fy, fz, 2.8, rot, 0.45);
   }
 }
 
@@ -403,7 +407,7 @@ function buildMikado(ctx: BuildContext): void {
     ctx,
     signTexture('LOCOMOTORA MIKADO', '#20304a', '#f2ecdc', 640, 96),
     ...P.lb.point(3.2, 2),
-    0,
+    P.y,
     rot + Math.PI / 2,
     3.6,
     0.6,
@@ -421,7 +425,7 @@ function buildStationSign(ctx: BuildContext): void {
   const mx = cx + (hit.x - cx) * 0.6,
     mz = cz + (hit.z - cz) * 0.6;
   const rot = facing(mx, mz, hit.x, hit.z);
-  signBoard(ctx, signTexture('VILLARCAYO', '#f2ecdc', '#20304a'), mx, mz, 0, rot, 4.2, 0.8, 1.8);
+  signBoard(ctx, signTexture('VILLARCAYO', '#f2ecdc', '#20304a'), mx, mz, ctx.terrain.heightAt(mx, mz), rot, 4.2, 0.8, 1.8);
 }
 
 export function buildLandmarks(ctx: BuildContext): void {

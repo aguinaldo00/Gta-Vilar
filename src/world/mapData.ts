@@ -17,6 +17,13 @@ export interface MapBuilding {
   t: 'house' | 'block' | 'industrial' | 'small' | 'church' | 'tower' | 'torre' | 'townhall' | 'station' | 'canopy' | 'ruins' | 'greenhouse';
   n?: string;
   mat?: string;
+  /** Ground under the walls (local y, from the terrain model). */
+  gy?: number;
+  /** Measured by LiDAR (local y): roof top and eaves. */
+  top?: number;
+  eave?: number;
+  /** "lidar" for buildings traced from the point cloud (missing in OSM). */
+  src?: 'lidar';
 }
 
 export interface MapArea {
@@ -30,6 +37,8 @@ export interface MapArea {
   c?: 1;
   /** Woods: needle-leaved (n) or broad-leaved (b). */
   l?: 'n' | 'b';
+  /** Water areas: surface level (local y). */
+  wl?: number;
 }
 
 /** Shop, bar or public service, on the street-facing wall of its building. */
@@ -87,16 +96,43 @@ export interface MapData {
     source: string;
     origin: { lat: number; lon: number; note: string };
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+    utmOrigin?: { E: number; N: number };
+    /** Heightmap file baked from LiDAR + MDT (tools/geodata). */
+    terrain?: { file: string; cols: number; rows: number; cell: number; minX: number; minZ: number; scale: number; datum: number };
+    /** Orthophoto tiles (tools/geodata/fetch_ortho.py). */
+    ortho?: { dir: string; tile: number; nx: number; nz: number; minX: number; minZ: number; source: string };
+    sources?: string[];
+    /** Real relief and imagery around the map (MDT25 + PNOA), drawn as the horizon. */
+    surroundings?: {
+      file: string;
+      image: string;
+      cols: number;
+      rows: number;
+      cell: number;
+      minX: number;
+      minZ: number;
+      scale: number;
+      imageBounds: [number, number, number, number];
+    };
   };
+  /** URL of the folder the map was loaded from (its side files live there). */
+  baseUrl?: string;
+  /** Heights of the surroundings grid (local y). */
+  surroundings?: Float32Array;
+  /** Ground heights (local y) on the meta.terrain grid; absent = flat map. */
+  heights?: Float32Array;
   buildings: MapBuilding[];
   areas: MapArea[];
   roads: MapRoad[];
   rails: { p: Coords }[];
-  rivers: { p: Coords; w: number; n?: string }[];
+  /** `wl`: water surface (local y) at each vertex. */
+  rivers: { p: Coords; w: number; n?: string; wl?: number[] }[];
   streams: { p: Coords; w: number }[];
   weirs: { p: Coords; n?: string }[];
   /** Flat [x, z, ...]. */
   trees: number[];
+  /** Trees found in the LiDAR canopy: flat [x, z, height, crown radius, ...] (metres). */
+  ltrees?: number[];
   /** Conifers (leaf_type=needleleaved), flat [x, z, ...]. */
   pines: number[];
   lamps: number[];
@@ -144,9 +180,36 @@ export function parseMap(raw: unknown, source = 'map'): MapData {
   return m as MapData;
 }
 
-/** Fetches and validates a map file served from public/maps/. */
+/** Decodes the Int16 heightmap (cm) that tools/geodata writes next to the map. */
+export function decodeHeights(map: MapData, buffer: ArrayBuffer): Float32Array {
+  const t = map.meta.terrain;
+  if (!t) throw new Error('map has no meta.terrain');
+  const raw = new Int16Array(buffer);
+  if (raw.length !== t.cols * t.rows) throw new Error(`${t.file}: expected ${t.cols * t.rows} samples, got ${raw.length}`);
+  const out = new Float32Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw[i] * t.scale;
+  return out;
+}
+
+/** Fetches and validates a map file served from public/maps/, with its heightmap. */
 export async function loadMap(url: string): Promise<MapData> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-  return parseMap(await res.json(), url);
+  const map = parseMap(await res.json(), url);
+  map.baseUrl = new URL('.', new URL(url, location.href)).href;
+  if (map.meta.terrain) {
+    const hurl = new URL(map.meta.terrain.file, new URL(url, location.href)).href;
+    const hr = await fetch(hurl);
+    if (!hr.ok) throw new Error(`${hurl}: HTTP ${hr.status}`);
+    map.heights = decodeHeights(map, await hr.arrayBuffer());
+  }
+  const s = map.meta.surroundings;
+  if (s) {
+    const sr = await fetch(new URL(s.file, map.baseUrl).href);
+    if (sr.ok) {
+      const raw = new Int16Array(await sr.arrayBuffer());
+      map.surroundings = Float32Array.from(raw, (v) => v * s.scale);
+    }
+  }
+  return map;
 }

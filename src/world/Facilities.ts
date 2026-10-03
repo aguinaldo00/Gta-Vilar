@@ -68,6 +68,7 @@ function carParks(ctx: BuildContext): void {
     }
     if (L * W > 20000) continue;
     const lb = new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot);
+    const groundAt = (lx: number, lz: number) => ctx.terrain.heightAt(...lb.point(lx, lz));
     const inside = (lx: number, lz: number) => {
       const [x, z] = lb.point(lx, lz);
       return pointInRing(x, z, ring);
@@ -103,8 +104,9 @@ function carParks(ctx: BuildContext): void {
           continue;
         if (!clearOfRoads(x, row.z)) continue;
         // Bay lines.
-        if (parallel) lb.add(Unit.box, line, x - pitch / 2, 0.035, row.z, 0, 0.1, 0.02, 2.2);
-        else lb.add(Unit.box, line, x - pitch / 2, 0.035, row.z, 0, 0.1, 0.02, 5);
+        const ly = groundAt(x - pitch / 2, row.z) + 0.035;
+        if (parallel) lb.add(Unit.box, line, x - pitch / 2, ly, row.z, 0, 0.1, 0.02, 2.2);
+        else lb.add(Unit.box, line, x - pitch / 2, ly, row.z, 0, 0.1, 0.02, 5);
         seed++;
         if (hash01(seed, 0.37) < (ctx.quality.detail ? 0.32 : 0.55)) continue;
         const [wx, wz] = lb.point(x + (hash01(seed, 5) - 0.5) * 0.3, row.z);
@@ -157,11 +159,13 @@ function polideportivo(
   if (!b) return;
   const ring = toPts(b.o);
   const { mats, batch } = ctx;
-  const H = 9.5;
-  batch.addWorld(ringWalls(ring, 0, 3.2, 2), mats.tint('#b5664a'));
-  batch.addWorld(ringWalls(ring, 3.2, 3.4, 2), mats.tint('#d9d5cc'));
-  batch.addWorld(ringWalls(ring, 3.4, H - 1.6, 1.2), mats.tint('#c9ced1'));
-  batch.addWorld(ringWalls(ring, H - 1.6, H, 2), mats.glass);
+  // Measured by LiDAR when available; the hall stands on the lowest ground of its plot.
+  const g = b.gy ?? Math.min(...ring.map(([x, z]) => ctx.terrain.heightAt(x, z)));
+  const H = b.top !== undefined ? Math.max(6, (b.eave ?? b.top) - g) : 9.5;
+  batch.addWorld(ringWalls(ring, g - 1, g + 3.2, 2), mats.tint('#b5664a'));
+  batch.addWorld(ringWalls(ring, g + 3.2, g + 3.4, 2), mats.tint('#d9d5cc'));
+  batch.addWorld(ringWalls(ring, g + 3.4, g + H - 1.6, 1.2), mats.tint('#c9ced1'));
+  batch.addWorld(ringWalls(ring, g + H - 1.6, g + H, 2), mats.glass);
   const o = orientedBox(ring);
   let rot = o.angle,
     L = o.w,
@@ -170,7 +174,7 @@ function polideportivo(
     rot += Math.PI / 2;
     [L, W] = [W, L];
   }
-  const lb = new LocalBatch(batch, o.cx, 0, o.cz, rot);
+  const lb = new LocalBatch(batch, o.cx, g, o.cz, rot);
   const rise = Math.min(4, W * 0.15),
     R = (W * W) / 4 / (2 * rise) + rise / 2,
     th = 2 * Math.asin(W / 2 / R);
@@ -193,7 +197,7 @@ function polideportivo(
   );
   lb.add(Unit.box, mats.glass, 0, 1.3, sz, 0, 4, 2.6, 0.12);
   lb.add(Unit.box, mats.tint('#d9d5cc'), 0, 3.0, sz + side * 1.2, 0, 6, 0.3, 2.6);
-  ctx.collision.addBox(o.cx, o.cz, L, W, { rot, top: H + rise });
+  ctx.collision.addBox(o.cx, o.cz, L, W, { rot, bottom: g - 1, top: g + H + rise, absolute: true });
 }
 
 /** Fence around the sports grounds, with gaps where paths and roads come in. */
@@ -225,8 +229,8 @@ function sportsFences(ctx: BuildContext): void {
         const g = new THREE.PlaneGeometry(1, 1);
         const uv = g.attributes.uv as THREE.BufferAttribute;
         for (let j = 0; j < uv.count; j++) uv.setXY(j, uv.getX(j) * seg * 2, uv.getY(j) * h * 2);
-        ctx.batch.add(g, fence, mx, h / 2, mz, ang, seg, h, 1);
-        ctx.batch.add(Unit.box, post, x0, h / 2, z0, 0, 0.06, h, 0.06);
+        ctx.batch.add(g, fence, mx, ctx.terrain.heightAt(mx, mz) + h / 2, mz, ang, seg, h, 1);
+        ctx.batch.add(Unit.box, post, x0, ctx.terrain.heightAt(x0, z0) + h / 2, z0, 0, 0.06, h + 0.3, 0.06);
         ctx.collision.addBox(mx, mz, seg, 0.15, { rot: ang, top: h, mask: Layer.Bodies });
       }
     }
@@ -280,7 +284,7 @@ function gasolinera(
     }
   }
   const face = road ? Math.atan2(road.x - cx, road.z - cz) : rot;
-  const lb = new LocalBatch(ctx.batch, cx, 0, cz, face);
+  const lb = new LocalBatch(ctx.batch, cx, ctx.terrain.heightAt(cx, cz), cz, face);
   const { mats } = ctx;
   const white = mats.tint('#f2f2ee');
   lb.add(Unit.box, white, 0, 5.4, 0, 0, 16, 0.5, 9);
@@ -364,7 +368,7 @@ function busStations(
       rot += Math.PI / 2;
       [L, W] = [W, L];
     }
-    const lb = new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot);
+    const lb = new LocalBatch(ctx.batch, o.cx, ctx.terrain.heightAt(o.cx, o.cz), o.cz, rot);
     const cl = Math.min(L - 2, 30);
     const z0 = -W / 2 + 2.5;
     lb.add(Unit.box, mats.tint('#cfcac0'), 0, 0.09, z0, 0, cl, 0.18, 4);
@@ -388,7 +392,7 @@ function busStations(
     if (p.k !== 'bus_stop') continue;
     const road = ctx.roads.nearest(p.x, p.z, 30, (r) => VEHICLE_ROADS.has(r.k));
     const face = road ? Math.atan2(road.x - p.x, road.z - p.z) : 0;
-    const lb = new LocalBatch(ctx.batch, p.x, 0, p.z, face);
+    const lb = new LocalBatch(ctx.batch, p.x, ctx.terrain.heightAt(p.x, p.z), p.z, face);
     lb.add(Unit.box, mats.tint('#5d6369'), 0, 2.5, 0, 0, 3.6, 0.12, 1.6);
     lb.add(Unit.box, mats.glass, 0, 1.25, -0.75, 0, 3.4, 2.3, 0.05);
     for (const x of [-1.75, 1.75]) lb.add(Unit.box, mats.glass, x, 1.25, 0, 0, 0.05, 2.3, 1.5);

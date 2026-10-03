@@ -152,6 +152,40 @@ function tuft(): THREE.InstancedBufferGeometry {
   return g;
 }
 
+/** Terrain heights as a half-float texture (4 m texels) for the grass vertex shader. */
+function heightTexture(map: MapData): THREE.DataTexture {
+  const t = map.meta.terrain;
+  const h = map.heights;
+  if (!t || !h) {
+    const flat = new THREE.DataTexture(new Uint16Array([0]), 1, 1, THREE.RedFormat, THREE.HalfFloatType);
+    flat.needsUpdate = true;
+    return flat;
+  }
+  const step = 2;
+  const w = Math.ceil(t.cols / step),
+    hh = Math.ceil(t.rows / step);
+  const data = new Uint16Array(w * hh);
+  for (let r = 0; r < hh; r++) {
+    for (let c = 0; c < w; c++)
+      data[r * w + c] = THREE.DataUtils.toHalfFloat(h[Math.min(t.rows - 1, r * step) * t.cols + Math.min(t.cols - 1, c * step)]);
+  }
+  const tex = new THREE.DataTexture(data, w, hh, THREE.RedFormat, THREE.HalfFloatType);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** (minX, minZ, width, depth) covered by heightTexture: texel centres sit on the grid nodes. */
+function heightGrid(map: MapData): THREE.Vector4 {
+  const t = map.meta.terrain;
+  if (!t) return new THREE.Vector4(0, 0, 1, 1);
+  const step = 2;
+  const w = Math.ceil(t.cols / step),
+    hh = Math.ceil(t.rows / step);
+  const cell = t.cell * step;
+  return new THREE.Vector4(t.minX - cell / 2, t.minZ - cell / 2, w * cell, hh * cell);
+}
+
 /**
  * Wind-blown grass around the camera, one draw call. A fixed grid of tufts
  * follows the camera (snapped to the grid so it never swims); the vertex
@@ -176,6 +210,8 @@ export class Grass {
       ...this.uniforms,
       uTime: waterTime,
       uMask: { value: grassMask(map, maskSize) },
+      uHeight: { value: heightTexture(map) },
+      uHeightGrid: { value: heightGrid(map) },
       uBounds: { value: new THREE.Vector4(B.minX, B.minZ, B.maxX - B.minX, B.maxZ - B.minZ) },
       uSpacing: { value: spacing },
       uRadius: { value: radius },
@@ -188,6 +224,7 @@ export class Grass {
           '#include <common>',
           `#include <common>
 uniform vec3 uCam; uniform float uTime; uniform sampler2D uMask; uniform vec4 uBounds; uniform float uSpacing; uniform float uRadius;
+uniform sampler2D uHeight; uniform vec4 uHeightGrid;
 attribute vec2 aCell;
 float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`,
         )
@@ -212,6 +249,8 @@ float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); 
   transformed.x += (sin(uTime * 1.9 + wp.x * 0.35 + wp.y * 0.18) * 0.16 + sin(uTime * 4.1 + wp.y) * 0.03) * tip * hgt;
   transformed.z += cos(uTime * 1.5 + wp.y * 0.3) * 0.12 * tip * hgt;
   transformed.xz += wp;
+  // Stand on the real ground (heightmap texture, metres).
+  transformed.y += texture2D(uHeight, (wp - uHeightGrid.xy) / uHeightGrid.zw).r;
   // Dry fields and meadows turn golden; small per-tuft brightness variation.
   vColor.rgb *= mix(vec3(1.0), vec3(1.25, 1.12, 0.7), m.g) * (0.9 + 0.25 * r2);`,
         );

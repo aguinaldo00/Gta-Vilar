@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Quality } from '@/config/Config';
 import { Rng } from '../core/math';
-import { type HeightGrid, Layer, type StaticColliders } from '../physics/PhysicsWorld';
+import { type ColliderOptions, type HeightGrid, Layer, type StaticColliders } from '../physics/PhysicsWorld';
 import { Batcher } from './Batcher';
 import { buildBuildings } from './Buildings';
 import { buildChurches } from './Churches';
@@ -17,7 +17,7 @@ import { Materials } from './Materials';
 import type { MapData } from './mapData';
 import { buildRoads, RoadNetwork, VEHICLE_ROADS } from './Roads';
 import { buildSports } from './Sports';
-import { buildGround, groundMaterial, TerrainModel } from './Terrain';
+import { buildGround, groundMaterial, OrthoTiles, TerrainModel } from './Terrain';
 import { buildVegetation } from './Vegetation';
 import { waterTime } from './Water';
 
@@ -28,6 +28,12 @@ interface NamedArea {
   ring: Pt[];
   b: Bounds2;
   area: number;
+}
+
+/** Ground-relative collider heights → world heights at a ground level `y`. */
+function lift(o: ColliderOptions, y: number): ColliderOptions {
+  if (o.absolute) return o;
+  return { ...o, top: o.top + y, bottom: (o.bottom ?? -10) + y };
 }
 
 /**
@@ -59,20 +65,30 @@ export class World {
     const rng = new Rng(1971);
     const mats = new Materials();
     const batch = new Batcher();
+    const ortho = map.meta.ortho && map.baseUrl ? new OrthoTiles(map.meta.ortho, map.baseUrl, mats.detail) : null;
+    // Builders describe colliders relative to the ground; lift them onto the real relief here.
+    const terrain = this.terrain;
+    const grounded: StaticColliders = {
+      addBox: (x, z, w, d, o) => collision.addBox(x, z, w, d, lift(o, terrain.heightAt(x, z))),
+      addCircle: (x, z, r, o) => collision.addCircle(x, z, r, lift(o, terrain.heightAt(x, z))),
+    };
     const ctx: BuildContext = {
       map,
+      ortho,
       scene,
       batch,
       mats,
-      collision,
+      collision: grounded,
       animators: this.animators,
       rng,
       terrain: this.terrain,
       roads: this.roads,
       quality,
     };
-    this.env = new Environment(scene, renderer, rng, quality);
-    buildGround(map, this.terrain, batch, groundMaterial(map, quality.groundTexture, mats.detail), quality.detail === 1);
+    this.env = new Environment(scene, renderer, rng, quality, map);
+    // Without an orthophoto the ground falls back to the land-use texture.
+    const fallback = ortho ? mats.terrain : groundMaterial(map, quality.groundTexture, mats.detail);
+    buildGround(map, this.terrain, batch, fallback, ortho, quality.detail === 1 ? 64 : 32);
     batch.stage = 'roads';
     buildRoads(ctx);
     batch.stage = 'buildings';
@@ -96,6 +112,15 @@ export class World {
     this.stats.byStage = Object.fromEntries(Object.entries(batch.byStage).map(([k, v]) => [k, Math.round(v)]));
     this.stats.meshes = batch.build(scene);
     this.buildBounds(collision);
+    // The background valley floor meets the map edge at its typical height.
+    const B = this.bounds;
+    const edge: number[] = [];
+    for (let t = 0; t <= 1; t += 0.02) {
+      edge.push(this.heightAt(B.minX + (B.maxX - B.minX) * t, B.minZ), this.heightAt(B.minX + (B.maxX - B.minX) * t, B.maxZ));
+      edge.push(this.heightAt(B.minX, B.minZ + (B.maxZ - B.minZ) * t), this.heightAt(B.maxX, B.minZ + (B.maxZ - B.minZ) * t));
+    }
+    edge.sort((a, b) => a - b);
+    this.env.setFloorHeight(edge[Math.floor(edge.length * 0.3)] - 0.5);
     this.indexPlaces();
   }
 
@@ -115,7 +140,7 @@ export class World {
     const B = this.bounds;
     const W = B.maxX - B.minX,
       H = B.maxZ - B.minZ;
-    const o = { top: 200, mask: Layer.Bodies };
+    const o = { bottom: -200, top: 200, mask: Layer.Bodies, absolute: true };
     collision.addBox((B.minX + B.maxX) / 2, B.minZ - 3, W + 20, 10, o);
     collision.addBox((B.minX + B.maxX) / 2, B.maxZ + 3, W + 20, 10, o);
     collision.addBox(B.minX - 3, (B.minZ + B.maxZ) / 2, 10, H + 20, o);

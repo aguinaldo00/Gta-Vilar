@@ -121,6 +121,9 @@ function pineTree(): THREE.BufferGeometry {
   return mergeGeometries(parts)!;
 }
 
+/** Approximate height of each model at scale 1 (to fit LiDAR tree heights). */
+const MODEL_HEIGHT: Record<Kind, number> = { round: 7.4, poplar: 12.4, pine: 12.5 };
+
 /** Instance tint per model (pines are darker and bluer). */
 const TINT: Record<Kind, [number, number, number]> = { round: [1, 1, 1], poplar: [1, 1, 1], pine: [0.5, 0.68, 0.58] };
 
@@ -183,8 +186,9 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
           z = az + ((bz - az) * s) / len;
         const r = roads.nearest(x, z, 4, (rd) => VEHICLE_ROADS.has(rd.k));
         if (!r || r.d > 2.5 || r.d < 0.3) continue;
-        batch.add(Unit.cyl, mats.iron, x, 0.45, z, 0, 0.14, 0.9, 0.14);
-        batch.add(Unit.blob, mats.iron, x, 0.92, z, 0, 0.1, 0.1, 0.1);
+        const gy = ctx.terrain.heightAt(x, z);
+        batch.add(Unit.cyl, mats.iron, x, gy + 0.45, z, 0, 0.14, 0.9, 0.14);
+        batch.add(Unit.blob, mats.iron, x, gy + 0.92, z, 0, 0.1, 0.1, 0.1);
         ctx.collision.addCircle(x, z, 0.12, { top: 0.9, mask: Layer.Bodies });
       }
     }
@@ -200,18 +204,19 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
       let tree = false;
       for (let t = 0; t < ctx.map.trees.length; t += 2) if (Math.hypot(ctx.map.trees[t] - x, ctx.map.trees[t + 1] - z) < 2.5) tree = true;
       if (tree) continue;
+      const gy = ctx.terrain.heightAt(x, z);
       if (k % 3 === 0) {
-        batch.add(Unit.cyl, mats.tint('#2f4a3a'), x, 0.45, z, 0, 0.45, 0.9, 0.45);
+        batch.add(Unit.cyl, mats.tint('#2f4a3a'), x, gy + 0.45, z, 0, 0.45, 0.9, 0.45);
         continue;
       }
-      batch.add(Unit.box, planter, x, 0.35, z, hash01(k) * 3, 1.4, 0.7, 1.4);
-      batch.add(Unit.blob, green, x, 0.85, z, 0, 0.6, 0.35, 0.6);
+      batch.add(Unit.box, planter, x, gy + 0.35, z, hash01(k) * 3, 1.4, 0.7, 1.4);
+      batch.add(Unit.blob, green, x, gy + 0.85, z, 0, 0.6, 0.35, 0.6);
       for (let f = 0; f < 4; f++)
         batch.add(
           Unit.blob,
           flowers[(k + f) % 3],
           x + (hash01(k, f) - 0.5) * 0.9,
-          1.0,
+          gy + 1.0,
           z + (hash01(f, k) - 0.5) * 0.9,
           0,
           0.18,
@@ -275,22 +280,40 @@ export function buildVegetation(ctx: BuildContext): void {
   const churches = ctx.map.buildings.filter((b) => b.t === 'church').map((b) => toPts(b.o));
   const insideBuilding = (x: number, z: number) =>
     footprints.query(x - 2, z - 2, x + 2, z + 2, tmp).some((r) => pointInRing(x, z, r)) || churches.some((r) => ringDist(x, z, r) < 4);
+  // Real trees: every crown the LiDAR saw, at its position and height (thinned on phones).
+  const lidar = ctx.map.ltrees ?? [];
+  const nL = lidar.length / 4;
+  const keep = Math.min(1, (ctx.quality.treeBudget * 2) / Math.max(1, nL));
+  for (let i = 0; i < lidar.length; i += 4) {
+    const x = lidar[i],
+      z = lidar[i + 1],
+      h = lidar[i + 2],
+      r = lidar[i + 3];
+    if (inPlaza(x, z) || insideBuilding(x, z) || hash01(x * 0.37, z * 0.71) > keep) continue;
+    // Tall and narrow (or by the river) reads as a poplar (chopo); the rest as broad-leaved trees.
+    const poplar = (h > 12 && r < h * 0.28) || (h > 9 && terrain.riverDistance(x, z).d < 30);
+    const kind: Kind = poplar ? 'poplar' : 'round';
+    place(kind, x, z, Math.min(2.6, Math.max(0.45, h / MODEL_HEIGHT[kind])), h > 3);
+  }
+
   for (let i = 0; i < ctx.map.trees.length; i += 2) {
     const x = ctx.map.trees[i],
       z = ctx.map.trees[i + 1];
     if (insideBuilding(x, z)) continue;
     if (inPlaza(x, z)) {
-      planeTree(ctx, x, z, 0.03);
+      planeTree(ctx, x, z, terrain.heightAt(x, z) + 0.03);
       continue;
     }
+    // Mapped (OSM) trees are already in the LiDAR canopy.
+    if (nL > 0) continue;
     const nearRiver = terrain.riverDistance(x, z).d < 40;
     place(nearRiver && hash01(x, z) < 0.7 ? 'poplar' : 'round', x, z, 0.8 + hash01(z, x) * 0.5);
   }
   for (let i = 0; i < ctx.map.pines.length; i += 2)
     place('pine', ctx.map.pines[i], ctx.map.pines[i + 1], 0.8 + hash01(ctx.map.pines[i + 1], 3) * 0.5);
 
-  // Infill for wooded areas, parks, orchards and scrub.
-  let budget = ctx.quality.treeBudget;
+  // Infill for wooded areas, parks, orchards and scrub (only without LiDAR trees).
+  let budget = nL > 0 ? 0 : ctx.quality.treeBudget;
   for (const a of ctx.map.areas) {
     const d = DENSITY[a.k];
     if (!d || budget <= 0) continue;
@@ -319,8 +342,21 @@ export function buildVegetation(ctx: BuildContext): void {
   const lamp = LAMP();
   const ornate = ORNATE_LAMP();
   for (let i = 0; i < ctx.map.lamps.length; i += 2) {
-    const x = ctx.map.lamps[i],
+    let x = ctx.map.lamps[i],
       z = ctx.map.lamps[i + 1];
+    // Lamps mapped on the carriageway are wall lamps of narrow streets (or streets drawn too wide):
+    // stand them on the kerb instead of in front of the traffic.
+    const road = roads.nearest(x, z, 8, (r) => VEHICLE_ROADS.has(r.k));
+    if (road && road.d < 0.3 && !inPlaza(x, z)) {
+      const ox = x - road.x,
+        oz = z - road.z;
+      const len = Math.hypot(ox, oz);
+      // Side of the road the lamp was on (or the right-hand side if it sat on the centre line).
+      const nx = len > 0.01 ? ox / len : road.dz,
+        nz = len > 0.01 ? oz / len : -road.dx;
+      x = road.x + nx * (road.road.w / 2 + 0.4);
+      z = road.z + nz * (road.road.w / 2 + 0.4);
+    }
     // Cast-iron fernandino lamps in the Plaza Mayor, plain poles elsewhere.
     ctx.batch.addMatrix(inPlaza(x, z) ? ornate : lamp, ctx.mats.propsVC, m.makeTranslation(x, terrain.heightAt(x, z), z));
     collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Bodies });

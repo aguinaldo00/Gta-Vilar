@@ -7,9 +7,11 @@
  * writes the simplified, projected map the game loads
  * (public/maps/villarcayo.json, fetched at runtime). The browser never parses OSM.
  *
- * Projection: equirectangular around the centroid of the Plaza Mayor
- * (place=square, name=Plaza Mayor). +X = east, +Z = south, metres.
- * x = (lon - lon0) · cos(lat0) · π/180 · R,  z = -(lat - lat0) · π/180 · R
+ * Projection: ETRS89 / UTM zone 30N (EPSG:25830), the CRS of every Spanish
+ * dataset used by the baker (PNOA LiDAR, MDT, orthophoto, Catastro), shifted
+ * so the centroid of the Plaza Mayor is the origin (rounded to the metre).
+ * Game axes: +X = east (E - E0), +Z = south (N0 - N), metres. OSM's WGS84 and
+ * ETRS89 differ by well under a metre here.
  *
  * Map data © OpenStreetMap contributors, ODbL 1.0.
  */
@@ -22,7 +24,6 @@ type Ring = Pt[];
 
 const IN = process.argv[2] ?? 'data/villarcayo.osm';
 const OUT = process.argv[3] ?? 'public/maps/villarcayo.json';
-const EARTH_R = 6371008.8;
 
 // ---------------------------------------------------------------- parsing
 
@@ -113,18 +114,59 @@ if (plazaWay) {
   lon0 = townhall.lon;
 } else throw new Error('Cannot find the Plaza Mayor or the town hall to use as origin');
 
-const kx = Math.cos((lat0 * Math.PI) / 180) * (Math.PI / 180) * EARTH_R;
-const kz = (Math.PI / 180) * EARTH_R;
+/** Transverse Mercator (GRS80) — UTM zone 30N easting/northing in metres. */
+function utm30(lat: number, lon: number): [number, number] {
+  const a = 6378137,
+    f = 1 / 298.257222101,
+    k0 = 0.9996;
+  const e2 = f * (2 - f),
+    ep2 = e2 / (1 - e2);
+  const phi = (lat * Math.PI) / 180,
+    lam = (lon * Math.PI) / 180,
+    lam0 = (-3 * Math.PI) / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(phi) ** 2);
+  const T = Math.tan(phi) ** 2,
+    C = ep2 * Math.cos(phi) ** 2,
+    A = Math.cos(phi) * (lam - lam0);
+  const M =
+    a *
+    ((1 - e2 / 4 - (3 * e2 ** 2) / 64 - (5 * e2 ** 3) / 256) * phi -
+      ((3 * e2) / 8 + (3 * e2 ** 2) / 32 + (45 * e2 ** 3) / 1024) * Math.sin(2 * phi) +
+      ((15 * e2 ** 2) / 256 + (45 * e2 ** 3) / 1024) * Math.sin(4 * phi) -
+      ((35 * e2 ** 3) / 3072) * Math.sin(6 * phi));
+  const E = k0 * N * (A + ((1 - T + C) * A ** 3) / 6 + ((5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5) / 120) + 500000;
+  const Nn =
+    k0 *
+    (M +
+      N *
+        Math.tan(phi) *
+        ((A * A) / 2 + ((5 - T + 9 * C + 4 * C * C) * A ** 4) / 24 + ((61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6) / 720));
+  return [E, Nn];
+}
+const [E0, N0] = utm30(lat0, lon0).map(Math.round);
 const q = (v: number) => Math.round(v * 10) / 10;
-const project = (lat: number, lon: number): Pt => [(lon - lon0) * kx, -(lat - lat0) * kz];
+const project = (lat: number, lon: number): Pt => {
+  const [e, n] = utm30(lat, lon);
+  return [e - E0, N0 - n];
+};
 const nodePt = (id: string): Pt | null => {
   const n = nodes.get(id);
   return n ? project(n.lat, n.lon) : null;
 };
 
-const [bx0, bz1] = project(+bnd.minlat, +bnd.minlon);
-const [bx1, bz0] = project(+bnd.maxlat, +bnd.maxlon);
-const B = { minX: q(bx0), maxX: q(bx1), minZ: q(bz0), maxZ: q(bz1) };
+// The lat/lon box is slightly rotated in UTM: keep the axis-aligned rectangle inside it.
+const corners = [
+  project(+bnd.minlat, +bnd.minlon),
+  project(+bnd.minlat, +bnd.maxlon),
+  project(+bnd.maxlat, +bnd.minlon),
+  project(+bnd.maxlat, +bnd.maxlon),
+];
+const B = {
+  minX: Math.ceil(Math.max(corners[0][0], corners[2][0])),
+  maxX: Math.floor(Math.min(corners[1][0], corners[3][0])),
+  minZ: Math.ceil(Math.max(corners[2][1], corners[3][1])),
+  maxZ: Math.floor(Math.min(corners[0][1], corners[1][1])),
+};
 const inB = (p: Pt, pad = 0) => p[0] >= B.minX - pad && p[0] <= B.maxX + pad && p[1] >= B.minZ - pad && p[1] <= B.maxZ + pad;
 
 // --------------------------------------------------------------- geometry
@@ -1158,7 +1200,10 @@ const out = {
     source: 'OpenStreetMap contributors (ODbL 1.0)',
     file: IN,
     origin: { lat: +lat0.toFixed(8), lon: +lon0.toFixed(8), note: 'Centroid of the Plaza Mayor (place=square)' },
-    projection: 'equirectangular; x east, z south, metres',
+    crs: 'EPSG:25830',
+    /** UTM 30N easting/northing of the local origin: E = x + E0, N = N0 - z. */
+    utmOrigin: { E: E0, N: N0 },
+    projection: 'ETRS89 / UTM 30N shifted to the origin; x east, z south, metres',
     bounds: B,
   },
   buildings,

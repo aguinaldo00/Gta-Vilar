@@ -151,8 +151,9 @@ export class Game {
 
   private spawnVehicles(): void {
     for (const s of this.config.game.vehicles) {
-      const p = this.world.roadSpawn(s.near.x, s.near.z, s.mainRoad);
-      const v = new Vehicle(this.config.vehicles[s.type], s.color, p.x, p.z, p.heading);
+      const spec = this.config.vehicles[s.type];
+      const p = this.freeSpot(this.world.roadSpawn(s.near.x, s.near.z, s.mainRoad), spec.length, spec.width);
+      const v = new Vehicle(spec, s.color, p.x, p.z, p.heading);
       v.y = this.world.heightAt(p.x, p.z);
       this.vehicles.push(v);
       this.scene.add(v.rig.root);
@@ -167,6 +168,27 @@ export class Game {
       );
       v.update(0.001, PARKED, this.world, this.skids);
     }
+  }
+
+  /** Slides a spawn point along its street until the car fits (no lamp post or wall in the way). */
+  private freeSpot(p: { x: number; z: number; heading: number }, length: number, width: number): { x: number; z: number; heading: number } {
+    const fx = Math.sin(p.heading),
+      fz = Math.cos(p.heading);
+    const fits = (x: number, z: number) => {
+      const y = this.world.heightAt(x, z);
+      for (const o of [-length / 2 + width / 2, 0, length / 2 - width / 2]) {
+        if (this.physics.capsuleBlocked(x + fx * o, y, z + fz * o, width / 2 + 0.3, 1.4, Layer.Vehicle)) return false;
+      }
+      return true;
+    };
+    for (let d = 0; d <= 40; d += 2) {
+      for (const sgn of d === 0 ? [1] : [1, -1]) {
+        const x = p.x + fx * d * sgn,
+          z = p.z + fz * d * sgn;
+        if (fits(x, z)) return { x, z, heading: p.heading };
+      }
+    }
+    return p;
   }
 
   private resize(): void {

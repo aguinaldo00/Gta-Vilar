@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Layer } from '../physics/PhysicsWorld';
 import { CHUNK } from './Batcher';
 import type { BuildContext } from './context';
-import { type Pt, type Segment, SpatialGrid, segBounds, segDist, segmentsOf, toPts, triangulate } from './geo';
+import { type Pt, type Segment, SpatialGrid, segBounds, segDist, segmentsOf, subdivideTris, toPts, triangulate } from './geo';
 import type { MapData, MapRoad } from './mapData';
 
 export const VEHICLE_ROADS = new Set([
@@ -114,10 +114,20 @@ function ribbon(m: FlatMesh, pts: Pt[], hw: number, height: (x: number, z: numbe
     if (len < 0.01) continue;
     const nx = (-(bz - az) / len) * hw,
       nz = ((bx - ax) / len) * hw;
-    const ya = height(ax, az),
-      yb = height(bx, bz);
-    m.tri(ax + nx, ya, az + nz, bx + nx, yb, bz + nz, bx - nx, yb, bz - nz);
-    m.tri(ax + nx, ya, az + nz, bx - nx, yb, bz - nz, ax - nx, ya, az - nz);
+    // Short slices so the surface follows the relief (and bridge decks) instead of cutting through it.
+    const n = Math.max(1, Math.ceil(len / 4));
+    for (let k = 0; k < n; k++) {
+      const x0 = ax + ((bx - ax) * k) / n,
+        z0 = az + ((bz - az) * k) / n;
+      const x1 = ax + ((bx - ax) * (k + 1)) / n,
+        z1 = az + ((bz - az) * (k + 1)) / n;
+      const y0l = height(x0 + nx, z0 + nz),
+        y0r = height(x0 - nx, z0 - nz);
+      const y1l = height(x1 + nx, z1 + nz),
+        y1r = height(x1 - nx, z1 - nz);
+      m.tri(x0 + nx, y0l, z0 + nz, x1 + nx, y1l, z1 + nz, x1 - nx, y1r, z1 - nz);
+      m.tri(x0 + nx, y0l, z0 + nz, x1 - nx, y1r, z1 - nz, x0 - nx, y0r, z0 - nz);
+    }
   }
   const fan = (x: number, z: number) => {
     const y = height(x, z);
@@ -125,7 +135,11 @@ function ribbon(m: FlatMesh, pts: Pt[], hw: number, height: (x: number, z: numbe
     for (let k = 0; k < n; k++) {
       const a0 = (k / n) * Math.PI * 2,
         a1 = ((k + 1) / n) * Math.PI * 2;
-      m.tri(x, y, z, x + Math.sin(a0) * hw, y, z + Math.cos(a0) * hw, x + Math.sin(a1) * hw, y, z + Math.cos(a1) * hw);
+      const px0 = x + Math.sin(a0) * hw,
+        pz0 = z + Math.cos(a0) * hw;
+      const px1 = x + Math.sin(a1) * hw,
+        pz1 = z + Math.cos(a1) * hw;
+      m.tri(x, y, z, px0, height(px0, pz0), pz0, px1, height(px1, pz1), pz1);
     }
   };
   for (let i = 1; i < pts.length - 1; i++) fan(pts[i][0], pts[i][1]);
@@ -166,12 +180,13 @@ export function buildRoads(ctx: BuildContext): void {
   const gravel = new FlatMesh(4, 4);
   const marks = new FlatMesh(1, 5);
 
-  const ground = (y: number) => (x: number, z: number) => Math.max(terrain.base(x, z), 0) + y;
+  // Every surface sits on the terrain (bridge decks included) plus its layer offset.
+  const ground = (y: number) => (x: number, z: number) => terrain.heightAt(x, z) + y;
   const roads = [...ctx.map.roads].sort((a, b) => (RANK[a.k] ?? 0) - (RANK[b.k] ?? 0));
   for (const r of roads) {
     const pts = toPts(r.p);
     const bridge = !!r.b;
-    const h = (y: number) => (bridge ? () => 0.35 + y : ground(y));
+    const h = ground;
     const rank = RANK[r.k] ?? 0;
     // Layer heights keep junction overlaps free of z-fighting: paths < sidewalks < paving < asphalt < paint.
     if (r.sw && !bridge) ribbon(sidewalk, pts, r.w / 2 + SIDEWALK_W, ground(0.03));
@@ -193,7 +208,7 @@ export function buildRoads(ctx: BuildContext): void {
           const x = ax + ux * (s + 1.5),
             z = az + uz * (s + 1.5);
           if (junctions.some(([jx, jz]) => Math.hypot(jx - x, jz - z) < r.w + 4)) continue;
-          const y = 0.09 + rank * 0.004;
+          const y = terrain.heightAt(ax + ux * (s + 1.5), az + uz * (s + 1.5)) + 0.09 + rank * 0.004;
           const px = -uz * 0.08,
             pz = ux * 0.08;
           const x0 = ax + ux * s,
@@ -212,8 +227,9 @@ export function buildRoads(ctx: BuildContext): void {
   // Pedestrian areas (Plaza Mayor, Plaza de España...) as paving.
   for (const a of ctx.map.areas) {
     if (a.k !== 'pedestrian') continue;
-    for (const [p, q, s] of triangulate(toPts(a.o), (a.h ?? []).map(toPts))) {
-      paving.tri(p[0], 0.042, p[1], q[0], 0.042, q[1], s[0], 0.042, s[1]);
+    const y = ground(0.042);
+    for (const [p, q, s] of subdivideTris(triangulate(toPts(a.o), (a.h ?? []).map(toPts)), 4)) {
+      paving.tri(p[0], y(p[0], p[1]), p[1], q[0], y(q[0], q[1]), q[1], s[0], y(s[0], s[1]), s[1]);
     }
   }
 
@@ -229,7 +245,7 @@ export function buildRoads(ctx: BuildContext): void {
       uz = Math.cos(a); // along the road
     const px = uz,
       pz = -ux; // across the road
-    const y = 0.09 + (hit ? (RANK[hit.road.k] ?? 0) * 0.004 : 0);
+    const y = terrain.heightAt(x, z) + 0.09 + (hit ? (RANK[hit.road.k] ?? 0) * 0.004 : 0);
     for (let s = -w / 2 + 0.5; s <= w / 2 - 0.4; s += 1.0) {
       const cx = x + px * s,
         cz = z + pz * s;
@@ -249,8 +265,8 @@ export function buildRoads(ctx: BuildContext): void {
 function buildBridge(ctx: BuildContext, r: MapRoad, pts: Pt[]): void {
   const { batch, mats, terrain, collision } = ctx;
   const overWater =
-    pts.some(([x, z]) => terrain.base(x, z) < -0.2) ||
-    pts.slice(1).some((p, i) => terrain.base((p[0] + pts[i][0]) / 2, (p[1] + pts[i][1]) / 2) < -0.2);
+    pts.some(([x, z]) => terrain.waterAt(x, z) !== null) ||
+    pts.slice(1).some((p, i) => terrain.waterAt((p[0] + pts[i][0]) / 2, (p[1] + pts[i][1]) / 2) !== null);
   if (!overWater) return;
   const vehicle = VEHICLE_ROADS.has(r.k) || r.k === 'track';
   const wood = !vehicle;
@@ -262,20 +278,30 @@ function buildBridge(ctx: BuildContext, r: MapRoad, pts: Pt[]): void {
     const mx = (ax + bx) / 2,
       mz = (az + bz) / 2;
     const rot = Math.atan2(bx - ax, bz - az);
-    batch.add(new THREE.BoxGeometry(r.w + 0.6, 0.6, len), wood ? mats.wood : mats.stone, mx, 0.05, mz, rot);
+    const deck = terrain.deck(mx, mz) > -Infinity ? terrain.deck(mx, mz) : terrain.heightAt(mx, mz);
+    batch.add(new THREE.BoxGeometry(r.w + 0.6, 0.6, len), wood ? mats.wood : mats.stone, mx, deck - 0.3, mz, rot);
     const ux = (bx - ax) / len,
       uz = (bz - az) / len;
     for (const side of [-1, 1]) {
       const ox = uz * side * (r.w / 2 + 0.1),
         oz = -ux * side * (r.w / 2 + 0.1);
       const ph = wood ? 1.0 : 0.85;
-      batch.add(new THREE.BoxGeometry(wood ? 0.1 : 0.4, ph, len), wood ? mats.wood : mats.stone, mx + ox, 0.35 + ph / 2, mz + oz, rot);
+      batch.add(new THREE.BoxGeometry(wood ? 0.1 : 0.4, ph, len), wood ? mats.wood : mats.stone, mx + ox, deck + ph / 2, mz + oz, rot);
       // Box collider rotation: local X axis must follow the parapet direction (along the segment's Z).
-      collision.addBox(mx + ox, mz + oz, wood ? 0.2 : 0.4, len, { rot, top: 0.35 + ph, mask: wood ? Layer.Bodies : Layer.Solid });
+      collision.addBox(mx + ox, mz + oz, wood ? 0.2 : 0.4, len, {
+        rot,
+        bottom: deck - 1,
+        top: deck + ph,
+        mask: wood ? Layer.Bodies : Layer.Solid,
+        absolute: true,
+      });
     }
   }
   if (wood) {
     // Bollards at both ends keep cars off footbridges.
-    for (const [x, z] of [pts[0], pts[pts.length - 1]]) collision.addCircle(x, z, r.w / 2 + 0.2, { top: 1, mask: Layer.Vehicle });
+    for (const [x, z] of [pts[0], pts[pts.length - 1]]) {
+      const y = terrain.heightAt(x, z);
+      collision.addCircle(x, z, r.w / 2 + 0.2, { bottom: y - 1, top: y + 1, mask: Layer.Vehicle, absolute: true });
+    }
   }
 }

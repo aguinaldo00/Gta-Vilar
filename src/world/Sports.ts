@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Layer } from '../physics/PhysicsWorld';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
-import { hash01, orientedBox, type Pt, toPts, triangulate } from './geo';
+import { hash01, orientedBox, type Pt, subdivideTris, toPts, triangulate } from './geo';
 import { beamMatrix } from './geometry';
 import type { MapArea } from './mapData';
 import { Unit } from './props';
@@ -245,7 +245,7 @@ function courtFrame(ctx: BuildContext, ring: Pt[]): Court {
     rot += Math.PI / 2;
     [L, W] = [W, L];
   }
-  return { lb: new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot), L, W, ring, cx: o.cx, cz: o.cz, rot };
+  return { lb: new LocalBatch(ctx.batch, o.cx, ctx.terrain.heightAt(o.cx, o.cz), o.cz, rot), L, W, ring, cx: o.cx, cz: o.cz, rot };
 }
 
 /** Pitch surface: the real polygon, UV-mapped in court space onto its atlas cell. */
@@ -256,7 +256,8 @@ function surface(ctx: BuildContext, c: Court, cellIdx: number, mat: THREE.Materi
     sin = Math.sin(c.rot);
   const cu = (cellIdx % 4) / 4,
     cv = 1 - (Math.floor(cellIdx / 4) + 1) / 2;
-  for (const tri of triangulate(c.ring)) {
+  // Draped on the terrain (subdivided so it never dips under the ground mesh).
+  for (const tri of subdivideTris(triangulate(c.ring), 4)) {
     const t = [...tri];
     // Upward winding.
     if ((t[1][1] - t[0][1]) * (t[2][0] - t[0][0]) - (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) < 0) [t[1], t[2]] = [t[2], t[1]];
@@ -267,7 +268,7 @@ function surface(ctx: BuildContext, c: Court, cellIdx: number, mat: THREE.Materi
         lz = dx * sin + dz * cos;
       const u = Math.min(1, Math.max(0, lx / c.L + 0.5)),
         v = Math.min(1, Math.max(0, lz / c.W + 0.5));
-      pos.push(x, y, z);
+      pos.push(x, ctx.terrain.heightAt(x, z) + y, z);
       uv.push(cu + (0.01 + u * 0.98) / 4, cv + (0.01 + (1 - v) * 0.98) / 2);
     }
   }
