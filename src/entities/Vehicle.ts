@@ -3,7 +3,7 @@ import { approach, clamp, damp, lerp, wrapAngle } from '../core/math';
 import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
 import type { World } from '../world/World';
 import type { SkidMarks } from './SkidMarks';
-import { type VehicleRig, buildVehicleModel } from './VehicleModels';
+import { type VehicleRig, buildVehicleModel, updateWheelInstances } from './VehicleModels';
 import { SPECS, type VehicleKind, type VehicleSpec } from './vehicleSpecs';
 
 export interface DriveControls {
@@ -219,6 +219,15 @@ export class Vehicle {
       const len = Math.hypot(nx, nz) || 1;
       nx /= len;
       nz /= len;
+      const prevH = world.heightAt(px, pz);
+      if (prevH < MIN_DRIVABLE || prevH > MAX_DRIVABLE) {
+        // Already off the drivable ground (e.g. dropped into the riverbed): crawl out uphill.
+        this.x += nx * 0.08;
+        this.z += nz * 0.08;
+        this.vx *= 0.9;
+        this.vz *= 0.9;
+        return;
+      }
       this.x = px;
       this.z = pz;
       this.heading = ph;
@@ -240,7 +249,7 @@ export class Vehicle {
     this.roll = damp(this.roll, Math.atan2((fL + rL - fR - rR) / 2, s.width), 10, dt);
 
     const root = this.rig.root;
-    root.position.set(this.x, this.y, this.z);
+    root.position.set(this.x, this.y + 0.04, this.z); // tyres on top of the road surface layers
     root.rotation.set(-this.pitch, this.heading, this.roll, 'YXZ');
     // Body weight transfer: squat under acceleration, lean out of corners.
     const body = this.rig.body;
@@ -251,6 +260,7 @@ export class Vehicle {
       w.spin.rotation.x += (this.speed / w.r) * dt;
       if (w.front) w.pivot.rotation.y = -this.steer * s.steerMax * 0.8;
     }
+    updateWheelInstances(this.rig);
     this.rig.brakeMat.emissiveIntensity = this.braking || this.throttle < 0 ? 1.6 : 0.15;
   }
 

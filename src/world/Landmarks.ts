@@ -1,46 +1,96 @@
 import * as THREE from 'three';
 import { Layer } from '../physics/CollisionWorld';
+import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
+import { centroid, orientedBox, toPts } from './geo';
 import { beamMatrix, boxGeo, hipRoof, scaleUV } from './geometry';
-import { AYTO, CURB, KIOSKO, PLAZA, PLAZA_BLOCK, TORRE } from './layout';
-import { MapLayer } from './MapSketch';
-import { Unit, bench, flag, planeTree, plazaLamp } from './props';
-import { building } from './Town';
+import { MAP, type MapPoi } from './mapData';
+import { Unit, flag, signBoard } from './props';
+import { signTexture } from './textures';
 
-const ARCH_SPACING = 6.8;
-const ARCH_HALF = 2.2;
-const ARCH_SPRING = 2.6;
+const BASE = 0.03; // plaza paving level
 
 /**
- * Casa Consistorial: two-storey sandstone block with a five-arch arcade on the
- * ground floor, iron balconies, hip roof and the central clock gable topped by
- * an iron bell cage (see the reference photos).
+ * Places a model in its own local frame (front = +Z) at a world position and
+ * heading: batched geometry, collision boxes and loose meshes all follow.
+ */
+class Placer {
+  readonly lb: LocalBatch;
+  readonly group = new THREE.Group();
+
+  constructor(private readonly ctx: BuildContext, readonly x: number, readonly z: number, readonly rot: number, y = 0) {
+    this.lb = new LocalBatch(ctx.batch, x, y, z, rot);
+    this.group.position.set(x, y, z);
+    this.group.rotation.y = rot;
+    ctx.scene.add(this.group);
+  }
+
+  add(geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, ry = 0, sx = 1, sy = 1, sz = 1, rx = 0, rz = 0): void {
+    this.lb.add(geo, mat, x, y, z, ry, sx, sy, sz, rx, rz);
+  }
+
+  box(x: number, z: number, w: number, d: number, o: { rot?: number; top: number; bottom?: number; mask?: number }): void {
+    const [wx, wz] = this.lb.point(x, z);
+    this.ctx.collision.addBox(wx, wz, w, d, { ...o, rot: (o.rot ?? 0) + this.rot });
+  }
+
+  circle(x: number, z: number, r: number, o: { top: number; bottom?: number; mask?: number }): void {
+    const [wx, wz] = this.lb.point(x, z);
+    this.ctx.collision.addCircle(wx, wz, r, o);
+  }
+}
+
+/** Heading whose +Z axis points from (x, z) towards (tx, tz). */
+function facing(x: number, z: number, tx: number, tz: number): number {
+  return Math.atan2(tx - x, tz - z);
+}
+
+function poi(k: MapPoi['k']): MapPoi | undefined {
+  return MAP.pois.find((p) => p.k === k);
+}
+
+/**
+ * Casa Consistorial on its real footprint: arcaded ground floor (soportales),
+ * iron balconies, hip roof and the clock gable with the bell cage, facing the
+ * Plaza Mayor and the templete (see the reference photos).
  */
 function buildAyuntamiento(ctx: BuildContext): void {
-  const { batch, mats, collision } = ctx;
-  const { x: cx, z: cz, w, d } = AYTO;
-  const base = CURB;
-  const gf = 5.0;
-  const uf = 5.2;
-  const front = cz + d / 2;
-  const back = cz - d / 2;
-  const arcadeDepth = 4;
-  const archXs = [-2, -1, 0, 1, 2].map((i) => cx + i * ARCH_SPACING);
+  const fp = MAP.buildings.find((b) => b.t === 'townhall');
+  if (!fp) return;
+  const ring = toPts(fp.o);
+  const obb = orientedBox(ring);
+  const target = poi('bandstand') ?? { x: obb.cx, z: obb.cz + 10 };
+  // Pick the OBB side that looks at the plaza as the front (+Z of the model).
+  const options = [0, Math.PI, Math.PI / 2, -Math.PI / 2].map((o) => obb.angle + o);
+  const toT = [target.x - obb.cx, target.z - obb.cz];
+  const rot = options.reduce((best, r) =>
+    Math.sin(r) * toT[0] + Math.cos(r) * toT[1] > Math.sin(best) * toT[0] + Math.cos(best) * toT[1] ? r : best);
+  const swapped = Math.abs(Math.sin(rot - obb.angle)) > 0.5;
+  const w = swapped ? obb.d : obb.w;
+  const d = swapped ? obb.w : obb.d;
 
-  // Ground floor core behind the arcade.
+  const P = new Placer(ctx, obb.cx, obb.cz, rot, BASE);
+  const { mats } = ctx;
+  const gf = 4.8, uf = 5.0;
+  const front = d / 2, back = -d / 2;
+  const arches = Math.max(3, Math.round(w / 6.4) | 1);
+  const spacing = w / arches;
+  const half = Math.min(2.2, spacing / 2 - 0.65);
+  const spring = gf - half - 0.6;
+  const archXs = Array.from({ length: arches }, (_, i) => -w / 2 + spacing * (i + 0.5));
+  const arcadeDepth = Math.min(4, d * 0.3);
+
   const coreD = d - arcadeDepth;
-  batch.add(boxGeo(w, gf, coreD, 2), mats.stone, cx, base + gf / 2, back + coreD / 2);
-  collision.addBox(cx, back + coreD / 2, w, coreD, { top: base + gf });
+  P.add(boxGeo(w, gf, coreD, 2), mats.stone, 0, gf / 2, back + coreD / 2);
+  P.box(0, back + coreD / 2, w, coreD, { top: gf + BASE });
 
-  // Arcaded front wall: outline with five round arches cut from the bottom edge.
   const s = new THREE.Shape();
   s.moveTo(-w / 2, 0);
   for (const ax of archXs) {
-    const lx = ax - cx;
-    s.lineTo(lx - ARCH_HALF, 0);
-    s.lineTo(lx - ARCH_HALF, ARCH_SPRING);
-    s.absarc(lx, ARCH_SPRING, ARCH_HALF, Math.PI, 0, true);
-    s.lineTo(lx + ARCH_HALF, 0);
+    s.lineTo(ax - half, 0);
+    s.lineTo(ax - half, spring);
+    s.absarc(ax, spring, half, Math.PI, 0, true);
+    s.lineTo(ax + half, 0);
   }
   s.lineTo(w / 2, 0);
   s.lineTo(w / 2, gf);
@@ -49,224 +99,265 @@ function buildAyuntamiento(ctx: BuildContext): void {
   const arcade = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false, curveSegments: 10 });
   scaleUV(arcade, 0.5, 0.5);
   arcade.translate(0, 0, -1);
-  batch.add(arcade, mats.stone, cx, base, front);
+  P.add(arcade, mats.stone, 0, 0, front);
+  const edges = [-w / 2, ...archXs.flatMap((ax) => [ax - half, ax + half]), w / 2];
+  for (let i = 0; i < edges.length; i += 2) P.box((edges[i] + edges[i + 1]) / 2, front - 0.5, edges[i + 1] - edges[i], 1, { top: gf + BASE });
 
-  // Pillar colliders between the arches.
-  const edges = [-w / 2, ...archXs.flatMap((ax) => [ax - cx - ARCH_HALF, ax - cx + ARCH_HALF]), w / 2];
-  for (let i = 0; i < edges.length; i += 2) {
-    const a = edges[i], b = edges[i + 1];
-    collision.addBox(cx + (a + b) / 2, front - 0.5, b - a, 1, { top: base + gf });
-  }
-
-  // Doors and windows under the arcade (on the core's front face).
   const coreFront = back + coreD;
   archXs.forEach((ax, i) => {
-    const isDoor = i === 2 || i === 0 || i === 4;
-    if (isDoor) batch.add(Unit.box, mats.darkWood, ax, base + 1.6, coreFront + 0.06, 0, 1.9, 3.2, 0.12);
-    else batch.add(Unit.box, mats.glass, ax, base + 2.2, coreFront + 0.06, 0, 1.5, 2.0, 0.12);
-    bench(ctx, ax + (i % 2 ? 0 : 1.6), coreFront + 0.5, base, 0);
+    if (i % 2 === 0) P.add(Unit.box, mats.darkWood, ax, 1.6, coreFront + 0.06, 0, 1.9, 3.2, 0.12);
+    else P.add(Unit.box, mats.glass, ax, 2.2, coreFront + 0.06, 0, 1.5, 2.0, 0.12);
   });
 
-  // Upper floor (also roofs the arcade).
-  const upperY = base + gf;
-  batch.add(boxGeo(w, uf, d, 2), mats.stone, cx, upperY + uf / 2, cz);
-  collision.addBox(cx, cz, w, d, { bottom: upperY, top: upperY + uf + 4, mask: Layer.Solid });
-  batch.add(Unit.box, mats.stoneTrim, cx, upperY + 0.15, cz, 0, w + 0.3, 0.35, d + 0.3);
-
-  // Tall balcony windows above every arch and on the sides.
+  const upperY = gf;
+  P.add(boxGeo(w, uf, d, 2), mats.stone, 0, upperY + uf / 2, 0);
+  P.box(0, 0, w, d, { bottom: upperY + BASE, top: upperY + uf + 4, mask: Layer.Solid });
+  P.add(Unit.box, mats.stoneTrim, 0, upperY + 0.15, 0, 0, w + 0.3, 0.35, d + 0.3);
   for (const ax of archXs) {
-    batch.add(Unit.box, mats.stoneTrim, ax, upperY + 2.1, front + 0.05, 0, 2.0, 3.2, 0.12);
-    batch.add(Unit.box, mats.glass, ax, upperY + 2.0, front + 0.1, 0, 1.4, 2.7, 0.1);
-    batch.add(Unit.box, mats.white, ax, upperY + 2.0, front + 0.13, 0, 0.08, 2.7, 0.06);
+    P.add(Unit.box, mats.stoneTrim, ax, upperY + 2.1, front + 0.05, 0, 2.0, 3.2, 0.12);
+    P.add(Unit.box, mats.glass, ax, upperY + 2.0, front + 0.1, 0, 1.4, 2.7, 0.1);
+    P.add(Unit.box, mats.white, ax, upperY + 2.0, front + 0.13, 0, 0.08, 2.7, 0.06);
   }
   for (const side of [-1, 1]) {
-    for (const oz of [-3.5, 3.5]) {
-      batch.add(Unit.box, mats.stoneTrim, cx + side * (w / 2 + 0.05), upperY + 2.1, cz + oz, 0, 0.12, 3.2, 2.0);
-      batch.add(Unit.box, mats.glass, cx + side * (w / 2 + 0.1), upperY + 2.0, cz + oz, 0, 0.1, 2.7, 1.4);
+    for (const oz of [-d / 4, d / 4]) {
+      P.add(Unit.box, mats.stoneTrim, side * (w / 2 + 0.05), upperY + 2.1, oz, 0, 0.12, 3.2, 2.0);
+      P.add(Unit.box, mats.glass, side * (w / 2 + 0.1), upperY + 2.0, oz, 0, 0.1, 2.7, 1.4);
     }
   }
-  // Long central iron balcony and two single ones.
-  const balconies: [number, number][] = [[cx, ARCH_SPACING * 2 + 2.4], [archXs[0], 2.6], [archXs[4], 2.6]];
+  const midW = archXs.length >= 3 ? archXs[archXs.length - 2] - archXs[1] + 2.4 : 3;
+  const balconies: [number, number][] = [[0, midW], [archXs[0], 2.6], [archXs[archXs.length - 1], 2.6]];
   for (const [bx, bw] of balconies) {
-    batch.add(Unit.box, mats.stoneTrim, bx, upperY + 0.42, front + 0.4, 0, bw, 0.16, 0.8);
-    batch.add(boxGeo(bw, 0.95, 0.04, 2.4, 0.95), mats.ironwork, bx, upperY + 0.98, front + 0.78);
+    P.add(Unit.box, mats.stoneTrim, bx, upperY + 0.42, front + 0.4, 0, bw, 0.16, 0.8);
+    P.add(boxGeo(bw, 0.95, 0.04, 2.4, 0.95), mats.ironwork, bx, upperY + 0.98, front + 0.78);
   }
 
-  // Cornice, roof.
   const topY = upperY + uf;
-  batch.add(Unit.box, mats.stoneTrim, cx, topY + 0.25, cz, 0, w + 0.8, 0.5, d + 0.8);
-  batch.add(hipRoof(w, d, 3.6, 0.5), mats.roof, cx, topY + 0.5, cz);
+  P.add(Unit.box, mats.stoneTrim, 0, topY + 0.25, 0, 0, w + 0.8, 0.5, d + 0.8);
+  P.add(hipRoof(w, d, Math.min(3.6, d * 0.25), 0.5), mats.roof, 0, topY + 0.5, 0);
 
-  // Clock gable with rounded top, clock face and iron bell cage.
-  const gz = front - 0.3;
-  const gw = 5.2;
-  const gh = 3.4;
-  batch.add(boxGeo(gw, gh, 1.2, 2), mats.stone, cx, topY + gh / 2, gz);
+  // Clock gable with rounded top and the iron bell cage.
+  const gz = front - 0.3, gw = 5.2, gh = 3.4;
+  P.add(boxGeo(gw, gh, 1.2, 2), mats.stone, 0, topY + gh / 2, gz);
   const cap = new THREE.CylinderGeometry(gw / 2, gw / 2, 1.2, 20, 1, false, -Math.PI / 2, Math.PI);
   cap.rotateX(-Math.PI / 2);
-  batch.add(cap, mats.stone, cx, topY + gh, gz);
-  batch.add(Unit.box, mats.stoneTrim, cx, topY + gh + 0.05, gz, 0, gw + 0.3, 0.2, 1.4);
+  P.add(cap, mats.stone, 0, topY + gh, gz);
+  P.add(Unit.box, mats.stoneTrim, 0, topY + gh + 0.05, gz, 0, gw + 0.3, 0.2, 1.4);
   const clock = new THREE.Mesh(new THREE.CircleGeometry(1.15, 32), mats.clock);
-  clock.position.set(cx, topY + gh * 0.55, gz + 0.62);
-  ctx.scene.add(clock);
-  batch.add(Unit.cyl16, mats.stoneTrim, cx, topY + gh * 0.55, gz + 0.58, 0, 2.7, 0.1, 2.7, Math.PI / 2);
-
+  clock.position.set(0, topY + gh * 0.55, gz + 0.62);
+  P.group.add(clock);
+  P.add(Unit.cyl16, mats.stoneTrim, 0, topY + gh * 0.55, gz + 0.58, 0, 2.7, 0.1, 2.7, Math.PI / 2);
   const cageBase = topY + gh + gw / 2;
-  const legs: [number, number][] = [[-0.8, -0.4], [0.8, -0.4], [0.8, 0.4], [-0.8, 0.4]];
-  for (const [lx, lz] of legs) {
-    batch.addMatrix(Unit.cyl, mats.iron, beamMatrix(cx + lx, cageBase - 0.1, gz + lz, cx, cageBase + 2.3, gz, 0.07));
+  for (const [lx, lz] of [[-0.8, -0.4], [0.8, -0.4], [0.8, 0.4], [-0.8, 0.4]]) {
+    P.lb.addMatrix(Unit.cyl, mats.iron, beamMatrix(lx, cageBase - 0.1, gz + lz, 0, cageBase + 2.3, gz, 0.07));
   }
-  batch.add(Unit.cone, mats.bronze, cx, cageBase + 1.0, gz, 0, 0.8, 0.9, 0.8);
-  batch.add(Unit.sphere, mats.bronze, cx, cageBase + 0.55, gz, 0, 0.8, 0.3, 0.8);
-  batch.add(Unit.cyl, mats.iron, cx, cageBase + 2.9, gz, 0, 0.05, 1.3, 0.05);
-  batch.add(Unit.box, mats.iron, cx + 0.2, cageBase + 3.3, gz, 0, 0.6, 0.15, 0.03);
+  P.add(Unit.cone, mats.bronze, 0, cageBase + 1.0, gz, 0, 0.8, 0.9, 0.8);
+  P.add(Unit.sphere, mats.bronze, 0, cageBase + 0.55, gz, 0, 0.8, 0.3, 0.8);
+  P.add(Unit.cyl, mats.iron, 0, cageBase + 2.9, gz, 0, 0.05, 1.3, 0.05);
 
-  // Balcony flags (Spain, Castilla y León, Europe) leaning over the plaza.
-  flag(ctx, 'es', cx, upperY + 0.6, front + 0.7, 2.8, 0, 0.45);
-  flag(ctx, 'cyl', cx - 2.2, upperY + 0.6, front + 0.7, 2.8, 0, 0.45);
-  flag(ctx, 'eu', cx + 2.2, upperY + 0.6, front + 0.7, 2.8, 0, 0.45);
-
-  ctx.sketch.rect(MapLayer.Landmark, cx - w / 2, back, cx + w / 2, front, '#d9b77a');
+  // Balcony flags: Spain, Castilla y León, Europe.
+  const fy = BASE + upperY + 0.6;
+  for (const [kind, ox] of [['es', 0], ['cyl', -2.2], ['eu', 2.2]] as const) {
+    const [fx, fz] = P.lb.point(ox, front + 0.7);
+    flag(ctx, kind, fx, fy, fz, 2.8, rot, 0.45);
+  }
 }
 
-/** Torre del Corregimiento: square medieval stone tower with crenellations. */
+/** Torre del Corregimiento on its footprint: square stone tower with battlements. */
 function buildTorre(ctx: BuildContext): void {
-  const { batch, mats, collision } = ctx;
-  const { x, z, size: s, height: h } = TORRE;
-  const base = CURB;
-  batch.add(boxGeo(s + 0.6, 1.2, s + 0.6, 2), mats.plinth, x, base + 0.6, z);
-  batch.add(boxGeo(s, h, s, 2), mats.stone, x, base + h / 2, z);
-  batch.add(boxGeo(s + 0.7, 0.7, s + 0.7, 2), mats.stone, x, base + h + 0.35, z);
-  // Merlons.
-  const top = base + h + 0.7;
-  const half = (s + 0.7) / 2 - 0.3;
+  const fp = MAP.buildings.find((b) => b.t === 'torre');
+  if (!fp) return;
+  const obb = orientedBox(toPts(fp.o));
+  const h = (fp.lv ?? 4) * 4.6;
+  const P = new Placer(ctx, obb.cx, obb.cz, obb.angle);
+  const { mats } = ctx;
+  const sw = obb.w, sd = obb.d;
+  P.add(boxGeo(sw + 0.5, 1.2, sd + 0.5, 2), mats.plinth, 0, 0.6, 0);
+  P.add(boxGeo(sw, h, sd, 2), mats.stone, 0, h / 2, 0);
+  P.add(boxGeo(sw + 0.7, 0.7, sd + 0.7, 2), mats.stone, 0, h + 0.35, 0);
+  const top = h + 0.7;
+  const hx = (sw + 0.7) / 2 - 0.3, hz = (sd + 0.7) / 2 - 0.3;
   for (let i = 0; i < 6; i++) {
-    const t = -half + (i * 2 * half) / 5;
-    for (const [mx, mz] of [[t, -half], [t, half], [-half, t], [half, t]]) {
-      batch.add(Unit.box, mats.stone, x + mx, top + 0.55, z + mz, 0, 0.75, 1.1, 0.75);
-    }
+    const tx = -hx + (i * 2 * hx) / 5, tz = -hz + (i * 2 * hz) / 5;
+    for (const [mx, mz] of [[tx, -hz], [tx, hz], [-hx, tz], [hx, tz]]) P.add(Unit.box, mats.stone, mx, top + 0.55, mz, 0, 0.75, 1.1, 0.75);
   }
-  // Pointed-arch door, arrow slits and windows.
-  batch.add(Unit.box, mats.darkWood, x, base + 1.7, z + s / 2 + 0.05, 0, 1.6, 2.8, 0.1);
-  batch.add(Unit.cone, mats.darkWood, x, base + 3.4, z + s / 2 + 0.05, 0, 1.6, 1.0, 0.1);
-  for (const [wy, ww, wh] of [[8, 0.35, 1.4], [12.5, 1.0, 1.8], [17, 0.35, 1.4]] as const) {
-    batch.add(Unit.box, mats.glass, x, base + wy, z + s / 2 + 0.05, 0, ww, wh, 0.1);
-    batch.add(Unit.box, mats.glass, x + s / 2 + 0.05, base + wy, z, 0, 0.1, wh, ww);
-    batch.add(Unit.box, mats.glass, x - s / 2 - 0.05, base + wy, z, 0, 0.1, wh, ww);
-    batch.add(Unit.box, mats.glass, x, base + wy, z - s / 2 - 0.05, 0, ww, wh, 0.1);
+  for (const [wy, ww, wh] of [[h * 0.4, 0.35, 1.4], [h * 0.62, 1.0, 1.8], [h * 0.84, 0.35, 1.4]] as const) {
+    P.add(Unit.box, mats.glass, 0, wy, sd / 2 + 0.05, 0, ww, wh, 0.1);
+    P.add(Unit.box, mats.glass, 0, wy, -sd / 2 - 0.05, 0, ww, wh, 0.1);
+    P.add(Unit.box, mats.glass, sw / 2 + 0.05, wy, 0, 0, 0.1, wh, ww);
+    P.add(Unit.box, mats.glass, -sw / 2 - 0.05, wy, 0, 0, 0.1, wh, ww);
   }
-  // Coat of arms plaque.
-  batch.add(Unit.box, mats.stoneTrim, x, base + 5.2, z + s / 2 + 0.08, 0, 1.2, 1.5, 0.15);
-  collision.addBox(x, z, s + 0.6, s + 0.6, { top: base + h + 2 });
-  ctx.sketch.rect(MapLayer.Landmark, x - s / 2, z - s / 2, x + s / 2, z + s / 2, '#a9875a');
+  P.add(Unit.box, mats.darkWood, 0, 1.7, sd / 2 + 0.05, 0, 1.6, 2.8, 0.1);
+  P.add(Unit.cone, mats.darkWood, 0, 3.4, sd / 2 + 0.05, 0, 1.6, 1.0, 0.1);
+  P.add(Unit.box, mats.stoneTrim, 0, 5.2, sd / 2 + 0.08, 0, 1.2, 1.5, 0.15);
+  P.box(0, 0, sw + 0.5, sd + 0.5, { top: h + 2 });
 }
 
-/** Octagonal music kiosk: stone base, wooden columns, green ironwork and a tiled roof. */
-function buildKiosko(ctx: BuildContext): void {
-  const { batch, mats, collision } = ctx;
-  const { x, z } = KIOSKO;
-  const base = CURB;
-  const P = base + 1.6; // platform level
-  const oct = (r1: number, r2: number, h: number) => {
-    const g = new THREE.CylinderGeometry(r1, r2, h, 8);
-    g.rotateY(Math.PI / 8); // put a flat face towards +Z (the entrance)
-    return g;
-  };
-  batch.add(oct(4.3, 4.5, 1.6), mats.stone, x, base + 0.8, z);
-  batch.add(oct(4.7, 4.7, 0.22), mats.darkWood, x, P - 0.05, z);
-  const colR = 3.95;
-  for (let k = 0; k < 8; k++) {
-    const a = Math.PI / 8 + (k * Math.PI) / 4;
-    const px = x + Math.sin(a) * colR;
-    const pz = z + Math.cos(a) * colR;
-    batch.add(Unit.cyl, mats.darkWood, px, P + 1.8, pz, 0, 0.26, 3.6, 0.26);
-    batch.add(Unit.box, mats.stoneTrim, px, P + 0.45, pz, a, 0.38, 0.9, 0.38);
-    batch.add(Unit.sphere, mats.stoneTrim, px, P + 1.05, pz, 0, 0.36, 0.36, 0.36);
-    collision.addCircle(px, pz, 0.2, { bottom: P, top: P + 3.6, mask: Layer.Bodies });
-    if (k % 2 === 0) {
-      const lx = px + Math.sin(a) * 0.55;
-      const lz = pz + Math.cos(a) * 0.55;
-      batch.addMatrix(Unit.cyl, mats.ironGreen, beamMatrix(px, P + 2.6, pz, lx, P + 2.9, lz, 0.06));
-      batch.add(Unit.box, mats.lampGlass, lx, P + 2.65, lz, a, 0.26, 0.4, 0.26);
-      batch.add(Unit.cone, mats.ironGreen, lx, P + 3.0, lz, 0, 0.45, 0.3, 0.45);
+/** The templete (octagonal music kiosk) at its mapped position. */
+function buildTemplete(ctx: BuildContext): void {
+  const b = poi('bandstand');
+  if (!b) return;
+  const ring = b.o ? toPts(b.o) : [];
+  const radius = ring.length ? ring.reduce((s, [x, z]) => s + Math.hypot(x - b.x, z - b.z), 0) / ring.length : 4.5;
+  const townhall = poi('townhall');
+  const rot = townhall ? facing(b.x, b.z, townhall.x, townhall.z) : 0;
+  const P = new Placer(ctx, b.x, b.z, rot);
+  const { mats } = ctx;
+  const k = radius / 4.5;
+  const Pl = 1.6 * Math.min(1, k + 0.1);
+  const oct = (r1: number, r2: number, h: number) => new THREE.CylinderGeometry(r1, r2, h, 8).rotateY(Math.PI / 8);
+  P.add(oct(4.3 * k, 4.5 * k, Pl), mats.stone, 0, Pl / 2, 0);
+  P.add(oct(4.7 * k, 4.7 * k, 0.22), mats.darkWood, 0, Pl - 0.05, 0);
+  const colR = 3.95 * k;
+  for (let i = 0; i < 8; i++) {
+    const a = Math.PI / 8 + (i * Math.PI) / 4;
+    const px = Math.sin(a) * colR, pz = Math.cos(a) * colR;
+    P.add(Unit.cyl, mats.darkWood, px, Pl + 1.8, pz, 0, 0.26, 3.6, 0.26);
+    P.add(Unit.box, mats.stoneTrim, px, Pl + 0.45, pz, a, 0.38, 0.9, 0.38);
+    P.add(Unit.sphere, mats.stoneTrim, px, Pl + 1.05, pz, 0, 0.36, 0.36, 0.36);
+    P.circle(px, pz, 0.2, { bottom: Pl, top: Pl + 3.6, mask: Layer.Bodies });
+    if (i % 2 === 0) {
+      const lx = px + Math.sin(a) * 0.55, lz = pz + Math.cos(a) * 0.55;
+      P.lb.addMatrix(Unit.cyl, mats.ironGreen, beamMatrix(px, Pl + 2.6, pz, lx, Pl + 2.9, lz, 0.06));
+      P.add(Unit.box, mats.lampGlass, lx, Pl + 2.65, lz, a, 0.26, 0.4, 0.26);
+      P.add(Unit.cone, mats.ironGreen, lx, Pl + 3.0, lz, 0, 0.45, 0.3, 0.45);
     }
   }
-  // Iron railings on seven faces; the +Z face is the stair entrance.
   const apothem = colR * Math.cos(Math.PI / 8);
   const panelW = 2 * colR * Math.sin(Math.PI / 8) - 0.35;
-  for (let k = 1; k < 8; k++) {
-    const a = (k * Math.PI) / 4;
-    const px = x + Math.sin(a) * apothem;
-    const pz = z + Math.cos(a) * apothem;
-    batch.add(boxGeo(panelW, 0.9, 0.04, panelW, 0.9), mats.ironwork, px, P + 0.5, pz, a);
-    batch.add(Unit.box, mats.ironGreen, px, P + 0.97, pz, a, panelW, 0.06, 0.08);
-    collision.addBox(px, pz, panelW + 0.4, 0.2, { rot: a, bottom: P, top: P + 1.0, mask: Layer.Player });
+  for (let i = 1; i < 8; i++) {
+    const a = (i * Math.PI) / 4;
+    const px = Math.sin(a) * apothem, pz = Math.cos(a) * apothem;
+    P.add(boxGeo(panelW, 0.9, 0.04, panelW, 0.9), mats.ironwork, px, Pl + 0.5, pz, a);
+    P.add(Unit.box, mats.ironGreen, px, Pl + 0.97, pz, a, panelW, 0.06, 0.08);
+    P.box(px, pz, panelW + 0.4, 0.2, { rot: a, bottom: Pl, top: Pl + 1.0, mask: Layer.Player });
   }
-  // Roof: dark timber ceiling, terracotta octagonal cone and a little lantern.
-  batch.add(oct(5.3, 5.3, 0.3), mats.darkWood, x, P + 3.7, z);
-  batch.add(new THREE.ConeGeometry(5.6, 1.6, 8).rotateY(Math.PI / 8), mats.roof, x, P + 4.65, z);
-  batch.add(oct(1.1, 1.1, 0.9), mats.darkWood, x, P + 5.6, z);
-  batch.add(new THREE.ConeGeometry(1.5, 0.6, 8).rotateY(Math.PI / 8), mats.roof, x, P + 6.3, z);
-  // Platform and stairs (step colliders let the player walk up).
-  collision.addCircle(x, z, 4.25, { top: P, mask: Layer.Solid });
-  const steps = [P - 0.4, P - 0.8, P - 1.2];
-  steps.forEach((top, i) => {
-    const sz = z + 4.4 + i * 0.6;
-    const h = top - base;
-    batch.add(boxGeo(2.6, h, 0.6, 1), mats.stone, x, base + h / 2, sz);
-    collision.addBox(x, sz, 2.6, 0.6, { top, mask: Layer.Solid });
-  });
-  ctx.sketch.circle(MapLayer.Landmark, x, z, 4.6, '#8a5a3a');
-}
-
-/** Pollarded plane trees, benches, lamps, flagpoles and the seated bronze statue. */
-function buildPlazaDecor(ctx: BuildContext): void {
-  const base = CURB;
-  for (let x = -26; x <= 26; x += 6.5) planeTree(ctx, x, -16.5, base);
-  for (const x of [-27, 27]) for (let z = -9; z <= 21; z += 7.5) planeTree(ctx, x, z, base);
-  for (let x = -22.75; x <= 22.75; x += 13) bench(ctx, x, -14.8, base, 0);
-  for (const x of [-25, 25]) for (const z of [-5.25, 9.75]) bench(ctx, x, z, base, x < 0 ? Math.PI / 2 : -Math.PI / 2);
-  for (const [lx, lz] of [[-12, -6], [-12, 16], [16, 14], [-2, 20]]) plazaLamp(ctx, lx, lz, base);
-
-  // Seated bronze figure on a stone bench (bottom-left of the reference photo).
-  const sx = -22, sz = 21;
-  ctx.batch.add(Unit.box, ctx.mats.stone, sx, base + 0.25, sz, 0, 2.2, 0.5, 0.7);
-  ctx.batch.add(Unit.box, ctx.mats.bronze, sx + 0.4, base + 0.85, sz - 0.1, 0, 0.5, 0.7, 0.35);
-  ctx.batch.add(Unit.box, ctx.mats.bronze, sx + 0.4, base + 1.35, sz - 0.1, 0, 0.26, 0.3, 0.28);
-  ctx.batch.add(Unit.box, ctx.mats.bronze, sx + 0.4, base + 0.58, sz + 0.25, 0, 0.45, 0.18, 0.55);
-  ctx.batch.add(Unit.box, ctx.mats.bronze, sx + 0.4, base + 0.3, sz + 0.5, 0, 0.45, 0.5, 0.15);
-  ctx.collision.addBox(sx, sz, 2.2, 0.8, { top: base + 0.5, mask: Layer.Solid });
-
-  // Flagpoles beside the town hall.
-  flag(ctx, 'es', -20.5, base, -20, 9, Math.PI / 2);
-  flag(ctx, 'cyl', -22, base, -20, 9, Math.PI / 2);
-  flag(ctx, 'eu', -23.5, base, -20, 9, Math.PI / 2);
-  for (const fx of [-20.5, -22, -23.5]) ctx.collision.addCircle(fx, -20, 0.12, { top: base + 9, mask: Layer.Bodies });
-
-  // Flower planters.
-  for (const [px, pz] of [[-6, 24], [6, 24], [-18, 24], [18, 24]]) {
-    ctx.batch.add(Unit.box, ctx.mats.stone, px, base + 0.3, pz, 0, 2.4, 0.6, 0.9);
-    ctx.batch.add(Unit.blob, ctx.mats.flowers, px, base + 0.7, pz, 0, 1.1, 0.35, 0.4);
-    ctx.collision.addBox(px, pz, 2.4, 0.9, { top: base + 0.6, mask: Layer.Solid });
+  P.add(oct(5.3 * k, 5.3 * k, 0.3), mats.darkWood, 0, Pl + 3.7, 0);
+  P.add(new THREE.ConeGeometry(5.6 * k, 1.6, 8).rotateY(Math.PI / 8), mats.roof, 0, Pl + 4.65, 0);
+  P.add(oct(1.1, 1.1, 0.9), mats.darkWood, 0, Pl + 5.6, 0);
+  P.add(new THREE.ConeGeometry(1.5, 0.6, 8).rotateY(Math.PI / 8), mats.roof, 0, Pl + 6.3, 0);
+  P.circle(0, 0, 4.25 * k, { top: Pl, mask: Layer.Solid });
+  const steps = 3;
+  for (let i = 0; i < steps; i++) {
+    const top = Pl - (Pl / (steps + 1)) * (i + 1);
+    const sz = 4.4 * k + i * 0.6;
+    P.add(boxGeo(2.6, top, 0.6, 1), mats.stone, 0, top / 2, sz);
+    P.box(0, sz, 2.6, 0.6, { top, mask: Layer.Solid });
   }
 }
 
-/** Houses flanking the town hall and around the tower inside the plaza block. */
-function buildPlazaBlockHouses(ctx: BuildContext): void {
-  const B = PLAZA_BLOCK;
-  const P = PLAZA;
-  building(ctx, P.minX, -40, -19, P.minZ, 'S', { floors: 3, galeria: true });
-  building(ctx, 19, -40, P.maxX, P.minZ, 'S', { floors: 3, galeria: true });
-  building(ctx, P.minX, B.minZ + 2.5, -16, -44, 'N', { floors: 3 });
-  building(ctx, 16, B.minZ + 2.5, P.maxX, -44, 'N', { floors: 3 });
-  building(ctx, P.minX, -44, -19, -40, 'W', { floors: 2, galeria: false });
-  building(ctx, 19, -44, P.maxX, -40, 'E', { floors: 2, galeria: false });
+/** Fuente de la plaza: round basin with a tiered central column. */
+function buildFountain(ctx: BuildContext): void {
+  const f = poi('fountain');
+  if (!f) return;
+  const ring = f.o ? toPts(f.o) : [];
+  const r = ring.length ? ring.reduce((s, [x, z]) => s + Math.hypot(x - f.x, z - f.z), 0) / ring.length : 4;
+  const h = f.ht ?? 4;
+  const P = new Placer(ctx, f.x, f.z, 0);
+  const { mats } = ctx;
+  P.add(new THREE.CylinderGeometry(r, r + 0.15, 0.7, 24, 1, true), mats.stone, 0, 0.35, 0);
+  P.add(new THREE.CylinderGeometry(r - 0.35, r - 0.35, 0.7, 24, 1, true), mats.stone, 0, 0.35, 0);
+  P.add(new THREE.RingGeometry(r - 0.35, r, 24).rotateX(-Math.PI / 2), mats.stoneTrim, 0, 0.71, 0);
+  const water = new THREE.Mesh(new THREE.CircleGeometry(r - 0.35, 24).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#4a9ab0' }));
+  water.position.y = 0.55;
+  P.group.add(water);
+  P.add(Unit.cyl, mats.stone, 0, h * 0.4, 0, 0, 0.6, h * 0.8, 0.6);
+  P.add(new THREE.CylinderGeometry(1.4, 0.4, 0.4, 16), mats.stone, 0, h * 0.45, 0);
+  P.add(new THREE.CylinderGeometry(0.8, 0.25, 0.3, 16), mats.stone, 0, h * 0.75, 0);
+  P.add(Unit.sphere, mats.stoneTrim, 0, h * 0.85, 0, 0, 0.5, 0.5, 0.5);
+  P.circle(0, 0, r, { top: 0.7, mask: Layer.Solid });
+}
+
+/** "Al músico": seated bronze figure on a bench (the statue in the plaza photo). */
+function buildStatue(ctx: BuildContext): void {
+  const s = poi('statue');
+  if (!s) return;
+  const b = poi('bandstand');
+  const P = new Placer(ctx, s.x, s.z, b ? facing(s.x, s.z, b.x, b.z) : 0, BASE);
+  const { mats } = ctx;
+  P.add(Unit.box, mats.iron, 0, 0.45, 0, 0, 1.9, 0.08, 0.55);
+  P.add(Unit.box, mats.iron, 0, 0.75, -0.25, 0, 1.9, 0.5, 0.06);
+  for (const k of [-0.8, 0.8]) P.add(Unit.box, mats.iron, k, 0.22, 0, 0, 0.08, 0.45, 0.5);
+  P.add(Unit.box, mats.bronze, 0.35, 0.82, -0.08, 0, 0.5, 0.68, 0.32);
+  P.add(Unit.box, mats.bronze, 0.35, 1.32, -0.08, 0, 0.26, 0.3, 0.28);
+  P.add(Unit.box, mats.bronze, 0.35, 0.56, 0.22, 0, 0.45, 0.16, 0.5);
+  P.add(Unit.box, mats.bronze, 0.35, 0.28, 0.45, 0, 0.45, 0.5, 0.14);
+  P.add(Unit.box, mats.bronze, -0.2, 0.7, 0.12, 0.4, 0.15, 0.6, 0.22);
+  P.box(0, 0, 1.9, 0.6, { top: 0.5 + BASE, mask: Layer.Solid });
+}
+
+function buildBellTowers(ctx: BuildContext): void {
+  const { mats } = ctx;
+  for (const t of MAP.pois.filter((p) => p.k === 'belltower')) {
+    const h = t.ht || 20;
+    const P = new Placer(ctx, t.x, t.z, 0);
+    P.add(boxGeo(4.2, h, 4.2, 2), mats.stone, 0, h / 2, 0);
+    for (const [ox, oz, ry] of [[0, 2.12, 0], [0, -2.12, 0], [2.12, 0, Math.PI / 2], [-2.12, 0, Math.PI / 2]] as const) {
+      P.add(Unit.box, mats.glass, ox, h - 2.2, oz, ry, 1.4, 2.2, 0.1);
+    }
+    P.add(new THREE.ConeGeometry(3.2, 2.6, 4).rotateY(Math.PI / 4), mats.roof, 0, h + 1.3, 0);
+    P.add(Unit.cyl, mats.iron, 0, h + 3.2, 0, 0, 0.06, 1.4, 0.06);
+    P.box(0, 0, 4.2, 4.2, { top: h + 2 });
+  }
+}
+
+/** Mikado steam locomotive preserved at the old Horna-Villarcayo station, on a short stretch of track. */
+function buildMikado(ctx: BuildContext): void {
+  const l = poi('locomotive');
+  if (!l) return;
+  const hit = ctx.roads.nearest(l.x, l.z, 80, (r) => r.k === 'viaverde');
+  const rot = hit ? Math.atan2(hit.dx, hit.dz) : 0;
+  const P = new Placer(ctx, l.x, l.z, rot);
+  const { mats } = ctx;
+  const black = new THREE.MeshLambertMaterial({ color: '#1f2022' });
+  const red = mats.redPaint;
+  P.add(boxGeo(3.4, 0.3, 26, 2), mats.gravel, 0, 0.15, 0);
+  for (let z = -12.6; z <= 12.6; z += 0.75) P.add(Unit.box, mats.sleeper, 0, 0.36, z, 0, 2.4, 0.12, 0.24);
+  for (const s of [-0.5, 0.5]) P.add(Unit.box, mats.rail, s, 0.47, 0, 0, 0.08, 0.14, 26);
+  const y0 = 0.55;
+  P.add(Unit.cyl16, black, 0, y0 + 1.75, 1.4, 0, 1.7, 7.4, 1.7, Math.PI / 2);
+  P.add(Unit.cyl16, new THREE.MeshLambertMaterial({ color: '#2b2c2f' }), 0, y0 + 1.75, 5.15, 0, 1.75, 0.3, 1.75, Math.PI / 2);
+  P.add(Unit.cyl, black, 0, y0 + 2.95, 4.2, 0, 0.45, 0.9, 0.45);
+  P.add(Unit.cyl, black, 0, y0 + 2.75, 1.6, 0, 0.75, 0.6, 0.75);
+  P.add(Unit.cyl, black, 0, y0 + 2.7, -0.4, 0, 0.6, 0.5, 0.6);
+  P.add(Unit.box, black, 0, y0 + 2.05, -3.4, 0, 2.6, 2.6, 2.6);
+  P.add(Unit.box, black, 0, y0 + 3.45, -3.4, 0, 2.9, 0.15, 2.9);
+  P.add(Unit.box, mats.glass, 1.31, y0 + 2.5, -3.2, 0, 0.04, 0.8, 1.0);
+  P.add(Unit.box, mats.glass, -1.31, y0 + 2.5, -3.2, 0, 0.04, 0.8, 1.0);
+  P.add(Unit.box, red, 0, y0 + 0.75, 0.5, 0, 2.2, 0.25, 11);
+  P.add(Unit.box, red, 0, y0 + 0.6, 5.9, 0, 2.6, 0.5, 0.25);
+  P.add(Unit.box, black, 0, y0 + 1.6, -8.2, 0, 2.6, 2.2, 5.8);
+  for (const side of [-0.9, 0.9]) {
+    for (const z of [-1.6, 0.05, 1.7, 3.35]) P.add(Unit.cyl16, red, side, y0 + 0.7, z, 0, 1.4, 0.12, 1.4, 0, Math.PI / 2);
+    P.add(Unit.cyl16, red, side, y0 + 0.4, 4.9, 0, 0.75, 0.1, 0.75, 0, Math.PI / 2);
+    P.add(Unit.cyl16, red, side, y0 + 0.4, -2.6, 0, 0.75, 0.1, 0.75, 0, Math.PI / 2);
+    P.add(Unit.box, mats.iron, side * 1.06, y0 + 0.75, 0.9, 0, 0.06, 0.12, 5.3);
+    for (const z of [-6.5, -9.9]) P.add(Unit.cyl16, red, side, y0 + 0.4, z, 0, 0.8, 0.1, 0.8, 0, Math.PI / 2);
+  }
+  P.add(Unit.box, mats.lampGlass, 0, y0 + 2.9, 5.35, 0, 0.35, 0.35, 0.2);
+  P.box(0, -1.4, 3, 16, { top: 4.5 });
+  signBoard(ctx, signTexture('LOCOMOTORA MIKADO', '#20304a', '#f2ecdc', 640, 96), ...P.lb.point(3.2, 2), 0, rot + Math.PI / 2, 3.6, 0.6, 0.9);
+}
+
+/** Name board of the old Horna-Villarcayo station, facing the Vía Verde. */
+function buildStationSign(ctx: BuildContext): void {
+  const st = MAP.buildings.find((b) => b.t === 'station');
+  if (!st) return;
+  const [cx, cz] = centroid(toPts(st.o));
+  const hit = ctx.roads.nearest(cx, cz, 80, (r) => r.k === 'viaverde');
+  if (!hit) return;
+  const mx = cx + (hit.x - cx) * 0.6, mz = cz + (hit.z - cz) * 0.6;
+  const rot = facing(mx, mz, hit.x, hit.z);
+  signBoard(ctx, signTexture('VILLARCAYO', '#f2ecdc', '#20304a'), mx, mz, 0, rot, 4.2, 0.8, 1.8);
 }
 
 export function buildLandmarks(ctx: BuildContext): void {
   buildAyuntamiento(ctx);
   buildTorre(ctx);
-  buildKiosko(ctx);
-  buildPlazaDecor(ctx);
-  buildPlazaBlockHouses(ctx);
+  buildTemplete(ctx);
+  buildFountain(ctx);
+  buildStatue(ctx);
+  buildBellTowers(ctx);
+  buildMikado(ctx);
+  buildStationSign(ctx);
 }
+

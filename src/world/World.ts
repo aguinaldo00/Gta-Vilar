@@ -1,81 +1,143 @@
 import * as THREE from 'three';
 import { Rng } from '../core/math';
-import type { CollisionWorld } from '../physics/CollisionWorld';
+import { type CollisionWorld, Layer } from '../physics/CollisionWorld';
 import { Batcher } from './Batcher';
-import type { Animator, BuildContext, GroundRect } from './context';
-import { buildCountryside, isField } from './Countryside';
+import { buildBuildings } from './Buildings';
+import type { Animator, BuildContext } from './context';
 import { Environment } from './Environment';
+import { type Bounds2, type Pt, orientedBox, pointInRing, ringBounds, toPts } from './geo';
+import { buildHydro } from './Hydro';
 import { buildLandmarks } from './Landmarks';
-import {
-  AYTO, CAMINO_REAL_Z, PLAZA_BLOCK, RAIL_X, RIVER, SOTO, STATION, TORRE, TOWN, inRect, isPool, riverCenterX, terrainHeight,
-} from './layout';
-import { MapSketch } from './MapSketch';
+import { BOUNDS, MAP } from './mapData';
 import { Materials } from './Materials';
-import { buildRailway } from './Railway';
-import { buildSoto } from './Soto';
-import { buildTerrain } from './Terrain';
-import { buildTown } from './Town';
+import { RoadNetwork, VEHICLE_ROADS, buildRoads } from './Roads';
+import { TerrainModel, buildGround, groundMaterial } from './Terrain';
+import { buildVegetation } from './Vegetation';
 import { waterTime } from './Water';
 
+/** Per-device rendering budget (draw distance is the main knob). */
+export interface Quality {
+  groundTexture: number;
+  fogNear: number;
+  fogFar: number;
+  shadowMapSize: number;
+  treeShadows: boolean;
+}
+
+interface NamedArea {
+  name: string;
+  ring: Pt[];
+  b: Bounds2;
+  area: number;
+}
+
 /**
- * Builds the whole Villarcayo map and answers spatial questions about it
- * (ground height, water, named zones).
+ * Villarcayo built from OpenStreetMap data (src/world/data/villarcayo.json):
+ * terrain, roads, buildings, water, vegetation and landmarks, plus spatial
+ * queries used by gameplay (ground height, water, place names, spawns).
  */
 export class World {
-  readonly ground: GroundRect[] = [];
-  readonly sketch = new MapSketch();
   readonly env: Environment;
+  readonly terrain = new TerrainModel(MAP);
+  readonly roads = new RoadNetwork();
+  readonly bounds = BOUNDS;
+  readonly stats = { meshes: 0, triangles: 0 };
   private readonly animators: Animator[] = [];
+  private readonly named: NamedArea[] = [];
+  private readonly landmarkZones: { name: string; x: number; z: number; r: number }[] = [];
 
-  constructor(scene: THREE.Scene, collision: CollisionWorld) {
+  constructor(scene: THREE.Scene, collision: CollisionWorld, quality: Quality) {
     const rng = new Rng(1971);
     const mats = new Materials();
     const batch = new Batcher();
     const ctx: BuildContext = {
-      scene, batch, mats, collision, ground: this.ground, sketch: this.sketch, animators: this.animators, rng,
+      scene, batch, mats, collision, animators: this.animators, rng, terrain: this.terrain, roads: this.roads, quality,
     };
-    this.env = new Environment(scene, rng);
-    scene.add(buildTerrain(mats));
-    buildCountryside(ctx);
-    buildTown(ctx);
+    this.env = new Environment(scene, rng, quality);
+    buildGround(this.terrain, batch, groundMaterial(quality.groundTexture, mats.detail));
+    buildRoads(ctx);
+    buildBuildings(ctx);
+    buildHydro(ctx);
+    buildVegetation(ctx);
     buildLandmarks(ctx);
-    buildSoto(ctx);
-    buildRailway(ctx);
-    batch.build(scene);
+    this.stats.triangles = Math.round(batch.triangles);
+    this.stats.meshes = batch.build(scene);
+    this.buildBounds(collision);
+    this.indexPlaces();
   }
 
-  /** Walkable / drivable height: terrain plus raised surfaces (sidewalks, decks, ballast). */
-  heightAt(x: number, z: number): number {
-    let h = terrainHeight(x, z);
-    for (const r of this.ground) {
-      if (r.y > h && x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) h = r.y;
+  private buildBounds(collision: CollisionWorld): void {
+    const B = this.bounds;
+    const W = B.maxX - B.minX, H = B.maxZ - B.minZ;
+    const o = { top: 200, mask: Layer.Bodies };
+    collision.addBox((B.minX + B.maxX) / 2, B.minZ - 3, W + 20, 10, o);
+    collision.addBox((B.minX + B.maxX) / 2, B.maxZ + 3, W + 20, 10, o);
+    collision.addBox(B.minX - 3, (B.minZ + B.maxZ) / 2, 10, H + 20, o);
+    collision.addBox(B.maxX + 3, (B.minZ + B.maxZ) / 2, 10, H + 20, o);
+  }
+
+  private indexPlaces(): void {
+    for (const a of MAP.areas) {
+      if (!a.n || a.k === 'parking') continue;
+      const ring = toPts(a.o);
+      const b = ringBounds(ring);
+      this.named.push({ name: a.n, ring, b, area: (b.maxX - b.minX) * (b.maxZ - b.minZ) });
     }
-    return h;
+    this.named.sort((a, b) => a.area - b.area);
+    const add = (name: string, x: number, z: number, r: number) => this.landmarkZones.push({ name, x, z, r });
+    for (const b of MAP.buildings) {
+      if (b.t === 'townhall') {
+        const o = orientedBox(toPts(b.o));
+        add('Ayuntamiento', o.cx, o.cz, Math.max(o.w, o.d) / 2 + 2);
+      } else if (b.t === 'torre') {
+        const o = orientedBox(toPts(b.o));
+        add('Torre del Corregimiento', o.cx, o.cz, 9);
+      } else if (b.t === 'station' || (b.t === 'church' && b.n)) {
+        const o = orientedBox(toPts(b.o));
+        add(b.t === 'station' ? 'Antigua Estación de Horna-Villarcayo' : b.n!, o.cx, o.cz, Math.max(o.w, o.d) / 2 + 12);
+      }
+    }
+    for (const p of MAP.pois) {
+      if (p.k === 'locomotive') add('Locomotora Mikado', p.x, p.z, 14);
+      if (p.k === 'bandstand') add('Templete de la Plaza Mayor', p.x, p.z, 7);
+    }
   }
 
-  /** Water surface height at (x, z), or null when there is no water. */
+  heightAt(x: number, z: number): number {
+    return this.terrain.heightAt(x, z);
+  }
+
   waterAt(x: number, z: number): number | null {
-    return Math.abs(x - riverCenterX(z)) < RIVER.halfWidth + 1 ? RIVER.water : null;
+    return this.terrain.waterAt(x, z);
   }
 
+  /** Place name for the HUD: landmark, named area, street name, or the municipality. */
   zoneAt(x: number, z: number): string {
-    if (inRect({ minX: TORRE.x - 9, maxX: TORRE.x + 9, minZ: TORRE.z - 9, maxZ: TORRE.z + 8 }, x, z)) return 'Torre del Corregimiento';
-    if (inRect({ minX: AYTO.x - AYTO.w / 2, maxX: AYTO.x + AYTO.w / 2, minZ: AYTO.z - AYTO.d / 2, maxZ: AYTO.z + AYTO.d / 2 }, x, z, 1)) return 'Ayuntamiento';
-    if (inRect(PLAZA_BLOCK, x, z)) return 'Plaza Mayor';
-    if (isPool(x, z)) return 'Piscinas Naturales';
-    if (Math.abs(x - riverCenterX(z)) < RIVER.halfWidth - 2) return 'Río Nela';
-    if (Math.abs(z - CAMINO_REAL_Z) < 7 && Math.abs(x) < 190) return 'Camino Real';
-    if (x > SOTO.minX) return 'Parque El Soto';
-    if (inRect(STATION, x, z, 14)) return 'Estación de Villarcayo';
-    if (Math.abs(x - RAIL_X) < 12) return 'Vía Santander-Mediterráneo';
-    if (inRect(TOWN, x, z)) return 'Villarcayo';
-    if (isField(x, z)) return 'Campos de Castilla';
-    return 'Merindad de Castilla la Vieja';
+    for (const l of this.landmarkZones) if (Math.hypot(x - l.x, z - l.z) < l.r) return l.name;
+    for (const a of this.named) {
+      if (x < a.b.minX || x > a.b.maxX || z < a.b.minZ || z > a.b.maxZ) continue;
+      if (pointInRing(x, z, a.ring)) return a.name;
+    }
+    const river = this.terrain.riverDistance(x, z);
+    if (river.d < river.hw + 3) return 'Río Nela';
+    const road = this.roads.nearest(x, z, 4, (r) => !!r.n);
+    if (road?.road.n) return road.road.n;
+    return Math.hypot(x, z) < 700 ? 'Villarcayo' : 'Merindad de Castilla la Vieja';
   }
 
-  update(dt: number, time: number, focus: THREE.Vector3): void {
+  /** Nearest drivable road to (x, z): a point on the right-hand lane and its heading. */
+  roadSpawn(x: number, z: number, preferMain = true): { x: number; z: number; heading: number } {
+    const main = preferMain ? this.roads.nearest(x, z, 120, (r) => VEHICLE_ROADS.has(r.k) && r.k !== 'service') : null;
+    const hit = main ?? this.roads.nearest(x, z, 400, (r) => VEHICLE_ROADS.has(r.k) || r.k === 'track');
+    if (!hit) return { x, z, heading: 0 };
+    const lane = hit.road.w / 4;
+    // Spain drives on the right; a vehicle heading along (dx, dz) has its right side at (-dz, dx).
+    return { x: hit.x - hit.dz * lane, z: hit.z + hit.dx * lane, heading: Math.atan2(hit.dx, hit.dz) };
+  }
+
+  update(dt: number, time: number, focus: THREE.Vector3, camera: THREE.Camera): void {
     waterTime.value = time;
     for (const a of this.animators) a(time, dt);
-    this.env.update(dt, focus);
+    this.env.update(dt, focus, camera);
   }
 }

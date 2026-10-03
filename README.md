@@ -1,83 +1,121 @@
 # Villarcayo Sandbox
 
-A browser-based 3D open-world vertical slice in the spirit of the early 3D-era *Grand Theft Auto* games, set in a stylised low-poly replica of **Villarcayo (Burgos, Spain)**. Built with **TypeScript + Three.js** and bundled with Vite. It uses no external assets: every texture is generated procedurally on a canvas at startup.
+A browser-based 3D open-world sandbox in the spirit of the early 3D-era *Grand Theft Auto* games, set in **Villarcayo de Merindad de Castilla la Vieja (Burgos, Spain)**. The town is built **from real OpenStreetMap data**: the actual streets, the footprint and height of each of its 1,592 buildings, the course of the Río Nela, parks, trees, street lamps and pedestrian crossings. Built with **TypeScript + Three.js** and bundled with Vite.
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + production bundle in dist/
+npm run map        # regenerate src/world/data/villarcayo.json from data/villarcayo.osm
 ```
+
+![Aerial view of central Villarcayo](docs/vista-aerea.jpg)
 
 ## Controls
 
-| Key | On foot | In a vehicle |
+| Action | Keyboard / mouse | Touch (phones and tablets) |
 | --- | --- | --- |
-| **W A S D** / arrows | Walk (camera-relative) | Throttle / brake-reverse / steer |
-| **Shift** | Run | — |
-| **Space** | Jump | Handbrake (drift) |
-| **F** / **E** | Steal the nearest vehicle | Get out (bail out if moving fast) |
-| **Mouse** | Orbit camera (click to lock pointer, or drag) | Orbit; auto-recentres behind the car |
-| **R** | Respawn in the Plaza Mayor | |
-| **H** / **M** | Help panel / mute | |
+| Walk / drive | **W A S D** / arrows | Joystick (left half of the screen) |
+| Run | **Shift** | Push the joystick all the way |
+| Jump / handbrake (drift) | **Space** | **SALTAR / FRENO** button |
+| Steal / get out of a vehicle | **F** / **E** | **ROBAR / SALIR** button |
+| Camera | Mouse (click to lock the pointer) | Drag on the right half of the screen |
+| Back to the Plaza Mayor | **R** | |
+| Help / mute | **H** / **M** | |
 
-## The map
+## Where the map comes from
 
-| Place | What's there |
+The data pipeline runs in two steps. The browser never parses OSM.
+
+1. **`data/villarcayo.osm`**: an OpenStreetMap export of the bounding box 42.92577–42.95111 N, 3.59137–3.55109 W (≈ 3.3 × 2.8 km).
+2. **`scripts/osm-to-map.ts`** (Node, no dependencies) reads the XML, projects coordinates and writes **`src/world/data/villarcayo.json`** (≈ 390 KB). Its processing steps:
+   - simplifies geometry (Douglas–Peucker, 0.25–0.5 m)
+   - clips everything to the bounds
+   - assembles multipolygons (buildings with courtyards, the Plaza Mayor, farmland)
+   - infers sidewalks
+   - marks road junctions
+
+**Projection.** Equirectangular around the **centroid of the Plaza Mayor** (`place=square`, 42.939036 N, 3.571694 W). +X is east, +Z is south, in metres: `x = (lon − lon0)·cos(lat0)·π/180·R`, `z = −(lat − lat0)·π/180·R`, with R = 6 371 008.8 m. At town scale the distortion is negligible.
+
+### What comes from OSM and what is assumed
+
+| Element | From OSM | Assumed / modelled by hand |
+| --- | --- | --- |
+| Streets | Course, type, name, `width`/`lanes`, bridges, tunnels (excluded), `sidewalk` tags | Width by type when untagged (primary 7.5 m … footway 2 m); sidewalks inferred on streets lined with buildings |
+| Buildings | Real footprint (with courtyards), `building:levels`, `height`, type, material | 3.1 m per storey; 2–3 storeys when untagged (151 buildings); roof shape (hipped on rectangular plots, sloping edges elsewhere); facade colour; galerías on 50 % of old-town houses |
+| Río Nela | Centre line, weirs (Presa de Churruca, Presa Danvila), natural pools (`leisure=swimming_area`) | Channel width (16 m) and bed profile; the depth of the pools |
+| Parks, fields, forest | Land-use polygons (El Soto, Parque El Soto, farmland, meadows, sports pitches…) | Infill tree density inside forests and parks |
+| Trees, lamps, benches, crossings | 481 trees (including tree rows), 740 street lamps, 84 benches, 219 zebra crossings at their real positions | Bench orientation (facing the nearest street); tree species (pollarded plane trees inside the Plaza Mayor, poplars by the river) |
+| Ayuntamiento | Footprint and position (`amenity=townhall`) | Façade modelled from the photos: soportales, balcony, clock and bell gable; front turned towards the templete |
+| Torre del Corregimiento | Footprint and 4 storeys | Battlements, windows, door |
+| Templete, fountain, statue | Position and size (`leisure=bandstand`, `amenity=fountain`, `memorial=bench` "Al músico") | 3D design (octagonal kiosk from the photo) |
+| Old railway | Route of the Vía Verde Santander–Mediterráneo, station building "Antigua Estación de Horna-Villarcayo", Mikado locomotive | The locomotive model and the short stretch of track under it |
+| Terrain | — | **Flat.** The OSM export carries no elevation, so only the river channel is carved |
+
+## Performance
+
+Measured with `renderer.info` (Chromium, 1280×720) at four viewpoints. "Total" includes the shadow pass.
+
+| View | Desktop: total draw calls / triangles | Desktop: main pass | Mobile (Pixel 7): total | Mobile: main pass |
+| --- | --- | --- | --- | --- |
+| Plaza Mayor | 136 / 333k | 98 / 231k | 129 / 296k | 95 / 229k |
+| Densest street in the centre | 148 / 318k | 113 / 221k | 133 / 264k | 101 / 198k |
+| El Soto (river and pools) | 89 / 214k | 65 / 143k | 87 / 238k | 68 / 216k |
+| Old station | 89 / 70k | 68 / 60k | 84 / 62k | 63 / 53k |
+
+How the budget is met:
+
+- **Merged static geometry:** the batcher merges geometry per material in 384 m chunks, so distant chunks are culled by the frustum.
+- **Vertex colours:** buildings, roofs and every plain-coloured prop share vertex-coloured materials.
+- **Road atlas:** asphalt, sidewalk, paving, dirt, gravel and paint share one texture atlas (one draw call per chunk).
+- **Instancing:** trees are `InstancedMesh`es; so are the four wheels of each vehicle and the clouds.
+- **Merged vehicles and player:** each vehicle and the player are merged into a handful of meshes.
+- **Mountains:** they are painted into the sky shader.
+- **Draw distance:** 560 m on desktop and 380 m on phones. Phones also get a 1024 px shadow map and no tree shadows.
+
+**Collision** follows the building footprints. Each wall is a thin box collider (18,670 colliders in a spatial hash); the visual geometry is never used for collision.
+
+## Verification
+
+The `.osm` file rendered directly (without the converter), the in-game minimap, and an overlay of the OSM street centre lines on the minimap:
+
+![Comparison of OpenStreetMap and the minimap](docs/comparacion-osm-minimapa.jpg)
+
+The Plaza Mayor, framed like the reference photos:
+
+| Ayuntamiento | Templete and Ayuntamiento |
 | --- | --- |
-| **Plaza Mayor** | Paved square with the octagonal *kiosko* (you can climb its steps), pollarded plane trees, benches, lamps, flagpoles and a seated bronze statue. |
-| **Ayuntamiento** | Sandstone town hall with a five-arch arcade you can walk through, iron balconies, waving flags and the clock gable with its iron bell cage. |
-| **Torre del Corregimiento** | Crenellated medieval stone tower right behind the town hall. |
-| **Camino Real** | The main east–west road. It runs through town past the plaza, crosses the railway at a level crossing and the Río Nela on a stone bridge. |
-| **Parque El Soto** | Riverside woodland on the east edge: poplar-lined banks, a footpath, a footbridge, parking and picnic tables. |
-| **Río Nela & piscinas naturales** | Animated flowing water. Two stone weirs hold back the turquoise natural pools, which have a jetty, diving board, sunbeds and a lifeguard chair. You wade in the river and swim in the pools. |
-| **Vía Santander–Mediterráneo** | Abandoned line on the western outskirts: weed-grown track and siding, the "VILLARCAYO" station and platform, rusty wagons, a water tower and a goods shed. |
-| Town & countryside | Generated blocks of Merindades-style houses with white glazed *galerías*, crop fields with hay bales, and hills closing the valley. |
-
-Vehicles: three **sedans** (*berlina*: red, blue, yellow), a **van** (*furgoneta*) and two **tractors** are parked around the plaza, the station and El Soto.
+| ![Ayuntamiento](docs/plaza-ayuntamiento.jpg) | ![Templete](docs/plaza-templete.jpg) |
 
 ## Architecture
 
 ```
+scripts/osm-to-map.ts        OSM XML → projected, simplified JSON
+data/villarcayo.osm          OpenStreetMap export (source)
 src/
-├── main.ts                  Entry: creates Game, wires the start screen
-├── Game.ts                  Renderer, fixed-step (60 Hz) loop on requestAnimationFrame,
-│                            input → entities → camera → HUD orchestration
-├── core/
-│   ├── Input.ts             Keyboard (by KeyboardEvent.code) + pointer-lock mouse
-│   └── math.ts              clamp/damp/angle helpers, seeded RNG
-├── physics/
-│   └── CollisionWorld.ts    2.5D static colliders (rotated boxes + circles with a vertical
-│                            extent) in a spatial hash; circle resolution, step-up support,
-│                            camera raycasts
-├── entities/
-│   ├── Player.ts            Blocky avatar: idle/walk/run/jump/wade/swim/knocked states,
-│   │                        procedural limb swing
-│   ├── Vehicle.ts           Arcade car physics: forward/lateral velocity split, grip &
-│   │                        handbrake drifting, impulse collisions, terrain limits
-│   ├── VehicleModels.ts     Low-poly sedan / van / tractor rigs (steering + rolling wheels)
-│   ├── vehicleSpecs.ts      Per-vehicle handling tuning
-│   └── SkidMarks.ts         Instanced tyre marks ring buffer
-├── camera/FollowCamera.ts   Orbit follow camera: pulls back and widens FOV when driving,
-│                            auto-recentres, avoids clipping into buildings
+├── main.ts / Game.ts        Renderer, fixed-step (60 Hz) loop on requestAnimationFrame, per-device quality
+├── core/                    Input (keyboard, pointer lock, virtual joystick), maths, mergeColoured
+├── physics/CollisionWorld   2.5D colliders (rotated boxes and circles with a height range), spatial hash, raycasts
+├── entities/                Player, Vehicle (arcade physics with drifting), vehicle models, skid marks
+├── camera/FollowCamera      Third-person orbit camera, pulls back and widens the FOV when driving
 ├── world/
-│   ├── layout.ts            Villarcayo geography: streets, landmarks, river curve, terrain
-│   ├── World.ts             Builds everything; heightAt / waterAt / zoneAt queries
-│   ├── Town.ts              Streets, sidewalks, blocks and procedural houses
-│   ├── Landmarks.ts         Ayuntamiento, Torre, kiosko, plaza props
-│   ├── Soto.ts              River, pools, bridges, woodland
-│   ├── Railway.ts           Track, station, wagons, water tower, warehouse
-│   ├── Countryside.ts       Fields, avenue, hills, map bounds
-│   ├── Environment.ts       Sky dome, sun + shadows, mountains, clouds
-│   ├── Terrain.ts / Water.ts / textures.ts / Materials.ts / geometry.ts / props.ts
-│   └── Batcher.ts           Merges static geometry per material (≈ one draw call each)
-├── ui/HUD.ts, ui/Minimap.ts Zone titles, prompts, speedometer, rotating radar
-└── audio/GameAudio.ts       Synthesised engine and tyre-screech sounds (WebAudio)
+│   ├── data/villarcayo.json Map generated from OSM
+│   ├── mapData.ts           Types and loading of the JSON
+│   ├── World.ts             Builds everything; heightAt / waterAt / zoneAt (real street names) / roadSpawn
+│   ├── Terrain.ts           Heights (river channel, pools, bridge decks), ground mesh and land-use texture
+│   ├── Roads.ts             Streets, sidewalks, markings, zebra crossings, bridges; road network index
+│   ├── Buildings.ts         Footprint extrusion, roofs, galerías, wall colliders
+│   ├── Hydro.ts             Río Nela, pools, streams, swimming pools, weirs
+│   ├── Vegetation.ts        Trees (instanced), street lamps and benches at their OSM positions
+│   ├── Landmarks.ts         Ayuntamiento, Torre, templete, fountain, "Al músico", bell towers, Mikado
+│   ├── Batcher.ts           Merging per material and chunk
+│   └── Environment / Materials / textures / geo / geometry / props / Water
+├── ui/                      HUD, minimap (vector OSM data), touch controls
+└── audio/GameAudio.ts       Synthesised engine and tyre screech
 ```
 
-### Design notes
+`window.__game` exposes the running `Game`, and `game.update(dt)` advances the simulation deterministically (useful for tests).
 
-- **Fixed timestep.** Physics advances in 1/60 s steps inside the `requestAnimationFrame` loop. Rendering, the camera and the HUD update once per frame.
-- **Collisions are 2.5D.** Every obstacle is a footprint (box or circle) with a `[bottom, top]` height range. Bodies are circles: the player is one, and vehicles are a chain of circles along their length. Low colliders within step height are walkable, which is how the kiosko stairs and station platform work. Colliders above head height, such as the town hall's upper floor and the galerías, let bodies pass underneath. Layer masks decide what blocks the player, vehicles and the camera.
-- **Drifting** comes from keeping the world-space velocity and decomposing it against the heading each step. The handbrake or a hard turn at speed lowers lateral grip, so the heading turns faster than the velocity follows.
-- **Ground** is an analytic height function (flat town, carved river channel, edge hills) plus raised rectangles for sidewalks, decks and ballast. Vehicles refuse terrain that is too low (the river) or too steep (the hills).
-- `window.__game` exposes the running `Game` for debugging and automated tests. `game.update(dt)` advances the simulation deterministically.
+## Licence and attribution
+
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database License (ODbL 1.0). The attribution is also shown on the game's start screen.

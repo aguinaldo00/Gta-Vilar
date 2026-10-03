@@ -77,6 +77,7 @@
         border: 3px solid #111; cursor: pointer; box-shadow: 0 6px 0 #111;
       }
       #play:disabled { opacity: .6; cursor: wait; }
+      #start .credits { font-size: 12px; opacity: .7; }
       #play:not(:disabled):hover { transform: translateY(-2px); }
 
       /* ---------- Touch devices ---------- */
@@ -153,8 +154,9 @@
     <div id="start">
       <h1><span>LAS MERINDADES</span>VILLARCAYO</h1>
       <p>
-        Plaza Mayor, el Ayuntamiento y la Torre del Corregimiento, el Camino Real, el Parque El Soto con el Río Nela y sus
-        piscinas naturales, y la vieja vía del Santander-Mediterráneo.
+        Villarcayo calle a calle, a partir de OpenStreetMap: la Plaza Mayor con el templete, el Ayuntamiento y la Torre del
+        Corregimiento, el Parque El Soto con el Río Nela y sus piscinas naturales, y la Vía Verde del Santander-Mediterráneo
+        con la locomotora Mikado.
       </p>
       <div class="keys touch-only">
         <b>Joystick</b><span>andar · conducir (a tope = correr)</span>
@@ -171,6 +173,7 @@
         <b>Ratón</b><span>cámara</span>
       </div>
       <button id="play" disabled>CARGANDO…</button>
+      <small class="credits">Mapa: © colaboradores de OpenStreetMap (ODbL)</small>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeColoured } from '../core/mergeColored';
 import type { VehicleKind } from './vehicleSpecs';
 
 export interface WheelRig {
@@ -10,6 +12,7 @@ export interface WheelRig {
   x: number;
   z: number;
   r: number;
+  width: number;
 }
 
 export interface VehicleRig {
@@ -19,6 +22,8 @@ export interface VehicleRig {
   wheels: WheelRig[];
   brakeMat: THREE.MeshLambertMaterial;
   driver: THREE.Group;
+  /** All four wheels in one InstancedMesh; matrices come from the pivots each frame. */
+  wheelMesh: THREE.InstancedMesh;
 }
 
 let shared: Record<'tire' | 'glass' | 'dark' | 'chrome' | 'headlight' | 'plate' | 'skin' | 'shirt' | 'hair', THREE.Material> | null = null;
@@ -48,21 +53,46 @@ function box(parent: THREE.Object3D, w: number, h: number, d: number, mat: THREE
   return m;
 }
 
-function wheel(root: THREE.Group, r: number, width: number, rimMat: THREE.Material, front: boolean, x: number, z: number): WheelRig {
-  const M = sharedMats();
+/** Wheel transform rig; the geometry itself is drawn by the vehicle's wheel InstancedMesh. */
+function wheel(root: THREE.Group, r: number, width: number, _rimMat: THREE.Material, front: boolean, x: number, z: number): WheelRig {
   const pivot = new THREE.Group();
   pivot.position.set(x, r, z);
   const spin = new THREE.Group();
   pivot.add(spin);
-  const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, width, 16).rotateZ(Math.PI / 2), M.tire);
-  tire.castShadow = true;
-  spin.add(tire);
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.6, r * 0.6, width + 0.02, 10).rotateZ(Math.PI / 2), rimMat);
-  spin.add(rim);
-  const spoke = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, r * 1.15, r * 0.22), rimMat);
-  spin.add(spoke);
   root.add(pivot);
-  return { pivot, spin, front, x, z, r };
+  return { pivot, spin, front, x, z, r, width };
+}
+
+/** Unit wheel (radius 1, width 1 along X): tyre, rim and a spoke so rolling is visible. */
+function unitWheel(rim: THREE.Color): THREE.BufferGeometry {
+  const part = (g: THREE.BufferGeometry, c: THREE.Color) => {
+    const n = g.toNonIndexed();
+    n.deleteAttribute('uv');
+    const arr = new Float32Array(n.attributes.position.count * 3);
+    for (let i = 0; i < arr.length; i += 3) arr.set([c.r, c.g, c.b], i);
+    n.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    return n;
+  };
+  return mergeGeometries([
+    part(new THREE.CylinderGeometry(1, 1, 1, 16).rotateZ(Math.PI / 2), new THREE.Color('#1c1c1c')),
+    part(new THREE.CylinderGeometry(0.6, 0.6, 1.06, 10).rotateZ(Math.PI / 2), rim),
+    part(new THREE.BoxGeometry(1.1, 1.15, 0.22), rim),
+  ])!;
+}
+
+const wheelMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+const _m = new THREE.Matrix4();
+const _s = new THREE.Matrix4();
+
+/** Writes the current pivot/spin transforms into the wheel InstancedMesh. */
+export function updateWheelInstances(rig: VehicleRig): void {
+  rig.wheels.forEach((w, i) => {
+    w.pivot.updateMatrix();
+    w.spin.updateMatrix();
+    _m.multiplyMatrices(w.pivot.matrix, w.spin.matrix).multiply(_s.makeScale(w.width, w.r, w.r));
+    rig.wheelMesh.setMatrixAt(i, _m);
+  });
+  rig.wheelMesh.instanceMatrix.needsUpdate = true;
 }
 
 /** Low-poly driver bust shown in the seat while the vehicle is driven. */
@@ -116,7 +146,7 @@ function buildSedan(color: string): VehicleRig {
   const driver = driverBust();
   driver.position.set(0.38, 0.55, -0.15);
   body.add(driver);
-  return { root, body, wheels, brakeMat: bm, driver };
+  return { root, body, wheels, brakeMat: bm, driver, wheelMesh: null as unknown as THREE.InstancedMesh };
 }
 
 function buildVan(color: string): VehicleRig {
@@ -149,7 +179,7 @@ function buildVan(color: string): VehicleRig {
   const driver = driverBust();
   driver.position.set(0.42, 0.95, 1.2);
   body.add(driver);
-  return { root, body, wheels, brakeMat: bm, driver };
+  return { root, body, wheels, brakeMat: bm, driver, wheelMesh: null as unknown as THREE.InstancedMesh };
 }
 
 function buildTractor(color: string): VehicleRig {
@@ -187,13 +217,22 @@ function buildTractor(color: string): VehicleRig {
   const driver = driverBust();
   driver.position.set(0, 1.62, -0.6);
   body.add(driver);
-  return { root, body, wheels, brakeMat: bm, driver };
+  return { root, body, wheels, brakeMat: bm, driver, wheelMesh: null as unknown as THREE.InstancedMesh };
 }
 
 export function buildVehicleModel(kind: VehicleKind, color: string): VehicleRig {
   const rig = kind === 'sedan' ? buildSedan(color) : kind === 'van' ? buildVan(color) : buildTractor(color);
-  rig.root.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) o.castShadow = true;
+  // Merge the boxes of each rigid part into one mesh (brake lights stay separate: they light up).
+  mergeColoured(rig.body, (m) => m.material === rig.brakeMat);
+  rig.body.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh && (o as THREE.Mesh).material === rig.brakeMat) o.castShadow = false;
   });
+  mergeColoured(rig.driver);
+  const rim = kind === 'tractor' ? new THREE.Color('#e3b622') : new THREE.Color('#c9ccd0');
+  rig.wheelMesh = new THREE.InstancedMesh(unitWheel(rim), wheelMaterial, rig.wheels.length);
+  rig.wheelMesh.castShadow = true;
+  rig.wheelMesh.frustumCulled = false;
+  rig.root.add(rig.wheelMesh);
+  updateWheelInstances(rig);
   return rig;
 }

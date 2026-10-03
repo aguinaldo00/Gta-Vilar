@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { mergeColoured } from '../core/mergeColored';
 import { clamp, damp, dampAngle } from '../core/math';
 import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
-import { WORLD_HALF } from '../world/layout';
+import { BOUNDS } from '../world/mapData';
 import type { World } from '../world/World';
 import type { Vehicle } from './Vehicle';
 
@@ -89,6 +90,7 @@ export class Player {
       part(leg, 0.22, 0.86, 0.24, jeans, 0, -0.43, 0);
       part(leg, 0.22, 0.1, 0.32, shoes, 0, -0.9, 0.05);
     }
+    for (const g of [this.body, this.armL, this.armR, this.legL, this.legR]) mergeColoured(g);
   }
 
   spawn(x: number, z: number, y: number, facing: number): void {
@@ -203,9 +205,8 @@ export class Player {
         }
       }
     }
-    const lim = WORLD_HALF - 1;
-    this.pos.x = clamp(p.x, -lim, lim);
-    this.pos.z = clamp(p.z, -lim, lim);
+    this.pos.x = clamp(p.x, BOUNDS.minX + 1, BOUNDS.maxX - 1);
+    this.pos.z = clamp(p.z, BOUNDS.minZ + 1, BOUNDS.maxZ - 1);
 
     // Ground snapping / landing.
     if (!swimming) {
@@ -285,6 +286,7 @@ export class Player {
 
   private sync(): void {
     this.root.position.copy(this.pos);
+    this.root.position.y += 0.05; // stand on top of the road/pavement surface layers
     this.root.rotation.y = this.facing;
   }
 }

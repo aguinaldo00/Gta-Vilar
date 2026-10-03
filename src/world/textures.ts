@@ -298,7 +298,7 @@ export function corrugatedTexture(): THREE.CanvasTexture {
       g.fillRect(x, 0, 8, h);
     }
     for (let i = 0; i < 26; i++) {
-      g.fillStyle = `rgba(${rng.int(110, 150)},${rng.int(50, 70)},${rng.int(20, 35)},${rng.range(0.25, 0.6)})`;
+      g.fillStyle = `rgba(${rng.int(110, 150)},${rng.int(50, 70)},${rng.int(20, 35)},${rng.range(0.06, 0.2)})`;
       g.beginPath();
       g.ellipse(rng.range(0, w), rng.range(0, h), rng.range(4, 18), rng.range(8, 30), 0, 0, Math.PI * 2);
       g.fill();

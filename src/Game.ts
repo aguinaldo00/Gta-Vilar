@@ -11,12 +11,13 @@ import { CollisionWorld, type Contact, Layer } from './physics/CollisionWorld';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
-import { World } from './world/World';
+import { type Quality, World } from './world/World';
 
 const FIXED_STEP = 1 / 60;
 const MAX_STEPS = 5;
 const ENTER_REACH = 1.6;
-const SPAWN = { x: 0, z: 14, facing: Math.PI };
+/** Plaza Mayor, between the templete and the Ayuntamiento, looking at the town hall. */
+const SPAWN = { x: 4, z: 14, facing: Math.PI };
 
 const KEYS = {
   forward: ['KeyW', 'ArrowUp'],
@@ -28,14 +29,14 @@ const KEYS = {
   use: ['KeyF', 'KeyE'],
 };
 
-/** Parked vehicles around the Plaza Mayor and a few further afield. */
-const VEHICLE_SPAWNS: { kind: VehicleKind; color: string; x: number; z: number; heading: number }[] = [
-  { kind: 'sedan', color: '#b3261e', x: -15, z: 36.6, heading: Math.PI / 2 },
-  { kind: 'tractor', color: '#2e7d32', x: -16, z: 6, heading: 0 },
-  { kind: 'van', color: '#ecebe6', x: 39, z: 4, heading: Math.PI },
-  { kind: 'sedan', color: '#1f4e9a', x: -39, z: -40, heading: 0 },
-  { kind: 'sedan', color: '#e0b020', x: 130, z: 52, heading: 0 },
-  { kind: 'tractor', color: '#c0392b', x: -138, z: -16, heading: Math.PI / 2 },
+/** Vehicles are parked on the real street nearest to each of these points. */
+const VEHICLE_SPAWNS: { kind: VehicleKind; color: string; x: number; z: number; main: boolean }[] = [
+  { kind: 'sedan', color: '#b3261e', x: 30, z: 10, main: true },
+  { kind: 'tractor', color: '#2e7d32', x: -25, z: 30, main: true },
+  { kind: 'van', color: '#ecebe6', x: -60, z: -40, main: true },
+  { kind: 'sedan', color: '#1f4e9a', x: 80, z: 60, main: true },
+  { kind: 'sedan', color: '#e0b020', x: -200, z: -250, main: true },
+  { kind: 'tractor', color: '#c0392b', x: -640, z: 1150, main: false },
 ];
 
 declare global {
@@ -51,7 +52,7 @@ declare global {
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(62, 1, 0.1, 2400);
+  readonly camera: THREE.PerspectiveCamera;
   readonly input: Input;
   readonly collision = new CollisionWorld();
   readonly world: World;
@@ -82,14 +83,21 @@ export class Game {
 
     this.input = new Input(this.renderer.domElement);
     this.touch = isTouch ? new TouchControls(this.input) : null;
-    this.world = new World(this.scene, this.collision);
+    // Draw distance is the main performance knob: phones see less far.
+    const quality: Quality = isTouch
+      ? { groundTexture: 2048, fogNear: 100, fogFar: 380, shadowMapSize: 1024, treeShadows: false }
+      : { groundTexture: 4096, fogNear: 160, fogFar: 560, shadowMapSize: 2048, treeShadows: true };
+    quality.groundTexture = Math.min(quality.groundTexture, this.renderer.capabilities.maxTextureSize);
+    this.camera = new THREE.PerspectiveCamera(62, 1, 0.25, quality.fogFar + 40);
+    this.world = new World(this.scene, this.collision, quality);
     this.skids = new SkidMarks(this.scene);
     this.followCam = new FollowCamera(this.camera);
-    this.minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement, this.world.sketch);
+    this.minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement);
 
     for (const s of VEHICLE_SPAWNS) {
-      const v = new Vehicle(s.kind, s.color, s.x, s.z, s.heading);
-      v.y = this.world.heightAt(s.x, s.z);
+      const p = this.world.roadSpawn(s.x, s.z, s.main);
+      const v = new Vehicle(s.kind, s.color, p.x, p.z, p.heading);
+      v.y = this.world.heightAt(p.x, p.z);
       this.vehicles.push(v);
       this.scene.add(v.rig.root);
       v.update(0.001, PARKED, this.world, this.collision, this.skids);
@@ -174,7 +182,7 @@ export class Game {
       height: v ? v.spec.camHeight : 1.55,
     }, this.collision, this.world);
 
-    this.world.update(dt, this.time, this.player.pos);
+    this.world.update(dt, this.time, this.player.pos, this.camera);
     this.audio.update(v);
 
     const zone = this.world.zoneAt(this.player.pos.x, this.player.pos.z);

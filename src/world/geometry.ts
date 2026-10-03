@@ -20,44 +20,6 @@ export function boxGeo(w: number, h: number, d: number, tileU = 0, tileV = tileU
   return g;
 }
 
-/** Flat quad in world coordinates with world-aligned UVs (seamless when tiles overlap). */
-export function quadXZ(x0: number, z0: number, x1: number, z1: number, y: number, tile: number): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute([x0, y, z0, x0, y, z1, x1, y, z1, x1, y, z0], 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute([x0 / tile, -z0 / tile, x0 / tile, -z1 / tile, x1 / tile, -z1 / tile, x1 / tile, -z0 / tile], 2));
-  g.setIndex([0, 1, 2, 0, 2, 3]);
-  return g;
-}
-
-/** Strip following a curve x = f(z), used for the river and paths. */
-export function curveStrip(
-  fx: (z: number) => number, z0: number, z1: number, halfWidth: number, y: number, tile: number, step = 3,
-): THREE.BufferGeometry {
-  const pos: number[] = [];
-  const uv: number[] = [];
-  const nrm: number[] = [];
-  const idx: number[] = [];
-  const n = Math.max(1, Math.ceil((z1 - z0) / step));
-  for (let i = 0; i <= n; i++) {
-    const z = z0 + ((z1 - z0) * i) / n;
-    const cx = fx(z);
-    pos.push(cx - halfWidth, y, z, cx + halfWidth, y, z);
-    uv.push((cx - halfWidth) / tile, -z / tile, (cx + halfWidth) / tile, -z / tile);
-    nrm.push(0, 1, 0, 0, 1, 0);
-    if (i < n) {
-      const a = i * 2;
-      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setIndex(idx);
-  return g;
-}
-
 /** Hip roof (four slopes and a ridge along the longer side), base at y = 0. */
 export function hipRoof(w: number, d: number, h: number, overhang = 0.4): THREE.BufferGeometry {
   const swap = d > w;
@@ -88,19 +50,6 @@ export function hipRoof(w: number, d: number, h: number, overhang = 0.4): THREE.
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.computeVertexNormals();
   if (swap) g.rotateY(Math.PI / 2);
-  return g;
-}
-
-/** Gable (two-slope) roof prism with the ridge along Z. */
-export function gableRoof(w: number, len: number, h: number): THREE.BufferGeometry {
-  const s = new THREE.Shape();
-  s.moveTo(-w / 2, 0);
-  s.lineTo(w / 2, 0);
-  s.lineTo(0, h);
-  s.closePath();
-  const g = new THREE.ExtrudeGeometry(s, { depth: len, bevelEnabled: false });
-  g.translate(0, 0, -len / 2);
-  scaleUV(g, 0.5, 0.5);
   return g;
 }
 
