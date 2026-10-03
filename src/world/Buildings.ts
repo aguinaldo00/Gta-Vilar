@@ -44,7 +44,7 @@ export function buildingHeight(b: MapBuilding, distToCentre: number): number {
 }
 
 /** Geometry accumulator with explicit normals, UVs and colours. */
-class Mesh3 {
+export class Mesh3 {
   pos: number[] = [];
   nrm: number[] = [];
   uv: number[] = [];
@@ -224,12 +224,18 @@ function inset(ring: Pt[], d: number): Pt[] | null {
     const bl = Math.hypot(bx, bz);
     if (bl < 0.3) return null;
     const k = d / ((bx * n1[0] + bz * n1[1]) / bl);
-    if (k > d * 3) return null;
+    // Very sharp corners would throw the miter far out.
+    if (Math.abs(k) > Math.abs(d) * 3) return null;
     out.push([c[0] + (bx / bl) * k, c[1] + (bz / bl) * k]);
   }
   const a0 = signedArea(ring),
     a1 = signedArea(out);
   return a1 > 0 && a1 > a0 * 0.15 ? out : null;
+}
+
+/** Outward offset of a CCW ring by `d` (eaves overhang), or null if it degenerates. */
+export function offsetRing(ring: Pt[], d: number): Pt[] | null {
+  return inset(ring, -d);
 }
 
 /** Tiled roof skirt sloping up from the eaves to a flat top (irregular footprints). */
@@ -318,9 +324,11 @@ export function buildBuildings(ctx: BuildContext): void {
     const ground = b.gy ?? ctx.terrain.heightAt(cx, cz);
     const y0 = ground + (b.mlv ?? 0) * FLOOR_H;
     // Measured volume: walls to the eaves, roof to the ridge. Otherwise from the storeys.
-    const measured = b.top !== undefined && b.eave !== undefined && b.top > y0 + 1.5;
-    const h = measured ? b.top! : y0 + buildingHeight(b, distC);
-    const eaveY = measured ? Math.min(h, Math.max(y0 + 1.8, b.eave!)) : h;
+    // Roof baked over a row of buildings (tools/geodata/roofs.py): the walls stop at its eaves.
+    const roofRef = b.rf !== undefined ? ctx.map.roofs?.[b.rf] : undefined;
+    const measured = roofRef !== undefined || (b.top !== undefined && b.eave !== undefined && b.top > y0 + 1.5);
+    const h = roofRef ? Math.max(y0 + 1.8, roofRef.e) + roofRef.r : measured ? b.top! : y0 + buildingHeight(b, distC);
+    const eaveY = roofRef ? Math.max(y0 + 1.8, roofRef.e) : measured ? Math.min(h, Math.max(y0 + 1.8, b.eave!)) : h;
     const rise = measured ? h - eaveY : -1;
     // Walls reach a little below the ground on slopes so they never float.
     const footY = (b.mlv ?? 0) > 0 ? y0 : ground - 1.2;
@@ -344,7 +352,7 @@ export function buildBuildings(ctx: BuildContext): void {
     if (industrial) tint = INDUSTRIAL_TINTS[Math.floor(rnd * INDUSTRIAL_TINTS.length)];
     // Pitched roofs start at the measured eaves; flat roofs (small rise) at the top.
     const pitched = measured ? rise > 0.9 : true;
-    const top = ruins ? y0 + Math.min(h - y0, 3.5) : measured && pitched ? eaveY : h;
+    const top = ruins ? y0 + Math.min(h - y0, 3.5) : roofRef || (measured && pitched) ? eaveY : h;
 
     // Facade rhythm: storeys fitted to the measured wall height (real floor count), bay width varies per building.
     const storeys = Math.max(1, Math.round((top - y0) / FLOOR_H));
@@ -357,8 +365,8 @@ export function buildBuildings(ctx: BuildContext): void {
 
     // Roofs. Low annexes (one storey, small) get flat terraces, like the patios and garages of the old town.
     const lowAnnex = b.part && (b.lv ?? 1) <= 1 && area < 140;
-    if (ruins) {
-      // Roofless.
+    if (ruins || roofRef) {
+      // Roofless, or covered by the shared roof of its row (src/world/Roofs.ts).
     } else if (b.t === 'greenhouse') {
       flatRoof(roofMesh, outer, holes, top, new THREE.Color('#cfe0e4'));
     } else if (measured ? !pitched : industrial || (b.t === 'block' && area > 600) || lowAnnex) {
@@ -383,7 +391,9 @@ export function buildBuildings(ctx: BuildContext): void {
     }
 
     // White glazed galería on the street-facing side of old-town houses (as in the plaza photos).
-    if (!church && !industrial && distC < OLD_TOWN_RADIUS && top - y0 > 2 * FLOOR_H && !b.mlv && rnd < 0.5) {
+    // Only on the old houses (not on modern blocks), and at most two floors tall, like the real ones.
+    const oldHouse = b.t === 'house' && !b.src && top - y0 > 2 * FLOOR_H && top - y0 < 4.6 * FLOOR_H;
+    if (!church && !industrial && oldHouse && distC < OLD_TOWN_RADIUS && !b.mlv && rnd < 0.5) {
       let best: { i: number; len: number } | null = null;
       for (let i = 0; i < outer.length; i++) {
         if (hidden.has(i)) continue;
@@ -403,7 +413,7 @@ export function buildBuildings(ctx: BuildContext): void {
         const nx = (bz - az) / len,
           nz = -(bx - ax) / len;
         const gw = Math.min(len - 1.6, 3 + hash01(idx, 7) * 4);
-        const gh = top - y0 - FLOOR_H - 0.9;
+        const gh = Math.min(top - y0 - FLOOR_H - 0.9, 2 * FLOOR_H - 0.6);
         const gd = 0.9;
         const mx = (ax + bx) / 2 + nx * (gd / 2),
           mz = (az + bz) / 2 + nz * (gd / 2);

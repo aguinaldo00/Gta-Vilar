@@ -285,11 +285,23 @@ export function buildVegetation(ctx: BuildContext): void {
   const nL = lidar.length / 4;
   const keep = Math.min(1, (ctx.quality.treeBudget * 2) / Math.max(1, nL));
   for (let i = 0; i < lidar.length; i += 4) {
-    const x = lidar[i],
-      z = lidar[i + 1],
-      h = lidar[i + 2],
+    let x = lidar[i],
+      z = lidar[i + 1];
+    const h = lidar[i + 2],
       r = lidar[i + 3];
-    if (inPlaza(x, z) || insideBuilding(x, z) || hash01(x * 0.37, z * 0.71) > keep) continue;
+    if (hash01(x * 0.37, z * 0.71) > keep) continue;
+    // The LiDAR gives the top of the crown; crowns of garden and street trees often overhang the
+    // road. Never stand a trunk on the carriageway: move it to the edge on its side of the street.
+    const onRoad = roads.nearest(x, z, 0.5, (rd) => VEHICLE_ROADS.has(rd.k));
+    if (onRoad && onRoad.d < 0.5) {
+      const ox = x - onRoad.x,
+        oz = z - onRoad.z;
+      const len = Math.hypot(ox, oz);
+      if (len < 0.3) continue; // right on the centre line: no side to move it to
+      x = onRoad.x + (ox / len) * (onRoad.road.w / 2 + 1.2);
+      z = onRoad.z + (oz / len) * (onRoad.road.w / 2 + 1.2);
+    }
+    if (inPlaza(x, z) || insideBuilding(x, z)) continue;
     // Tall and narrow (or by the river) reads as a poplar (chopo); the rest as broad-leaved trees.
     const poplar = (h > 12 && r < h * 0.28) || (h > 9 && terrain.riverDistance(x, z).d < 30);
     const kind: Kind = poplar ? 'poplar' : 'round';

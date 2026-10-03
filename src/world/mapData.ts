@@ -24,6 +24,25 @@ export interface MapBuilding {
   eave?: number;
   /** "lidar" for buildings traced from the point cloud (missing in OSM). */
   src?: 'lidar';
+  /** Index of the roof (MapData.roofs) covering this footprint; its walls stop at that roof's eaves. */
+  rf?: number;
+}
+
+/**
+ * Roof over one or more adjacent footprints with the same eaves
+ * (tools/geodata/roofs.py), measured from the LiDAR.
+ */
+export interface MapRoof {
+  o: Coords;
+  h?: Coords[];
+  /** Eave height (local y). */
+  e: number;
+  /** Slope, rise per metre (0 = flat terrace). */
+  s: number;
+  /** Ridge height above the eaves; the hip roof is cut flat there. */
+  r: number;
+  /** Colour sampled from the orthophoto (0xRRGGBB). */
+  c?: number;
 }
 
 export interface MapArea {
@@ -122,6 +141,12 @@ export interface MapData {
   /** Ground heights (local y) on the meta.terrain grid; absent = flat map. */
   heights?: Float32Array;
   buildings: MapBuilding[];
+  /** Walls, fences and hedges (OSM, plus plot walls found in the LiDAR: src "lidar"); h in metres. */
+  barriers?: { p: Coords; k: 'wall' | 'fence' | 'hedge' | 'retaining_wall'; h?: number; src?: 'lidar' }[];
+  /** Bollards, flat [x, z, ...]. */
+  bollards?: number[];
+  /** Roofs shared by rows of buildings (absent: each building gets its own roof). */
+  roofs?: MapRoof[];
   areas: MapArea[];
   roads: MapRoad[];
   rails: { p: Coords }[];

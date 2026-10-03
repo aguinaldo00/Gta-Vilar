@@ -62,6 +62,8 @@ export class Materials {
   readonly facadeVC: Lambert;
   readonly stoneVC: Lambert;
   readonly roofVC: Lambert;
+  /** Neutral tiles tinted per roof with its real colour (vertex colour, in units of the texture's 50 % grey). */
+  readonly roofTintVC: Lambert;
   readonly corrugatedVC: Lambert;
   readonly treeVC: Lambert;
   /** Leaf cards + bark (alpha-tested). `leavesWind` sways in the wind (instanced trees). */
@@ -137,6 +139,13 @@ export class Materials {
     this.facadeVC = storeyAtlas(lambert({ map: atlas, normalMap: T.normalMapFrom(atlas, 2.5), vertexColors: true }));
     this.stoneVC = lambert({ map: ashlar, normalMap: ashlarN, vertexColors: true });
     this.roofVC = lambert({ map: tiles, normalMap: tilesN, vertexColors: true, side: THREE.DoubleSide, roughness: 0.8 });
+    this.roofTintVC = lambert({
+      map: T.neutralRoofTilesTexture(),
+      normalMap: tilesN,
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      roughness: 0.8,
+    });
     this.corrugatedVC = lambert({ map: corr, vertexColors: true, side: THREE.DoubleSide });
     this.treeVC = lambert({ vertexColors: true, flatShading: true, roughness: 1 });
     this.propsVC = lambert({ vertexColors: true });

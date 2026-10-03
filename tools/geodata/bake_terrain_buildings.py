@@ -8,9 +8,12 @@ Inputs
   map JSON   from scripts/osm-to-map.ts (OSM in ETRS89 / UTM 30N, local origin)
   LiDAR npz  from tools/geodata/lidar_rasters.py (1 m DTM / roofs, PNOA-LiDAR)
   MDT5 tif   IGN 5 m elevation model (fills what the LiDAR tiles do not cover)
+  raw/derived/lidar_walls.npz (optional, tools/geodata/lidar_walls.py): low thin structures
 
 Writes
   public/maps/villarcayo.terrain.png   16-bit heights (cm, relative to the plaza) on a 2 m grid, see heightpng.py
+  into the map JSON: building heights, buildings traced from the LiDAR, tree crowns, river levels,
+  shared roofs (roofs.py) and walls / fences / hedges (walls.py)
   map JSON                             + meta.terrain, building ground/eave/top heights
                                        (LiDAR), buildings missing from OSM, river surface levels
 
@@ -24,9 +27,12 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
+from shapely.geometry import Polygon
 from skimage import measure
 
 from heightpng import write_height_png
+from roofs import bake_roofs, fix_hidden_walls
+from walls import bake_barriers, total_length
 
 TERRAIN_CELL = 2  # m, runtime heightmap resolution
 MIN_ROOF_CELLS = 4
@@ -81,6 +87,43 @@ def merged_dtm(m, lid, mdt, mdt_geo):
     return out.astype(np.float32), covered
 
 
+PAVED_KINDS = {
+    "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential",
+    "living_street", "service", "pedestrian", "footway", "cycleway", "steps",
+}
+
+
+def smooth_streets(m, dtm):
+    """
+    Smooths the ground along streets, sidewalks and squares (sigma 1.5 m).
+
+    The LiDAR ground carries kerbs, gutters and the camber of the road. Roads
+    and sidewalks are drawn as surfaces a few centimetres above this ground,
+    so those small steps made the ground (or a sidewalk) poke through the
+    asphalt. Away from the streets the relief is left untouched.
+    """
+    minX, minZ, W, H = game_grid(m)
+    img = Image.new("L", (W, H), 0)
+    d = ImageDraw.Draw(img)
+    for r in m["roads"]:
+        if r["k"] not in PAVED_KINDS or r.get("b"):
+            continue
+        p = r["p"]
+        pts = [(p[i] - minX, p[i + 1] - minZ) for i in range(0, len(p), 2)]
+        width = r["w"] + (2 * 2.2 if r.get("sw") else 0) + 2
+        d.line(pts, fill=255, width=int(round(width)), joint="curve")
+        for x, z in pts:
+            d.ellipse([x - width / 2, z - width / 2, x + width / 2, z + width / 2], fill=255)
+    for a in m["areas"]:
+        if a["k"] == "pedestrian":
+            o = a["o"]
+            d.polygon([(o[i] - minX, o[i + 1] - minZ) for i in range(0, len(o), 2)], fill=255)
+    mask = np.asarray(img, np.float32) / 255
+    weight = np.clip(ndimage.gaussian_filter(mask, 1.5) * 1.5, 0, 1)
+    smooth = ndimage.gaussian_filter(dtm, 1.5)
+    return (weight * smooth + (1 - weight) * dtm).astype(np.float32), float(mask.mean())
+
+
 def lidar_on_grid(m, lid, key):
     E0, N0 = m["meta"]["utmOrigin"]["E"], m["meta"]["utmOrigin"]["N"]
     minX, minZ, W, H = game_grid(m)
@@ -115,6 +158,35 @@ def polygon_mask(coords, minX, minZ, W, H, pad=0):
     return mask, r0, c0
 
 
+def remove_demolished(m, dtm, roof, surface):
+    """
+    Drops OSM footprints where the 2025 point cloud sees bare ground: full
+    coverage, no building points, and nothing (not even a tree that could hide
+    a shed) standing more than 1.5 m above the ground on 90 % of the outline.
+    """
+    minX, minZ, W, H = game_grid(m)
+    keep, gone = [], 0
+    for b in m["buildings"]:
+        if b.get("hp") or b.get("src") or b.get("t") in ("townhall", "torre", "church"):
+            keep.append(b)
+            continue
+        mask, r0, c0 = polygon_mask(b["o"], minX, minZ, W, H)
+        if mask is None or not mask.any():
+            keep.append(b)
+            continue
+        sl = (slice(r0, r0 + mask.shape[0]), slice(c0, c0 + mask.shape[1]))
+        s = surface[sl][mask]
+        if np.isfinite(s).mean() < 0.95 or np.isfinite(roof[sl][mask]).any():
+            keep.append(b)
+            continue
+        if np.nanpercentile(s - dtm[sl][mask], 90) < 1.5:
+            gone += 1
+            continue
+        keep.append(b)
+    m["buildings"] = keep
+    return gone
+
+
 def measure_buildings(m, dtm, roof, H0, covered):
     minX, minZ, W, H = game_grid(m)
     footprint = np.zeros((H, W), bool)
@@ -128,14 +200,25 @@ def measure_buildings(m, dtm, roof, H0, covered):
         ground = dtm[sl][mask]
         # Base: low ground under the walls (buildings on slopes sit on their lowest corner).
         b["gy"] = round(float(np.percentile(ground, 10)) - H0, 2)
+        b.pop("top", None)
+        b.pop("eave", None)
         if not covered[sl][mask].any():
             continue
-        r = roof[sl][mask]
+        # Measure away from the outline: the cadastre and the point cloud can be ~0.5 m apart,
+        # and edge cells mix in the neighbour's roof or the street.
+        inner = ndimage.binary_erosion(mask, iterations=1)
+        if inner.sum() < 0.4 * mask.sum() or inner.sum() < MIN_ROOF_CELLS:
+            inner = mask
+        r = roof[sl][inner]
         r = r[np.isfinite(r)]
-        if r.size < max(MIN_ROOF_CELLS, 0.25 * mask.sum()) or b.get("t") in ("canopy",):
+        if r.size < max(MIN_ROOF_CELLS, 0.25 * inner.sum()) or b.get("t") in ("canopy",):
             continue
         top = float(np.percentile(r, 95)) - H0
-        eave = float(np.percentile(r, 12)) - H0
+        # Eaves: the low edge of the roof, inside the outline.
+        band = inner & (ndimage.distance_transform_edt(mask) <= 2.0)
+        rb = roof[sl][band]
+        rb = rb[np.isfinite(rb)]
+        eave = float(np.percentile(rb if rb.size >= 3 else r, 20)) - H0
         if top - b["gy"] < 1.8:
             continue
         b["top"] = round(top, 2)
@@ -170,9 +253,16 @@ def trace_new_buildings(m, dtm, roof, footprint, H0):
         if len(ring) < 4:
             continue
         r0, c0 = sl[0].start - 1, sl[1].start - 1
-        coords = []
-        for rr, cc in ring[:-1]:
-            coords += [round(minX + c0 + cc + 0.5, 1), round(minZ + r0 + rr + 0.5, 1)]
+        poly = Polygon([(minX + c0 + cc + 0.5, minZ + r0 + rr + 0.5) for rr, cc in ring[:-1]])
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        if poly.is_empty or poly.geom_type != "Polygon":
+            continue
+        # Traced outlines follow the 1 m raster in steps: square them up. Nearly rectangular
+        # buildings (most sheds, garages and new houses) become their rectangle.
+        mrr = poly.minimum_rotated_rectangle
+        poly = mrr if poly.area / mrr.area > 0.8 else poly.simplify(0.6)
+        coords = [round(v, 1) for xy in list(poly.exterior.coords)[:-1] for v in xy]
         heights = ndsm[sl][comp]
         top_abs = roof[sl][comp]
         gy = float(np.percentile(dtm[sl][comp], 10)) - H0
@@ -313,25 +403,35 @@ def main(map_path, lidar_path, mdt_path):
     # Start from the OSM-only buildings (re-runs must not stack LiDAR additions).
     m["buildings"] = [b for b in m["buildings"] if b.get("src") != "lidar"]
     dtm, covered = merged_dtm(m, lid, mdt, mdt_geo)
+    dtm, street_share = smooth_streets(m, dtm)
     minX, minZ, W, H = game_grid(m)
     H0 = float(dtm[-minZ, -minX])  # ground at the local origin (Plaza Mayor)
     roof = lidar_on_grid(m, lid, "bld")
+    demolished = remove_demolished(m, dtm, roof, lidar_on_grid(m, lid, "dsm"))
     footprint, measured = measure_buildings(m, dtm, roof, H0, covered)
     added = trace_new_buildings(m, dtm, roof, footprint, H0)
+    walls_path = os.path.join(os.path.dirname(lidar_path), "lidar_walls.npz")
+    walls_npz = np.load(walls_path) if os.path.exists(walls_path) else None
+    n_walls = bake_barriers(m, walls_npz, footprint | np.isfinite(roof))
     trees = lidar_trees(m, dtm, H0)
     river_levels(m, dtm, H0)
     carve_water(m, dtm, H0)
     out_png = os.path.join(os.path.dirname(map_path), os.path.splitext(os.path.basename(map_path))[0] + ".terrain.png")
     grid = write_terrain(m, dtm, H0, out_png)
+    n_roofs, n_foot, roof_stats = bake_roofs(m, dtm, roof, H0, os.path.join(os.path.dirname(map_path), "ortho"))
+    shown = fix_hidden_walls(m)
     m["meta"]["sources"] = [
         "OpenStreetMap contributors (ODbL 1.0)",
         "PNOA-LiDAR 2025 © Instituto Geográfico Nacional / Junta de Castilla y León (CC BY 4.0)",
         "MDT05 © Instituto Geográfico Nacional (CC BY 4.0)",
     ]
     json.dump(m, open(map_path, "w"), separators=(",", ":"))
-    print(f"datum H0 = {H0:.2f} m; relief {grid.min():.1f} .. {grid.max():.1f} m")
+    print(f"datum H0 = {H0:.2f} m; relief {grid.min():.1f} .. {grid.max():.1f} m; streets smoothed over {street_share * 100:.1f}% of the map")
+    print(f"OSM buildings the LiDAR shows as bare ground (removed): {demolished}")
     print(f"buildings measured by LiDAR: {measured}; added from LiDAR: {added}; trees from LiDAR: {trees}")
-    print(f"terrain {m['meta']['terrain']['cols']}x{m['meta']['terrain']['rows']} -> {out_bin} ({os.path.getsize(out_bin) // 1024} KB)")
+    print(f"barriers: {len(m['barriers']) - n_walls} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km)")
+    print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}")
+    print(f"terrain {m['meta']['terrain']['cols']}x{m['meta']['terrain']['rows']} -> {out_png} ({os.path.getsize(out_png) // 1024} KB)")
 
 
 if __name__ == "__main__":

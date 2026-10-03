@@ -68,7 +68,7 @@ export class RoadNetwork {
 }
 
 /** Accumulates flat triangles with world-aligned UVs, forcing every face to point up. */
-class FlatMesh {
+export class FlatMesh {
   readonly pos: number[] = [];
   readonly uv: number[] = [];
   readonly cells: number[] = [];
@@ -149,6 +149,116 @@ function ribbon(m: FlatMesh, pts: Pt[], hw: number, height: (x: number, z: numbe
   }
 }
 
+/** Kerb height: sidewalks stand this much above the carriageway. */
+export const KERB = 0.13;
+
+/**
+ * Sidewalks as two strips beside the carriageway (never under it), raised by
+ * a kerb with its face along the road edge. Pieces that would run into the
+ * carriageway of another street (junctions) are left out, and the outer side
+ * of bends is filled with a fan.
+ */
+export function sidewalks(
+  m: FlatMesh,
+  kerb: FlatMesh,
+  pts: Pt[],
+  hw: number,
+  sw: number,
+  road: (x: number, z: number) => number,
+  onOtherCarriageway: (x: number, z: number) => boolean,
+): void {
+  const top = (x: number, z: number) => road(x, z) + KERB;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, az] = pts[i - 1],
+      [bx, bz] = pts[i];
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 0.01) continue;
+    const ux = (bx - ax) / len,
+      uz = (bz - az) / len;
+    const n = Math.max(1, Math.ceil(len / 3));
+    for (const side of [1, -1]) {
+      const nx = -uz * side,
+        nz = ux * side;
+      const p = (t: number, o: number): [number, number] => [ax + ux * t + nx * o, az + uz * t + nz * o];
+      /** Part of [t0, t1] along offset o that is off other streets' carriageways (one crossing per slice). */
+      const free = (t0: number, t1: number, o: number): [number, number] | null => {
+        const a = onOtherCarriageway(...p(t0, o)),
+          b = onOtherCarriageway(...p(t1, o));
+        if (a && b) return null;
+        if (!a && !b) return [t0, t1];
+        let lo = t0,
+          hi = t1;
+        for (let it = 0; it < 12; it++) {
+          const mid = (lo + hi) / 2;
+          if (onOtherCarriageway(...p(mid, o)) === a) lo = mid;
+          else hi = mid;
+        }
+        return a ? [hi, t1] : [t0, lo];
+      };
+      const slice = (t0: number, t1: number, depth: number): void => {
+        // A narrow street can fit inside one slice with both ends clear: split around it.
+        const tm = (t0 + t1) / 2;
+        const inside = (o: number) =>
+          !onOtherCarriageway(...p(t0, o)) && !onOtherCarriageway(...p(t1, o)) && onOtherCarriageway(...p(tm, o));
+        if (depth < 3 && (inside(hw) || inside(hw + sw))) {
+          slice(t0, tm, depth + 1);
+          slice(tm, t1, depth + 1);
+          return;
+        }
+        // Clip the slice where it runs into another street: inner and outer edges separately,
+        // so the cut follows that street's kerb line even when it crosses at an angle.
+        const fi = free(t0, t1, hw),
+          fo = free(t0, t1, hw + sw);
+        if (!fi || !fo) return;
+        const [x0i, z0i] = p(fi[0], hw),
+          [x1i, z1i] = p(fi[1], hw),
+          [x0o, z0o] = p(fo[0], hw + sw),
+          [x1o, z1o] = p(fo[1], hw + sw);
+        m.tri(x0i, top(x0i, z0i), z0i, x1i, top(x1i, z1i), z1i, x1o, top(x1o, z1o), z1o);
+        m.tri(x0i, top(x0i, z0i), z0i, x1o, top(x1o, z1o), z1o, x0o, top(x0o, z0o), z0o);
+        // Kerb face, wound to face the road on either side.
+        const [ka, kb, kaz, kbz] = side === 1 ? [x1i, x0i, z1i, z0i] : [x0i, x1i, z0i, z1i];
+        kerb.tri(ka, road(ka, kaz), kaz, kb, road(kb, kbz), kbz, kb, top(kb, kbz), kbz);
+        kerb.tri(ka, road(ka, kaz), kaz, kb, top(kb, kbz), kbz, ka, top(ka, kaz), kaz);
+      };
+      for (let k = 0; k < n; k++) slice((len * k) / n, (len * (k + 1)) / n, 0);
+    }
+  }
+  // Outer side of bends: an annular wedge closes the gap between the two strips.
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, pz] = pts[i - 1],
+      [cx, cz] = pts[i],
+      [qx, qz] = pts[i + 1];
+    const l1 = Math.hypot(cx - px, cz - pz),
+      l2 = Math.hypot(qx - cx, qz - cz);
+    if (l1 < 0.01 || l2 < 0.01) continue;
+    const d1 = [(cx - px) / l1, (cz - pz) / l1],
+      d2 = [(qx - cx) / l2, (qz - cz) / l2];
+    for (const side of [1, -1]) {
+      const n1 = [-d1[1] * side, d1[0] * side],
+        n2 = [-d2[1] * side, d2[0] * side];
+      if (n1[0] * d2[0] + n1[1] * d2[1] >= 0) continue; // inner side: the strips overlap there
+      const a1 = Math.atan2(n1[1], n1[0]);
+      let da = Math.atan2(n2[1], n2[0]) - a1;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const steps = Math.max(1, Math.ceil(Math.abs(da) / 0.3));
+      for (let k = 0; k < steps; k++) {
+        const b0 = a1 + (da * k) / steps,
+          b1 = a1 + (da * (k + 1)) / steps;
+        const q = (a: number, r: number): [number, number] => [cx + Math.cos(a) * r, cz + Math.sin(a) * r];
+        const [ix0, iz0] = q(b0, hw),
+          [ix1, iz1] = q(b1, hw),
+          [ox0, oz0] = q(b0, hw + sw),
+          [ox1, oz1] = q(b1, hw + sw);
+        if (onOtherCarriageway((ix0 + ox1) / 2, (iz0 + oz1) / 2)) continue;
+        m.tri(ix0, top(ix0, iz0), iz0, ix1, top(ix1, iz1), iz1, ox1, top(ox1, oz1), oz1);
+        m.tri(ix0, top(ix0, iz0), iz0, ox1, top(ox1, oz1), oz1, ox0, top(ox0, oz0), oz0);
+      }
+    }
+  }
+}
+
 /** Splits flat triangle soup (all surfaces together) into chunk-sized pieces for the batcher. */
 function addChunked(ctx: BuildContext, surfaces: FlatMesh[], mat: THREE.Material): void {
   const buckets = new Map<string, FlatMesh>();
@@ -179,6 +289,13 @@ export function buildRoads(ctx: BuildContext): void {
   const dirt = new FlatMesh(4, 3);
   const gravel = new FlatMesh(4, 4);
   const marks = new FlatMesh(1, 5);
+  const kerbs = new FlatMesh(1, 1);
+  const net = ctx.roads;
+  // A point on the carriageway of any street (the sidewalk of one street must not cover another).
+  const onCarriageway = (x: number, z: number) => {
+    const hit = net.nearest(x, z, 0, (r) => VEHICLE_ROADS.has(r.k));
+    return hit !== null && hit.d < -0.2;
+  };
 
   // Every surface sits on the terrain (bridge decks included) plus its layer offset.
   const ground = (y: number) => (x: number, z: number) => terrain.heightAt(x, z) + y;
@@ -189,8 +306,9 @@ export function buildRoads(ctx: BuildContext): void {
     const h = ground;
     const rank = RANK[r.k] ?? 0;
     // Layer heights keep junction overlaps free of z-fighting: paths < sidewalks < paving < asphalt < paint.
-    if (r.sw && !bridge) ribbon(sidewalk, pts, r.w / 2 + SIDEWALK_W, ground(0.03));
-    if (ASPHALT.has(r.k)) ribbon(asphalt, pts, r.w / 2, h(0.05 + rank * 0.004));
+    const roadY = 0.05 + rank * 0.004;
+    if (r.sw && !bridge) sidewalks(sidewalk, kerbs, pts, r.w / 2, SIDEWALK_W, ground(roadY), onCarriageway);
+    if (ASPHALT.has(r.k)) ribbon(asphalt, pts, r.w / 2, h(roadY));
     else if (PAVED.has(r.k)) ribbon(paving, pts, r.w / 2, h(0.04));
     else if (r.k === 'viaverde') ribbon(gravel, pts, r.w / 2, h(0.025));
     else ribbon(dirt, pts, r.w / 2, h(0.02));
@@ -234,7 +352,6 @@ export function buildRoads(ctx: BuildContext): void {
   }
 
   // Zebra crossings at the OSM crossing nodes.
-  const net = ctx.roads;
   for (let i = 0; i < ctx.map.crossings.length; i += 3) {
     const x = ctx.map.crossings[i],
       z = ctx.map.crossings[i + 1],
@@ -258,7 +375,7 @@ export function buildRoads(ctx: BuildContext): void {
     }
   }
 
-  addChunked(ctx, [sidewalk, asphalt, paving, dirt, gravel, marks], mats.roadAtlas);
+  addChunked(ctx, [sidewalk, kerbs, asphalt, paving, dirt, gravel, marks], mats.roadAtlas);
 }
 
 /** Deck slab and parapets for bridges that actually cross the river or the pools. */

@@ -25,9 +25,19 @@ DEM_CELL = 25
 IMG_PX = 2048
 
 
-def get(url):
+CACHE = "raw/ign"
+
+
+def get(url, name):
+    """Downloads once into raw/ign (re-bakes do not hit the IGN services again)."""
+    path = os.path.join(CACHE, name)
+    if os.path.exists(path) and os.path.getsize(path) > 1000:
+        return open(path, "rb").read()
     with urllib.request.urlopen(url, timeout=300) as r:
-        return r.read()
+        data = r.read()
+    os.makedirs(CACHE, exist_ok=True)
+    open(path, "wb").write(data)
+    return data
 
 
 def main(map_path):
@@ -37,7 +47,8 @@ def main(map_path):
     e0, e1, n0, n1 = E0 - HALF, E0 + HALF, N0 - HALF, N0 + HALF
     dem = get(
         "https://servicios.idee.es/wcs-inspire/mdt?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage"
-        f"&COVERAGEID=Elevacion25830_25&FORMAT=image/tiff&SUBSET=x({e0},{e1})&SUBSET=y({n0},{n1})"
+        f"&COVERAGEID=Elevacion25830_25&FORMAT=image/tiff&SUBSET=x({e0},{e1})&SUBSET=y({n0},{n1})",
+        "surroundings_mdt25.tif",
     )
     im = Image.open(io.BytesIO(dem))
     tie, scale = im.tag_v2[33922], im.tag_v2[33550]
@@ -51,7 +62,8 @@ def main(map_path):
     write_height_png(q, os.path.join(out_dir, "surroundings.heights.png"))
     img = get(
         "https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage"
-        f"&STYLES=&CRS=EPSG:25830&BBOX={e0},{n0},{e1},{n1}&WIDTH={IMG_PX}&HEIGHT={IMG_PX}&FORMAT=image/jpeg"
+        f"&STYLES=&CRS=EPSG:25830&BBOX={e0},{n0},{e1},{n1}&WIDTH={IMG_PX}&HEIGHT={IMG_PX}&FORMAT=image/jpeg",
+        "surroundings_pnoa.jpg",
     )
     Image.open(io.BytesIO(img)).convert("RGB").save(os.path.join(out_dir, "surroundings.jpg"), quality=82)
     m["meta"]["surroundings"] = {

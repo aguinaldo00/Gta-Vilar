@@ -42,13 +42,18 @@ The data pipeline runs in two steps. The browser never parses OSM.
 
 3. **`tools/geodata/`** (Python: laspy, numpy, scipy, scikit-image, pillow) bakes the IGN data into the same map. `bake_all.sh` runs every step; the raw downloads stay in `raw/`, which is not committed.
    - `lidar_rasters.py`: the **PNOA-LiDAR 2025** classified point clouds (LAZ, 1 km tiles around the town) → 1 m rasters: bare ground (class 2), surface, building roofs (class 6) and vegetation (class 5).
+   - `lidar_walls.py`: the low points (0.35–3.2 m above the ground) on a 0.5 m grid: PNOA files garden walls and fences as low vegetation, so every plot boundary shows up as a thin line.
    - `bake_terrain_buildings.py`:
      - ground model: LiDAR blended over a 25 m feather into the **MDT05** where there is no point cloud → `public/maps/villarcayo.terrain.png` (2 m grid, 16-bit heights in cm stored losslessly in the red and green channels, see `tools/geodata/heightpng.py`)
      - every OSM building measured from its roof points (ground level, eave height, ridge height)
      - buildings that exist in the LiDAR but not in OSM traced from the roof raster (202 added)
      - 10,452 tree crowns detected in the canopy model, with their height and radius
      - Río Nela water levels sampled along the channel, flowing monotonically downstream, with the bed carved under them
-   - `fetch_ortho.py`: **PNOA orthophoto** tiles (WMS) → `public/maps/ortho/{i}_{j}.jpg`, 256 m tiles, draped on the ground and on the roofs.
+     - the ground smoothed along streets and squares (kerbs and gutters in the LiDAR made the ground poke through the asphalt)
+     - OSM footprints where the 2025 point cloud only sees bare ground are dropped (demolished)
+     - `roofs.py`: one roof per row of buildings that share their eaves (±1 m). The pitch is the median gradient of the LiDAR roof surface, the eaves its low edge, the ridge its 97th percentile and the colour the median of the orthophoto. Shared walls are hidden only when the neighbour really is as tall.
+     - `walls.py`: walls, fences and hedges: the OSM barriers plus the thin, straight runs of low points (away from buildings, tree crowns, carriageways and rows of parked cars)
+   - `fetch_ortho.py`: **PNOA orthophoto** tiles (WMS) → `public/maps/ortho/{i}_{j}.jpg`, 256 m tiles, draped on the ground (and sampled for the roof colours).
    - `fetch_surroundings.py`: 24 × 24 km of **MDT25** + orthophoto → `public/maps/surroundings.*`, the real valley and hills on the horizon.
 
 ### What comes from OSM and what is assumed
@@ -56,15 +61,16 @@ The data pipeline runs in two steps. The browser never parses OSM.
 | Element | From OSM | Assumed / modelled by hand |
 | --- | --- | --- |
 | Streets | Course, type, name, `width`/`lanes`, bridges, tunnels (excluded), `sidewalk` tags | Width by type when untagged (primary 7.5 m … footway 2 m); sidewalks inferred on streets lined with buildings |
-| Buildings | Real footprint (with courtyards), `building:levels`, `height`, type, material. **3,383 building parts** (`building:part`, from the Spanish cadastre) with their own number of storeys and `building:min_level`, so each building is drawn as its real stepped volume | 3.1 m per storey; 2–3 storeys when an outline has neither levels nor parts; roof shape (hipped on rectangular plots, sloping edges elsewhere, flat terraces on one-storey annexes); facade colour; galerías on 50 % of old-town houses |
+| Buildings | Real footprint (with courtyards), `building:levels`, `height`, type, material. **3,383 building parts** (`building:part`, from the Spanish cadastre) with their own number of storeys and `building:min_level`, so each building is drawn as its real stepped volume | Heights, eaves, roof pitch, ridge and roof colour are **measured** (LiDAR + orthophoto); 202 buildings missing from OSM traced from the LiDAR. Assumed: the roof form (a hipped roof from the straight skeleton of each row's outline: gables are not distinguished), facade colour and window layout, galerías on half of the old houses of 2–4 storeys |
 | Río Nela | Centre line, weirs (Presa de Churruca, Presa Danvila), natural pools (`leisure=swimming_area`) | Channel width (16 m) and bed profile; the depth of the pools |
 | Parks, fields, forest | Land-use polygons (El Soto, Parque El Soto, farmland, meadows, sports pitches…) | Infill tree density inside forests and parks |
+| Walls, fences, hedges | 108 barriers (walls, fences, hedges, retaining walls; gates leave an opening) and 13 bollards | Plus ~1,800 plot walls and fences (30 km) found in the LiDAR, with their measured height; wall vs fence (masonry plinth + wire mesh) is guessed from the height |
 | Trees, lamps, benches, crossings | 481 trees (including tree rows), 740 street lamps, 84 benches, 219 zebra crossings at their real positions | Bench orientation (facing the nearest street); tree species (pollarded plane trees inside the Plaza Mayor, poplars by the river) |
 | Ayuntamiento | Footprint and position (`amenity=townhall`) | Façade modelled from the photos: soportales, balcony, clock and bell gable; front turned towards the templete |
 | Torre del Corregimiento | Footprint and 4 storeys | Battlements, windows, door |
 | Templete, fountain, statue | Position and size (`leisure=bandstand`, `amenity=fountain`, `memorial=bench` "Al músico") | 3D design (octagonal kiosk from the photo) |
 | Old railway | Route of the Vía Verde Santander–Mediterráneo, station building "Antigua Estación de Horna-Villarcayo", Mikado locomotive | The locomotive model and the short stretch of track under it |
-| Shops, bars and services | **224 establishments** (`shop`, `amenity` bar/pub/restaurant/café/bank/pharmacy/post office/police…, `office`, `craft`, `healthcare`, hotels, including closed ones such as Bar Capitol) with their real name, snapped to the street-facing wall of their building | Shop front by trade (shop window, door or roller shutter, awning, terrace), sign colours (brand colours for banks and chains, otherwise by trade) |
+| Shops, bars and services | **224 establishments** (`shop`, `amenity` bar/pub/restaurant/café/bank/pharmacy/post office/police…, `office`, `craft`, `healthcare`, hotels, including closed ones such as Bar Capitol) with their real name, on the ground-floor wall of **their own building** facing the street of their `addr:street` (110 of 127 shops with an address face that street; the rest are in buildings that do not touch it) | Shop front by trade (shop window, door or roller shutter, awning, terrace), sign colours (brand colours for banks and chains, otherwise by trade) |
 | Churches | Footprints and positions of Santa Marina, its campanile (`tower:type=bell_tower`), the Ermita de San Roque and the Ermita de San Vicente | Santa Marina as the 1967 "tent" with the stained-glass gables and the concrete campanile with three crosses (from published descriptions); stone hermitages with espadaña |
 | Sports | 29 pitches with their sport: football (Campo El Soto, Campo Genín), futsal, basketball, tennis, pádel, frontones, Bolera Nela, petanque, table tennis; Polideportivo; sports-ground fences | Court markings, goals, hoops, nets, frontón walls, the nine bolos; the polideportivo's vaulted roof |
 | Parkings, fuel, buses | 37 car parks (with `orientation`), Estación de Servicio Rivera, Estación de Autobuses, bus stops | Bay layout and parked cars; canopy, pumps and totem; bus shelters |
@@ -99,12 +105,12 @@ Measured with `renderer.info` (Chromium, 1280×720 desktop; Pixel 7 emulation), 
 
 | View | Desktop: draw calls (total) | Desktop: triangles (main / shadows) | Mobile: draw calls (total) | Mobile: triangles (main / shadows) |
 | --- | --- | --- | --- | --- |
-| Plaza Mayor | 220 | 864k / 202k | 171 | 365k / 124k |
-| Densest street in the centre | 217 | 815k / 144k | 171 | 361k / 92k |
-| El Soto (river and pools) | 153 | 702k / 152k | 116 | 272k / 42k |
-| Old station | 150 | 571k / 38k | 106 | 168k / 16k |
+| Plaza Mayor | 229 | 892k / 220k | 185 | 397k / 141k |
+| Densest street in the centre | 233 | 852k / 160k | 185 | 399k / 106k |
+| El Soto (river and pools) | 172 | 735k / 156k | 132 | 298k / 47k |
+| Old station | 159 | 598k / 43k | 113 | 189k / 21k |
 
-The real relief costs geometry: the orthophoto ground patches, the 10,000 LiDAR tree crowns and the MDT25 landscape on the horizon added about 70k triangles to the mobile main pass, which now goes over the 300k budget in the two densest views (365k) while staying under 150 draw calls. The biggest remaining items there are the merged props (parked cars, lamps, furniture: about 107k) and the trees; they are the first candidates for LODs in the graphics phase. The desktop "high" level spends more on grass, trees and shadows and is meant for a desktop GPU. The figures were measured in a software renderer; frame rates have to be checked on real hardware.
+The real relief costs geometry: the orthophoto ground, the 10,000 LiDAR tree crowns, the 30 km of walls and fences, the kerbs and the MDT25 landscape on the horizon. The mobile main pass goes over the 300k-triangle budget in the two densest views (about 400k) while staying under 160 draw calls. The biggest items there are the merged props (parked cars, lamps, furniture: about 120k), the roads and the trees; they are the first candidates for LODs in the graphics phase. The desktop "high" level spends more on grass, trees and shadows and is meant for a desktop GPU. The figures were measured in a software renderer; frame rates have to be checked on real hardware.
 
 ## Architecture
 
@@ -135,8 +141,10 @@ src/
 │   ├── mapData.ts           Map types, validation and runtime loading
 │   ├── World.ts             Builds everything; heightAt / heightGrid / waterAt / zoneAt / roadSpawn
 │   ├── Terrain.ts           TerrainModel (heightmap sampling, bridge decks, river levels), orthophoto tiles, ground mesh
-│   ├── Roads.ts             Streets, sidewalks, markings, zebra crossings, bridges; road network index
-│   ├── Buildings.ts         Footprint extrusion, roofs, galerías, wall colliders
+│   ├── Roads.ts             Streets, sidewalks with kerbs (clipped at junctions), markings, zebra crossings, bridges
+│   ├── Buildings.ts         Footprint extrusion up to the eaves, galerías, wall colliders
+│   ├── Roofs.ts             Shared roofs: straight-skeleton hip roofs with the measured pitch, ridge and colour
+│   ├── Barriers.ts          Walls, fences, hedges and bollards that follow the ground, with colliders
 │   ├── Hydro.ts             Río Nela, pools, streams, swimming pools, weirs
 │   ├── Vegetation.ts        Leaf-card trees (instanced, wind), street lamps and benches at their OSM positions
 │   ├── Grass.ts             Wind-blown grass around the camera with an OSM-derived density mask
@@ -151,7 +159,7 @@ src/
 ├── ui/                      HUD, minimap (vector map data), touch controls
 └── audio/GameAudio.ts       Synthesised engine and tyre screech
 tests/
-├── unit/                    Vitest: geometry, maths, config validation, map file, loop/events, Rapier backend
+├── unit/                    Vitest: geometry, maths, config validation, map file, loop/events, Rapier backend, terrain, roofs, sidewalks
 └── e2e/                     Playwright: boot + drive, player physics (walls, jump, swim), vehicle crashes
 ```
 

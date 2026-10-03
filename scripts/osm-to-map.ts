@@ -333,17 +333,42 @@ interface Poly {
   tags: Tags;
   outer: Ring;
   holes: Ring[];
+  /** Crossed the map edge and was clipped. */
+  cut?: boolean;
 }
 
 /** Every closed way and multipolygon relation as polygons (clipped to bounds). */
+/** True if two non-adjacent edges of the ring cross. */
+function selfIntersects(r: Ring): boolean {
+  const n = r.length;
+  const cross = (a: Pt, b: Pt, c: Pt) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  for (let i = 0; i < n; i++) {
+    const a = r[i],
+      b = r[(i + 1) % n];
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      const c = r[j],
+        d = r[(j + 1) % n];
+      if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return true;
+    }
+  }
+  return false;
+}
+
+/** Simplified ring, falling back to a finer tolerance when simplifying makes it cross itself. */
+function cleanSimple(pts: Pt[]): Ring | null {
+  const r = cleanRing(pts, 0.25);
+  return r && selfIntersects(r) ? cleanRing(pts, 0.03) : r;
+}
+
 function collectPolygons(): Poly[] {
   const out: Poly[] = [];
   for (const [id, w] of ways) {
     if (w.nds.length < 4 || w.nds[0] !== w.nds[w.nds.length - 1]) continue;
-    const ring = cleanRing(wayPts(id), 0.25);
+    const ring = cleanSimple(wayPts(id));
     if (!ring) continue;
     const clipped = clipRing(ring);
-    if (clipped) out.push({ id: `w${id}`, tags: w.tags, outer: clipped, holes: [] });
+    if (clipped) out.push({ id: `w${id}`, tags: w.tags, outer: clipped, holes: [], cut: !ring.every((p) => inB(p)) });
   }
   for (const [id, r] of rels) {
     if (r.tags.type !== 'multipolygon') continue;
@@ -353,13 +378,19 @@ function collectPolygons(): Poly[] {
     // Old-style multipolygons keep their tags on the outer way.
     if (Object.keys(tags).length <= 1 && outerIds.length === 1) tags = ways.get(outerIds[0])?.tags ?? tags;
     const holes = assembleRings(innerIds)
-      .map((h) => cleanRing(h, 0.25))
+      .map((h) => cleanSimple(h))
       .filter((h): h is Ring => !!h);
     for (const o of assembleRings(outerIds)) {
-      const ring = cleanRing(o, 0.25);
+      const ring = cleanSimple(o);
       const clipped = ring && clipRing(ring);
       if (!clipped) continue;
-      out.push({ id: `r${id}`, tags, outer: clipped, holes: holes.filter((h) => pointInRing(h[0], clipped)) });
+      out.push({
+        id: `r${id}`,
+        tags,
+        outer: clipped,
+        holes: holes.filter((h) => pointInRing(h[0], clipped)),
+        cut: !ring.every((p) => inB(p)),
+      });
     }
   }
   return out;
@@ -457,6 +488,8 @@ const outlines: { b: BuildingOut; ring: Ring; bb: [number, number, number, numbe
 for (const p of polygons) {
   const t = p.tags;
   if (!t.building || t.building === 'no' || t['building:part'] || t.leisure === 'bandstand') continue;
+  // Buildings cut by the map edge would get a wall along the cut (and a broken outline): leave them out.
+  if (p.cut) continue;
   if (p.id.startsWith('w') && relOuterWays.has(p.id) && rels.size) {
     // Prefer the relation version (with courtyards) when it exists and is itself a building.
     const owner = [...rels.entries()].find(
@@ -758,6 +791,66 @@ for (const [id, w] of ways) {
   }
 }
 
+// ------------------------------------------------------------- barriers
+
+/**
+ * Walls, fences and hedges as polylines; gates (barrier=gate on the way) leave
+ * a 3 m opening. Bollards are points. tools/geodata/walls.py adds the plot
+ * walls and fences that only the LiDAR sees.
+ */
+const BARRIER_KIND: Record<string, string> = {
+  wall: 'wall',
+  city_wall: 'wall',
+  retaining_wall: 'retaining_wall',
+  fence: 'fence',
+  guard_rail: 'fence',
+  hedge: 'hedge',
+};
+const GATES = new Set(['gate', 'sliding_gate', 'swing_gate', 'lift_gate', 'entrance']);
+const barriers: { p: number[]; k: string; h?: number }[] = [];
+const bollards: number[] = [];
+for (const [id, w] of ways) {
+  const kind = BARRIER_KIND[w.tags.barrier ?? ''];
+  if (!kind || w.tags.building) continue;
+  const pts = wayPts(id);
+  // Openings around gates: split the line at gate nodes.
+  const gates = w.nds
+    .map((n) => nodes.get(n))
+    .filter((n) => n?.tags && GATES.has(n.tags.barrier ?? ''))
+    .map((n) => project(n!.lat, n!.lon));
+  let runs: Pt[][] = [pts];
+  for (const g of gates) {
+    const next: Pt[][] = [];
+    for (const run of runs) {
+      let cur: Pt[] = [];
+      for (let i = 0; i < run.length; i++) {
+        const p = run[i];
+        if (Math.hypot(p[0] - g[0], p[1] - g[1]) < 1.5) {
+          // Stop 1.5 m before the gate and restart 1.5 m after it.
+          const prev = run[i - 1],
+            nxt = run[i + 1];
+          if (prev) cur.push(lerpPt(g, prev, Math.min(1, 1.5 / (Math.hypot(prev[0] - g[0], prev[1] - g[1]) || 1))));
+          if (cur.length > 1) next.push(cur);
+          cur = nxt ? [lerpPt(g, nxt, Math.min(1, 1.5 / (Math.hypot(nxt[0] - g[0], nxt[1] - g[1]) || 1)))] : [];
+        } else cur.push(p);
+      }
+      if (cur.length > 1) next.push(cur);
+    }
+    runs = next;
+  }
+  const height = num(w.tags.height);
+  for (const run of runs)
+    for (const part of clipLine(run)) {
+      if (part.length < 2) continue;
+      barriers.push({ p: flat(simplify(part, 0.2)), k: kind, ...(height ? { h: height } : {}) });
+    }
+}
+for (const n of nodes.values()) {
+  if (n.tags?.barrier !== 'bollard') continue;
+  const p = project(n.lat, n.lon);
+  if (inB(p)) bollards.push(q(p[0]), q(p[1]));
+}
+
 // ---------------------------------------------------------------- points
 
 const trees: number[] = [];
@@ -1014,6 +1107,8 @@ interface Wall {
   n: Pt;
   len: number;
   key: string;
+  /** The footprint the wall belongs to (index in `buildings`). */
+  bi: number;
 }
 const wallGrid = new Map<string, Wall[]>();
 const WG = 30;
@@ -1034,12 +1129,12 @@ buildings.forEach((b, bi) => {
     const dx = (c[0] - a[0]) / len,
       dz = (c[1] - a[1]) / len;
     const n: Pt = ccw ? [dz, -dx] : [-dz, dx];
-    const w: Wall = { a, b: c, n, len, key: `${bi}:${i}` };
+    const w: Wall = { a, b: c, n, len, key: `${bi}:${i}`, bi };
     const k = `${Math.floor((a[0] + c[0]) / 2 / WG)},${Math.floor((a[1] + c[1]) / 2 / WG)}`;
     (wallGrid.get(k) ?? wallGrid.set(k, []).get(k)!).push(w);
   }
 });
-const roadSegGrid = new Map<string, { a: Pt; b: Pt; w: number }[]>();
+const roadSegGrid = new Map<string, { a: Pt; b: Pt; w: number; n?: string }[]>();
 for (const r of roads) {
   if (!VEHICLE.has(r.k) && r.k !== 'pedestrian' && r.k !== 'footway') continue;
   for (let i = 2; i < r.p.length; i += 2) {
@@ -1049,8 +1144,36 @@ for (const r of roads) {
     const keys = new Set<string>();
     for (let s = 0; s <= n; s++)
       keys.add(`${Math.floor((a[0] + ((b[0] - a[0]) * s) / n) / WG)},${Math.floor((a[1] + ((b[1] - a[1]) * s) / n) / WG)}`);
-    for (const k of keys) (roadSegGrid.get(k) ?? roadSegGrid.set(k, []).get(k)!).push({ a, b, w: r.w });
+    for (const k of keys) (roadSegGrid.get(k) ?? roadSegGrid.set(k, []).get(k)!).push({ a, b, w: r.w, n: r.n });
   }
+}
+/** Street name normalised for comparisons ("C/ San Roque" = "Calle de San Roque" = "san roque"). */
+function streetKey(n: string | undefined): string {
+  return (n ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/^(c\/|c\.|calle|avenida|avda\.?|av\.|plaza|pza\.?|paseo|camino|carretera|ctra\.?|travesia|ronda|glorieta)\s+/, '')
+    .replace(/^(de|del|de la|de los|de las)\s+/, '')
+    .replace(/[^a-z0-9 ]/g, '')
+    .trim();
+}
+/** Name of the nearest named street within `max` m of p (beyond its kerb). */
+function nearestStreetName(p: Pt, max: number): string | undefined {
+  let best = max,
+    name: string | undefined;
+  const cx = Math.floor(p[0] / WG),
+    cz = Math.floor(p[1] / WG);
+  for (let i = -1; i <= 1; i++)
+    for (let j = -1; j <= 1; j++)
+      for (const s of roadSegGrid.get(`${cx + i},${cz + j}`) ?? []) {
+        const d = segDist(p, s.a, s.b) - s.w / 2;
+        if (s.n && d < best) {
+          best = d;
+          name = s.n;
+        }
+      }
+  return name;
 }
 function streetGap(p: Pt): number {
   let best = Infinity;
@@ -1069,6 +1192,12 @@ const plazaRing = plazaWay
       .filter((p): p is Pt => !!p)
   : null;
 
+/** Normalised name of the street (or the Plaza Mayor) a point in front of a facade looks onto. */
+function facingStreet(p: Pt): string {
+  if (plazaRing && pointInRing(p, plazaRing)) return streetKey('Plaza Mayor');
+  return streetKey(nearestStreetName(p, 12));
+}
+
 interface ShopOut {
   x: number;
   z: number;
@@ -1078,11 +1207,47 @@ interface ShopOut {
   n: string;
 }
 const shops: ShopOut[] = [];
+const shopStats = { onAddressStreet: 0, otherStreet: 0, noStreetNear: 0, ownBuilding: 0, neighbourBuilding: 0 };
 const usedOnWall = new Map<string, [number, number][]>();
-function placeShop(p: Pt, t: Tags): void {
+/** Footprints (outline and its parts) that contain p: the shop's own building. */
+function buildingsAt(p: Pt): Set<number> {
+  const out = new Set<number>();
+  buildings.forEach((b, bi) => {
+    const xs = b.o.filter((_, k) => k % 2 === 0),
+      zs = b.o.filter((_, k) => k % 2 === 1);
+    if (p[0] < Math.min(...xs) - 1 || p[0] > Math.max(...xs) + 1 || p[1] < Math.min(...zs) - 1 || p[1] > Math.max(...zs) + 1) return;
+    const ring: Pt[] = [];
+    for (let k = 0; k < b.o.length; k += 2) ring.push([b.o[k], b.o[k + 1]]);
+    if (pointInRing(p, ring)) out.add(bi);
+  });
+  // A point inside an outline drawn by its parts belongs to every part of that outline.
+  for (const bi of [...out]) {
+    if (!buildings[bi].hp) continue;
+    const ring: Pt[] = [];
+    for (let k = 0; k < buildings[bi].o.length; k += 2) ring.push([buildings[bi].o[k], buildings[bi].o[k + 1]]);
+    buildings.forEach((b, pi) => {
+      if (!b.part) return;
+      const pr: Pt[] = [];
+      for (let k = 0; k < b.o.length; k += 2) pr.push([b.o[k], b.o[k + 1]]);
+      if (pointInRing(centroid(pr), ring)) out.add(pi);
+    });
+  }
+  return out;
+}
+
+/**
+ * Shop front on the wall of the shop's own building that faces its address
+ * street. Candidates are the exposed ground-floor walls within 30 m, scored by
+ * distance, with a strong preference for the building that contains the
+ * point and for walls that face the street named in addr:street (a shop is
+ * never moved to the other side of the street because that facade is closer).
+ */
+function placeShop(p: Pt, t: Tags, frontage?: number): void {
   const cat = shopCategory(t);
   if (!cat || !inB(p)) return;
   const label = shortName(t, cat.label);
+  const own = buildingsAt(p);
+  const street = streetKey(t['addr:street']);
   let best: { w: Wall; s: number; t: number } | null = null;
   const cx = Math.floor(p[0] / WG),
     cz = Math.floor(p[1] / WG);
@@ -1095,13 +1260,18 @@ function placeShop(p: Pt, t: Tags): void {
         const m: Pt = [w.a[0] + (w.b[0] - w.a[0]) * tt + w.n[0] * 2.5, w.a[1] + (w.b[1] - w.a[1]) * tt + w.n[1] * 2.5];
         const gap = streetGap(m);
         const open = gap < 10 || (plazaRing && pointInRing(m, plazaRing));
-        const score = d + (open ? 0 : 30) + (w.len < 4 ? 6 : 0) + Math.max(0, gap) * 0.3;
+        const facing = street ? facingStreet(m) : '';
+        const streetScore = !street || !facing ? 0 : facing === street ? -10 : 12;
+        const score =
+          d + (open ? 0 : 30) + (w.len < 4 ? 6 : 0) + Math.max(0, gap) * 0.3 + (own.size && !own.has(w.bi) ? 15 : 0) + streetScore;
         if (!best || score < best.s) best = { w, s: score, t: tt };
       }
     }
   if (!best || best.s > 45) return;
   const { w } = best;
-  const width = Math.min(w.len - 0.8, Math.max(3.2, Math.min(7, 1.6 + label.length * 0.32)));
+  // Shops mapped as a whole building or unit take its frontage; points get a typical old-town front.
+  const wanted = frontage ? Math.min(16, frontage) : Math.max(3.2, Math.min(7, 1.6 + label.length * 0.32));
+  const width = Math.min(w.len - 0.8, wanted);
   if (width < 2) return;
   // Keep the front inside the wall and clear of fronts already on it.
   const half = width / 2 / w.len;
@@ -1117,6 +1287,11 @@ function placeShop(p: Pt, t: Tags): void {
     if (!ok.length) return;
     tc = ok[0];
   }
+  if (street) {
+    const f = facingStreet([w.a[0] + (w.b[0] - w.a[0]) * tc + w.n[0] * 2.5, w.a[1] + (w.b[1] - w.a[1]) * tc + w.n[1] * 2.5]);
+    shopStats[f === street ? 'onAddressStreet' : f ? 'otherStreet' : 'noStreetNear']++;
+  }
+  if (own.size) shopStats[own.has(w.bi) ? 'ownBuilding' : 'neighbourBuilding']++;
   used.push([tc - half, tc + half]);
   usedOnWall.set(w.key, used);
   shops.push({
@@ -1131,7 +1306,15 @@ function placeShop(p: Pt, t: Tags): void {
 for (const n of nodes.values()) if (n.tags) placeShop(project(n.lat, n.lon), n.tags);
 for (const p of polygons) {
   if (p.tags.amenity === 'place_of_worship' || p.tags.amenity === 'townhall' || p.tags.amenity === 'school') continue;
-  if (shopCategory(p.tags) && Math.abs(signedArea(p.outer)) < 6000) placeShop(centroid(p.outer), p.tags);
+  if (!shopCategory(p.tags) || Math.abs(signedArea(p.outer)) >= 6000) continue;
+  // Frontage: the longest side of the mapped unit.
+  let side = 0;
+  for (let i = 0; i < p.outer.length; i++) {
+    const a = p.outer[i],
+      b = p.outer[(i + 1) % p.outer.length];
+    side = Math.max(side, Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  placeShop(centroid(p.outer), p.tags, side);
 }
 
 // Picnic tables: mapped ones plus a few around each picnic site (the riverside "mesas" in El Soto).
@@ -1222,6 +1405,8 @@ const out = {
   shops,
   tables,
   playgrounds,
+  barriers,
+  bollards,
 };
 mkdirSync(dirname(OUT), { recursive: true });
 const json = JSON.stringify(out);
@@ -1233,5 +1418,7 @@ console.log(
 console.log(
   `trees ${trees.length / 2}  lamps ${lamps.length / 2}  benches ${benches.length / 2}  crossings ${crossings.length / 3}  pois ${pois.length}`,
 );
+console.log('shop fronts', JSON.stringify(shopStats));
+console.log(`barriers ${barriers.length} (OSM)  bollards ${bollards.length / 2}`);
 console.log(`shops ${shops.length}  picnic tables ${tables.length / 4}  playgrounds ${playgrounds.length / 2}`);
 console.log(`→ ${OUT} (${(json.length / 1024).toFixed(0)} KB)`);

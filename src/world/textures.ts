@@ -563,6 +563,28 @@ export function roofTilesTexture(): THREE.CanvasTexture {
   });
 }
 
+/**
+ * The same roof tiles in neutral grey with a mean of 50 % (sRGB), so the
+ * vertex colour sets the real colour of each roof (sampled from the
+ * orthophoto: red tiles, dark slate, faded terracotta...).
+ */
+export function neutralRoofTilesTexture(): THREE.CanvasTexture {
+  const src = roofTilesTexture().image as HTMLCanvasElement;
+  return canvasTexture(src.width, src.height, (g, w, h) => {
+    g.drawImage(src, 0, 0);
+    const img = g.getImageData(0, 0, w, h);
+    const d = img.data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    const k = 128 / (sum / (d.length / 4));
+    for (let i = 0; i < d.length; i += 4) {
+      const l = Math.min(255, (0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]) * k);
+      d[i] = d[i + 1] = d[i + 2] = l;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+
 /** Ground detail: grass blades, soil and pebbles, neutral enough to be tinted by land use. */
 export function grassDetailTexture(): THREE.CanvasTexture {
   const rng = new Rng(63);
