@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Layer } from '../physics/CollisionWorld';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
-import { type Pt, centroid, orientedBox, signedArea, toPts } from './geo';
+import { centroid, orientedBox, type Pt, signedArea, toPts } from './geo';
 import { beamMatrix, boxGeo } from './geometry';
 import { MAP, type MapBuilding } from './mapData';
 import { Unit } from './props';

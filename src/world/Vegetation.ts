@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Layer } from '../physics/CollisionWorld';
 import type { BuildContext } from './context';
-import { type Pt, SpatialGrid, hash01, pointInRing, ringBounds, ringDist, toPts } from './geo';
+import { hash01, type Pt, pointInRing, ringBounds, ringDist, SpatialGrid, toPts } from './geo';
 import { MAP } from './mapData';
+import { bench, planeTree, Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
-import { Unit, bench, planeTree } from './props';
 
 type Kind = 'round' | 'poplar' | 'pine';
 const INSTANCE_CELL = 384;

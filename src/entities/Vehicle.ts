@@ -3,7 +3,7 @@ import { approach, clamp, damp, lerp, wrapAngle } from '../core/math';
 import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
 import type { World } from '../world/World';
 import type { SkidMarks } from './SkidMarks';
-import { type VehicleRig, buildVehicleModel, updateWheelInstances } from './VehicleModels';
+import { buildVehicleModel, updateWheelInstances, type VehicleRig } from './VehicleModels';
 import { SPECS, type VehicleKind, type VehicleSpec } from './vehicleSpecs';
 
 export interface DriveControls {

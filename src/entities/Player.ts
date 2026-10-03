@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { mergeColoured } from '../core/mergeColored';
 import { clamp, damp, dampAngle } from '../core/math';
+import { mergeColoured } from '../core/mergeColored';
 import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
 import { BOUNDS } from '../world/mapData';
 import type { World } from '../world/World';

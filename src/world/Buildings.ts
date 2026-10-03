@@ -3,7 +3,7 @@ import { Layer } from '../physics/CollisionWorld';
 import { CUSTOM_CHURCHES } from './Churches';
 import type { BuildContext } from './context';
 import { CUSTOM_FACILITIES } from './Facilities';
-import { type Pt, centroid, hash01, signedArea, toPts, triangulate } from './geo';
+import { centroid, hash01, type Pt, signedArea, toPts, triangulate } from './geo';
 import { FLOOR_H } from './Materials';
 import { MAP, type MapBuilding } from './mapData';
 import { VEHICLE_ROADS } from './Roads';

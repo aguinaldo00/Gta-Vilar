@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Layer } from '../physics/CollisionWorld';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
-import { type Pt, hash01, orientedBox, toPts, triangulate } from './geo';
+import { hash01, orientedBox, type Pt, toPts, triangulate } from './geo';
 import { beamMatrix } from './geometry';
 import { MAP, type MapArea } from './mapData';
 import { Unit } from './props';

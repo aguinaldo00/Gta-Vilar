@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { Layer } from '../physics/CollisionWorld';
 import type { BuildContext } from './context';
-import { type Pt, hash01, pointInRing, ringBounds, toPts, triangulate } from './geo';
+import { hash01, type Pt, pointInRing, ringBounds, toPts, triangulate } from './geo';
 import { MAP } from './mapData';
-import { type TerrainModel, WATER_LEVEL } from './Terrain';
 import { Unit } from './props';
+import { type TerrainModel, WATER_LEVEL } from './Terrain';
 import { createWaterMaterial } from './Water';
 
 /** Water surface with an `aDepth` attribute (metres of water below each vertex). */

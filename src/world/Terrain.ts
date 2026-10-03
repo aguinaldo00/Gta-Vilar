@@ -4,11 +4,11 @@ import type { Batcher } from './Batcher';
 import {
   type Bounds2,
   type Pt,
-  type Segment,
-  SpatialGrid,
   pointInRing,
   ringBounds,
   ringDist,
+  type Segment,
+  SpatialGrid,
   segBounds,
   segDist,
   segmentsOf,

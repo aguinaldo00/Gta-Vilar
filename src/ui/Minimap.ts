@@ -1,5 +1,5 @@
 import type { Vehicle } from '../entities/Vehicle';
-import { type Bounds2, SpatialGrid, ringBounds, toPts } from '../world/geo';
+import { type Bounds2, ringBounds, SpatialGrid, toPts } from '../world/geo';
 import { MAP } from '../world/mapData';
 
 type Item =

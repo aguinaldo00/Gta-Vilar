@@ -8,16 +8,16 @@ import { buildCommerce } from './Commerce';
 import type { Animator, BuildContext } from './context';
 import { Environment } from './Environment';
 import { buildFacilities } from './Facilities';
-import { type Bounds2, type Pt, orientedBox, pointInRing, ringBounds, toPts } from './geo';
+import { Grass } from './Grass';
+import { type Bounds2, orientedBox, type Pt, pointInRing, ringBounds, toPts } from './geo';
 import { buildHydro } from './Hydro';
 import { buildLandmarks } from './Landmarks';
-import { BOUNDS, MAP } from './mapData';
 import { Materials } from './Materials';
-import { RoadNetwork, VEHICLE_ROADS, buildRoads } from './Roads';
-import { TerrainModel, buildGround, groundMaterial } from './Terrain';
+import { BOUNDS, MAP } from './mapData';
+import { buildRoads, RoadNetwork, VEHICLE_ROADS } from './Roads';
 import { buildSports } from './Sports';
+import { buildGround, groundMaterial, TerrainModel } from './Terrain';
 import { buildVegetation } from './Vegetation';
-import { Grass } from './Grass';
 import { waterTime } from './Water';
 
 /** Per-device rendering budget (draw distance is the main knob). */

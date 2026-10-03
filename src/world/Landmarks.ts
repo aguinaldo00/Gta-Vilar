@@ -5,7 +5,7 @@ import type { BuildContext } from './context';
 import { centroid, orientedBox, toPts } from './geo';
 import { beamMatrix, boxGeo, hipRoof, scaleUV } from './geometry';
 import { MAP, type MapPoi } from './mapData';
-import { Unit, flag, signBoard } from './props';
+import { flag, signBoard, Unit } from './props';
 import { signTexture } from './textures';
 
 const BASE = 0.03; // plaza paving level
