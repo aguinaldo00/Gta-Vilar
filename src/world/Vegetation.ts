@@ -40,21 +40,35 @@ function bark(g: THREE.BufferGeometry): THREE.BufferGeometry {
  * of randomly oriented leaf cards. Card normals point away from the crown
  * centre so the crown shades like a soft volume, not like flat planes.
  */
-function leafTree(seed: number, trunkH: number, trunkR: number, crown: THREE.Vector3, radii: THREE.Vector3, cards: number, size: number): THREE.BufferGeometry {
+function leafTree(
+  seed: number,
+  trunkH: number,
+  trunkR: number,
+  crown: THREE.Vector3,
+  radii: THREE.Vector3,
+  cards: number,
+  size: number,
+): THREE.BufferGeometry {
   let r = seed;
-  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
-  const parts: THREE.BufferGeometry[] = [bark(new THREE.CylinderGeometry(trunkR * 0.6, trunkR, trunkH, 6, 1, true).translate(0, trunkH / 2, 0))];
+  const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+  const parts: THREE.BufferGeometry[] = [
+    bark(new THREE.CylinderGeometry(trunkR * 0.6, trunkR, trunkH, 6, 1, true).translate(0, trunkH / 2, 0)),
+  ];
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + rnd();
     const len = Math.min(radii.x, radii.y) * 0.9;
     const b = new THREE.CylinderGeometry(trunkR * 0.25, trunkR * 0.45, len, 4, 1, true).translate(0, len / 2, 0);
-    b.rotateZ(0.7 + rnd() * 0.3).rotateY(a).translate(0, trunkH * 0.85, 0);
+    b.rotateZ(0.7 + rnd() * 0.3)
+      .rotateY(a)
+      .translate(0, trunkH * 0.85, 0);
     parts.push(bark(b));
   }
   const o = new THREE.Object3D();
   for (let i = 0; i < cards; i++) {
     // Point inside the crown ellipsoid, biased to its surface.
-    const u = rnd() * 2 - 1, phi = rnd() * Math.PI * 2, k = 0.55 + rnd() * 0.45;
+    const u = rnd() * 2 - 1,
+      phi = rnd() * Math.PI * 2,
+      k = 0.55 + rnd() * 0.45;
     const sq = Math.sqrt(1 - u * u);
     o.position.set(crown.x + sq * Math.cos(phi) * radii.x * k, crown.y + u * radii.y * k, crown.z + sq * Math.sin(phi) * radii.z * k);
     o.rotation.set((rnd() - 0.5) * 0.9, rnd() * Math.PI, (rnd() - 0.5) * 0.6);
@@ -78,12 +92,13 @@ function leafTree(seed: number, trunkH: number, trunkR: number, crown: THREE.Vec
 /** Conifer: tall bare trunk and tiers of drooping leaf cards narrowing to the top. */
 function pineTree(): THREE.BufferGeometry {
   let r = 41;
-  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
   const parts: THREE.BufferGeometry[] = [bark(new THREE.CylinderGeometry(0.12, 0.3, 11, 6, 1, true).translate(0, 5.5, 0))];
   const o = new THREE.Object3D();
   const tiers = 6;
   for (let t = 0; t < tiers; t++) {
-    const y = 4.2 + t * 1.25, rad = 2.6 * (1 - t / tiers) + 0.4;
+    const y = 4.2 + t * 1.25,
+      rad = 2.6 * (1 - t / tiers) + 0.4;
     const n = 5 - Math.floor(t / 2);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + rnd();
@@ -95,7 +110,8 @@ function pineTree(): THREE.BufferGeometry {
       const uv = card.attributes.uv as THREE.BufferAttribute;
       for (let j = 0; j < uv.count; j++) uv.setX(j, uv.getX(j) * 0.75);
       card.applyMatrix4(o.matrix);
-      const pos = card.attributes.position as THREE.BufferAttribute, nrm = card.attributes.normal as THREE.BufferAttribute;
+      const pos = card.attributes.position as THREE.BufferAttribute,
+        nrm = card.attributes.normal as THREE.BufferAttribute;
       for (let j = 0; j < pos.count; j++) {
         const nv = new THREE.Vector3(pos.getX(j), 1.2, pos.getZ(j)).normalize();
         nrm.setXYZ(j, nv.x, nv.y, nv.z);
@@ -112,12 +128,15 @@ const TINT: Record<Kind, [number, number, number]> = { round: [1, 1, 1], poplar:
 /** Tree models; `cards` scales the crown (fewer, larger leaf cards on phones). */
 const MODELS: Record<Kind, (cards: number) => THREE.BufferGeometry> = {
   pine: pineTree,
-  round: (k) => leafTree(11, 2.9, 0.28, new THREE.Vector3(0, 5.0, 0), new THREE.Vector3(2.8, 2.4, 2.8), Math.round(18 * k), 3.3 / Math.sqrt(k)),
-  poplar: (k) => leafTree(23, 3.0, 0.22, new THREE.Vector3(0, 7.6, 0), new THREE.Vector3(1.7, 4.8, 1.7), Math.round(18 * k), 2.5 / Math.sqrt(k)),
+  round: (k) =>
+    leafTree(11, 2.9, 0.28, new THREE.Vector3(0, 5.0, 0), new THREE.Vector3(2.8, 2.4, 2.8), Math.round(18 * k), 3.3 / Math.sqrt(k)),
+  poplar: (k) =>
+    leafTree(23, 3.0, 0.22, new THREE.Vector3(0, 7.6, 0), new THREE.Vector3(1.7, 4.8, 1.7), Math.round(18 * k), 2.5 / Math.sqrt(k)),
 };
 
 /** Street lamp: batched as static geometry (cheap, and it shares the props draw call). */
-const LAMP = (): THREE.BufferGeometry => coloured([
+const LAMP = (): THREE.BufferGeometry =>
+  coloured([
     [new THREE.CylinderGeometry(0.07, 0.12, 4.2, 5, 1, true).translate(0, 2.1, 0), '#2b2f2e'],
     [new THREE.BoxGeometry(0.34, 0.45, 0.34).translate(0, 4.35, 0), '#fff1c4'],
     [new THREE.ConeGeometry(0.32, 0.3, 4).rotateY(Math.PI / 4).translate(0, 4.72, 0), '#2b2f2e'],
@@ -125,7 +144,8 @@ const LAMP = (): THREE.BufferGeometry => coloured([
 
 /** Cast-iron "fernandino" lamp post with three lanterns (Plaza Mayor). */
 const ORNATE_LAMP = (): THREE.BufferGeometry => {
-  const iron = '#1e2421', glass = '#fff1c4';
+  const iron = '#1e2421',
+    glass = '#fff1c4';
   const parts: [THREE.BufferGeometry, string][] = [
     [new THREE.CylinderGeometry(0.28, 0.36, 0.7, 8).translate(0, 0.35, 0), iron],
     [new THREE.CylinderGeometry(0.09, 0.14, 3.4, 8).translate(0, 2.4, 0), iron],
@@ -134,7 +154,8 @@ const ORNATE_LAMP = (): THREE.BufferGeometry => {
   ];
   for (let k = 0; k < 3; k++) {
     const a = (k / 3) * Math.PI * 2;
-    const x = Math.cos(a) * 0.6, z = Math.sin(a) * 0.6;
+    const x = Math.cos(a) * 0.6,
+      z = Math.sin(a) * 0.6;
     parts.push([new THREE.BoxGeometry(1.2, 0.05, 0.05).rotateY(-a).translate(x / 2, 4.05, z / 2), iron]);
     parts.push([new THREE.CylinderGeometry(0.15, 0.1, 0.42, 6).translate(x, 3.85, z), glass]);
     parts.push([new THREE.ConeGeometry(0.2, 0.22, 6).translate(x, 4.17, z), iron]);
@@ -150,13 +171,17 @@ const ORNATE_LAMP = (): THREE.BufferGeometry => {
  */
 function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
   const { mats, batch, roads } = ctx;
-  const planter = mats.stone, flowers = [mats.tint('#c0392b'), mats.tint('#e5b31a'), mats.tint('#8e44ad')], green = mats.hedge;
+  const planter = mats.stone,
+    flowers = [mats.tint('#c0392b'), mats.tint('#e5b31a'), mats.tint('#8e44ad')],
+    green = mats.hedge;
   for (const ring of plazas) {
     for (let i = 0; i < ring.length; i++) {
-      const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
+      const [ax, az] = ring[i],
+        [bx, bz] = ring[(i + 1) % ring.length];
       const len = Math.hypot(bx - ax, bz - az);
       for (let s = 1.5; s < len - 1; s += 2.2) {
-        const x = ax + ((bx - ax) * s) / len, z = az + ((bz - az) * s) / len;
+        const x = ax + ((bx - ax) * s) / len,
+          z = az + ((bz - az) * s) / len;
         const r = roads.nearest(x, z, 4, (rd) => VEHICLE_ROADS.has(rd.k));
         if (!r || r.d > 2.5 || r.d < 0.3) continue;
         batch.add(Unit.cyl, mats.iron, x, 0.45, z, 0, 0.14, 0.9, 0.14);
@@ -167,7 +192,8 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
     // Planters and bins around the inner edge.
     const b = ringBounds(ring);
     for (let k = 0; k < 40; k++) {
-      const x = b.minX + hash01(k, 1.3) * (b.maxX - b.minX), z = b.minZ + hash01(k, 7.9) * (b.maxZ - b.minZ);
+      const x = b.minX + hash01(k, 1.3) * (b.maxX - b.minX),
+        z = b.minZ + hash01(k, 7.9) * (b.maxZ - b.minZ);
       if (!pointInRing(x, z, ring)) continue;
       const near = roads.nearest(x, z, 6, (rd) => VEHICLE_ROADS.has(rd.k));
       if (near && near.d < 2) continue;
@@ -181,7 +207,18 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
       }
       batch.add(Unit.box, planter, x, 0.35, z, hash01(k) * 3, 1.4, 0.7, 1.4);
       batch.add(Unit.blob, green, x, 0.85, z, 0, 0.6, 0.35, 0.6);
-      for (let f = 0; f < 4; f++) batch.add(Unit.blob, flowers[(k + f) % 3], x + (hash01(k, f) - 0.5) * 0.9, 1.0, z + (hash01(f, k) - 0.5) * 0.9, 0, 0.18, 0.15, 0.18);
+      for (let f = 0; f < 4; f++)
+        batch.add(
+          Unit.blob,
+          flowers[(k + f) % 3],
+          x + (hash01(k, f) - 0.5) * 0.9,
+          1.0,
+          z + (hash01(f, k) - 0.5) * 0.9,
+          0,
+          0.18,
+          0.15,
+          0.18,
+        );
       ctx.collision.addBox(x, z, 1.4, 1.4, { rot: hash01(k) * 3, top: 0.7, mask: Layer.Bodies });
     }
   }
@@ -204,7 +241,11 @@ const DENSITY: Record<string, { per: number; kind: Kind | 'mix' }> = {
 export function buildVegetation(ctx: BuildContext): void {
   const { collision, terrain, roads, rng } = ctx;
   const instances = new Map<string, { kind: Kind; mats: THREE.Matrix4[] }>();
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const m = new THREE.Matrix4(),
+    q = new THREE.Quaternion(),
+    s = new THREE.Vector3(),
+    p = new THREE.Vector3(),
+    up = new THREE.Vector3(0, 1, 0);
 
   // Footprints of buildings, to keep infill trees out of houses.
   const footprints = new SpatialGrid<Pt[]>(40);
@@ -236,7 +277,8 @@ export function buildVegetation(ctx: BuildContext): void {
   const insideBuilding = (x: number, z: number) =>
     footprints.query(x - 2, z - 2, x + 2, z + 2, tmp).some((r) => pointInRing(x, z, r)) || churches.some((r) => ringDist(x, z, r) < 4);
   for (let i = 0; i < MAP.trees.length; i += 2) {
-    const x = MAP.trees[i], z = MAP.trees[i + 1];
+    const x = MAP.trees[i],
+      z = MAP.trees[i + 1];
     if (insideBuilding(x, z)) continue;
     if (inPlaza(x, z)) {
       planeTree(ctx, x, z, 0.03);
@@ -258,7 +300,8 @@ export function buildVegetation(ctx: BuildContext): void {
     const area = Math.abs((b.maxX - b.minX) * (b.maxZ - b.minZ));
     const n = Math.min(budget, Math.floor(area / d.per));
     for (let k = 0; k < n; k++) {
-      const x = rng.range(b.minX, b.maxX), z = rng.range(b.minZ, b.maxZ);
+      const x = rng.range(b.minX, b.maxX),
+        z = rng.range(b.minZ, b.maxZ);
       if (!pointInRing(x, z, ring) || holes.some((h) => pointInRing(x, z, h)) || blocked(x, z, 2.5)) continue;
       let kind: Kind = d.kind === 'mix' ? (terrain.riverDistance(x, z).d < 50 || rng.chance(0.3) ? 'poplar' : 'round') : d.kind;
       if (a.l === 'n') kind = 'pine';
@@ -276,7 +319,8 @@ export function buildVegetation(ctx: BuildContext): void {
   const lamp = LAMP();
   const ornate = ORNATE_LAMP();
   for (let i = 0; i < MAP.lamps.length; i += 2) {
-    const x = MAP.lamps[i], z = MAP.lamps[i + 1];
+    const x = MAP.lamps[i],
+      z = MAP.lamps[i + 1];
     // Cast-iron fernandino lamps in the Plaza Mayor, plain poles elsewhere.
     ctx.batch.addMatrix(inPlaza(x, z) ? ornate : lamp, ctx.mats.propsVC, m.makeTranslation(x, terrain.heightAt(x, z), z));
     collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Bodies });
@@ -284,17 +328,21 @@ export function buildVegetation(ctx: BuildContext): void {
 
   // Benches face the nearest street or path.
   for (let i = 0; i < MAP.benches.length; i += 2) {
-    const x = MAP.benches[i], z = MAP.benches[i + 1];
+    const x = MAP.benches[i],
+      z = MAP.benches[i + 1];
     const hit = roads.nearest(x, z, 25);
     const rot = hit ? Math.atan2(hit.x - x, hit.z - z) : 0;
     bench(ctx, x, z, terrain.heightAt(x, z), rot);
   }
 
-  const geos = Object.fromEntries((Object.keys(MODELS) as Kind[]).map((k) => [k, MODELS[k](ctx.quality.detail ? 1 : 0.6)])) as Record<Kind, THREE.BufferGeometry>;
+  const geos = Object.fromEntries((Object.keys(MODELS) as Kind[]).map((k) => [k, MODELS[k](ctx.quality.detail ? 1 : 0.6)])) as Record<
+    Kind,
+    THREE.BufferGeometry
+  >;
   for (const { kind, mats } of instances.values()) {
     const im = new THREE.InstancedMesh(geos[kind], ctx.mats.leavesWind, mats.length);
     im.customDepthMaterial = ctx.mats.leavesDepth;
-    mats.forEach((mm, i) => im.setMatrixAt(i, mm));
+    for (let i = 0; i < mats.length; i++) im.setMatrixAt(i, mats[i]);
     for (let i = 0; i < mats.length; i++) {
       const v = 0.85 + hash01(i, mats.length) * 0.3;
       const [tr, tg, tb] = TINT[kind];
@@ -312,19 +360,24 @@ export function buildVegetation(ctx: BuildContext): void {
  * dry-stone wall (setos y paredes), skipped where a road, track or building is.
  */
 function hedgerows(ctx: BuildContext, blocked: (x: number, z: number, clearance: number) => boolean): void {
-  const hedge = ctx.mats.hedge, wall = ctx.mats.stone;
+  const hedge = ctx.mats.hedge,
+    wall = ctx.mats.stone;
   const done = new Set<string>();
   for (const a of MAP.areas) {
     if (a.k !== 'farmland' && a.k !== 'meadow') continue;
     const ring = toPts(a.o);
     for (let i = 0; i < ring.length; i++) {
-      const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
+      const [ax, az] = ring[i],
+        [bx, bz] = ring[(i + 1) % ring.length];
       const len = Math.hypot(bx - ax, bz - az);
       const n = Math.max(1, Math.round(len / 6));
       for (let k = 0; k < n; k++) {
-        const x0 = ax + ((bx - ax) * k) / n, z0 = az + ((bz - az) * k) / n;
-        const x1 = ax + ((bx - ax) * (k + 1)) / n, z1 = az + ((bz - az) * (k + 1)) / n;
-        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+        const x0 = ax + ((bx - ax) * k) / n,
+          z0 = az + ((bz - az) * k) / n;
+        const x1 = ax + ((bx - ax) * (k + 1)) / n,
+          z1 = az + ((bz - az) * (k + 1)) / n;
+        const mx = (x0 + x1) / 2,
+          mz = (z0 + z1) / 2;
         const key = `${Math.round(mx / 2)},${Math.round(mz / 2)}`;
         if (done.has(key)) continue;
         done.add(key);

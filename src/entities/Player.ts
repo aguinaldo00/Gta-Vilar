@@ -78,13 +78,19 @@ export class Player {
     part(this.body, 0.32, 0.18, 0.06, hair, 0, 0.92, -0.14);
     part(this.body, 0.2, 0.05, 0.02, mat('#111111'), 0, 0.88, 0.151); // shades
 
-    for (const [arm, side] of [[this.armL, 1], [this.armR, -1]] as const) {
+    for (const [arm, side] of [
+      [this.armL, 1],
+      [this.armR, -1],
+    ] as const) {
       arm.position.set(side * 0.36, 0.55, 0);
       this.body.add(arm);
       part(arm, 0.16, 0.42, 0.18, jacket, 0, -0.2, 0);
       part(arm, 0.13, 0.2, 0.14, skin, 0, -0.5, 0);
     }
-    for (const [leg, side] of [[this.legL, 1], [this.legR, -1]] as const) {
+    for (const [leg, side] of [
+      [this.legL, 1],
+      [this.legR, -1],
+    ] as const) {
       leg.position.set(side * 0.14, 0, 0);
       this.body.add(leg);
       part(leg, 0.22, 0.86, 0.24, jeans, 0, -0.43, 0);
@@ -180,8 +186,14 @@ export class Player {
     const step = swimming ? waterY! + 0.6 - this.pos.y : this.grounded ? STEP_HEIGHT : 0.2;
     this.contacts.length = 0;
     const r = collision.resolveCircle(
-      this.pos.x + this.vel.x * dt, this.pos.z + this.vel.z * dt,
-      this.radius, Layer.Player, this.pos.y, this.height, step, this.contacts,
+      this.pos.x + this.vel.x * dt,
+      this.pos.z + this.vel.z * dt,
+      this.radius,
+      Layer.Player,
+      this.pos.y,
+      this.height,
+      step,
+      this.contacts,
     );
     for (const c of this.contacts) {
       const vn = this.vel.x * c.nx + this.vel.z * c.nz;
@@ -241,7 +253,11 @@ export class Player {
 
   private animate(dt: number, hs: number): void {
     const st = this.state;
-    let legSwing = 0, armSwing = 0, lean = 0, armLift = 0, legBend = 0;
+    let legSwing = 0,
+      armSwing = 0,
+      lean = 0,
+      armLift = 0,
+      legBend = 0;
     if (st === 'walk' || st === 'run' || st === 'wade') {
       this.phase += hs * dt * (st === 'run' ? 1.6 : 2.4);
       const amp = st === 'run' ? 0.95 : 0.6;
@@ -262,8 +278,8 @@ export class Player {
 
     const k = 14;
     if (st === 'swim') {
-      this.armL.rotation.x = this.phase % (Math.PI * 2) - Math.PI;
-      this.armR.rotation.x = (this.phase + Math.PI) % (Math.PI * 2) - Math.PI;
+      this.armL.rotation.x = (this.phase % (Math.PI * 2)) - Math.PI;
+      this.armR.rotation.x = ((this.phase + Math.PI) % (Math.PI * 2)) - Math.PI;
       this.legL.rotation.x = Math.sin(this.phase * 2) * 0.3;
       this.legR.rotation.x = -Math.sin(this.phase * 2) * 0.3;
     } else {

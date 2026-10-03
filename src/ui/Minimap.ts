@@ -2,19 +2,38 @@ import type { Vehicle } from '../entities/Vehicle';
 import { type Bounds2, SpatialGrid, ringBounds, toPts } from '../world/geo';
 import { MAP } from '../world/mapData';
 
-
 type Item =
   | { kind: 'fill'; pts: number[]; color: string; layer: number }
   | { kind: 'line'; pts: number[]; color: string; width: number; layer: number };
 
 const AREA_FILL: Record<string, string> = {
-  forest: '#3f5f2c', park: '#4f7a34', garden: '#4f7a34', pitch: '#3f7a35', water: '#4cc0c4', pool: '#5ec8e0',
-  pedestrian: '#b9b2a2', parking: '#55565a', cemetery: '#5c6e4a', farmland: '#8a7f4c', meadow: '#5e7a3c',
+  forest: '#3f5f2c',
+  park: '#4f7a34',
+  garden: '#4f7a34',
+  pitch: '#3f7a35',
+  water: '#4cc0c4',
+  pool: '#5ec8e0',
+  pedestrian: '#b9b2a2',
+  parking: '#55565a',
+  cemetery: '#5c6e4a',
+  farmland: '#8a7f4c',
+  meadow: '#5e7a3c',
 };
 const ROAD_COLOR: Record<string, string> = {
-  primary: '#d9d4c8', secondary: '#d9d4c8', tertiary: '#cfcabe', residential: '#b9b5ab', living_street: '#b9b5ab',
-  unclassified: '#b9b5ab', service: '#9d9a92', pedestrian: '#c9c1ae', footway: '#8f8a7c', path: '#857456', track: '#857456',
-  cycleway: '#8f8a7c', viaverde: '#a08a64', steps: '#8f8a7c',
+  primary: '#d9d4c8',
+  secondary: '#d9d4c8',
+  tertiary: '#cfcabe',
+  residential: '#b9b5ab',
+  living_street: '#b9b5ab',
+  unclassified: '#b9b5ab',
+  service: '#9d9a92',
+  pedestrian: '#c9c1ae',
+  footway: '#8f8a7c',
+  path: '#857456',
+  track: '#857456',
+  cycleway: '#8f8a7c',
+  viaverde: '#a08a64',
+  steps: '#8f8a7c',
 };
 
 /** GTA-style rotating radar drawn from the OSM vector data around the player. */
@@ -24,7 +43,10 @@ export class Minimap {
   private readonly found: Item[] = [];
   private readonly blips: { x: number; z: number; label: string; color: string }[] = [];
 
-  constructor(private readonly canvas: HTMLCanvasElement, private readonly viewRadius = 90) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly viewRadius = 90,
+  ) {
     this.g = canvas.getContext('2d')!;
     const add = (it: Item, b: Bounds2) => this.grid.insert(it, b);
     const bboxOf = (pts: number[], pad = 0): Bounds2 => {
@@ -39,11 +61,15 @@ export class Minimap {
     for (const s of MAP.streams) add({ kind: 'line', pts: s.p, color: '#3d84b8', width: 2, layer: 1 }, bboxOf(s.p, 2));
     for (const r of MAP.roads) {
       const big = ['primary', 'secondary', 'tertiary'].includes(r.k);
-      add({ kind: 'line', pts: r.p, color: ROAD_COLOR[r.k] ?? '#9d9a92', width: Math.max(1.5, r.w + (r.sw ? 2 : 0)), layer: big ? 4 : 3 }, bboxOf(r.p, r.w));
+      add(
+        { kind: 'line', pts: r.p, color: ROAD_COLOR[r.k] ?? '#9d9a92', width: Math.max(1.5, r.w + (r.sw ? 2 : 0)), layer: big ? 4 : 3 },
+        bboxOf(r.p, r.w),
+      );
     }
     for (const b of MAP.buildings) {
       if (b.part) continue;
-      const color = b.t === 'townhall' || b.t === 'torre' ? '#e2b65c' : b.t === 'church' ? '#c9a77a' : b.t === 'industrial' ? '#8e8f93' : '#6f6a62';
+      const color =
+        b.t === 'townhall' || b.t === 'torre' ? '#e2b65c' : b.t === 'church' ? '#c9a77a' : b.t === 'industrial' ? '#8e8f93' : '#6f6a62';
       add({ kind: 'fill', pts: b.o, color, layer: 5 }, bboxOf(b.o));
     }
     for (const p of MAP.pois) {
@@ -78,7 +104,10 @@ export class Minimap {
     g.scale(scale, scale);
     g.translate(-px, -pz);
     const reach = this.viewRadius * 1.45;
-    const items = this.grid.query(px - reach, pz - reach, px + reach, pz + reach, this.found).slice().sort((a, b) => a.layer - b.layer);
+    const items = this.grid
+      .query(px - reach, pz - reach, px + reach, pz + reach, this.found)
+      .slice()
+      .sort((a, b) => a.layer - b.layer);
     g.lineCap = g.lineJoin = 'round';
     for (const it of items) {
       g.beginPath();
@@ -106,7 +135,8 @@ export class Minimap {
     }
     for (const b of this.blips) {
       // Clamp far blips to the radar rim.
-      let bx = b.x, bz = b.z;
+      let bx = b.x,
+        bz = b.z;
       const d = Math.hypot(bx - px, bz - pz);
       const lim = this.viewRadius - 8;
       if (d > lim) {

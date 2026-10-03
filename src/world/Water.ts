@@ -77,7 +77,10 @@ const fragmentShader = /* glsl */ `
  * channel (`aDepth`), so the riverbed shows through near the banks.
  */
 export function createWaterMaterial(
-  deep: THREE.ColorRepresentation, shallow: THREE.ColorRepresentation, flow: number, opacity = 0.92,
+  deep: THREE.ColorRepresentation,
+  shallow: THREE.ColorRepresentation,
+  flow: number,
+  opacity = 0.92,
 ): THREE.ShaderMaterial {
   const uniforms = THREE.UniformsUtils.merge([
     THREE.UniformsLib.fog,

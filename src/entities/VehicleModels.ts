@@ -199,7 +199,13 @@ function buildTractor(color: string): VehicleRig {
   body.add(exhaust);
   // Cab: floor, four posts, roof, front glass.
   box(body, 1.4, 0.14, 1.4, M.dark, 0, 1.25, -0.55);
-  for (const [px, pz] of [[-0.65, 0.1], [0.65, 0.1], [-0.65, -1.2], [0.65, -1.2]]) box(body, 0.08, 1.55, 0.08, M.dark, px, 2.05, pz);
+  for (const [px, pz] of [
+    [-0.65, 0.1],
+    [0.65, 0.1],
+    [-0.65, -1.2],
+    [0.65, -1.2],
+  ])
+    box(body, 0.08, 1.55, 0.08, M.dark, px, 2.05, pz);
   box(body, 1.5, 0.12, 1.55, p, 0, 2.85, -0.55);
   const cabGlass = new THREE.MeshStandardMaterial({ color: '#9fb6c8', transparent: true, opacity: 0.35 });
   box(body, 1.25, 1.1, 0.03, cabGlass, 0, 2.15, 0.1);

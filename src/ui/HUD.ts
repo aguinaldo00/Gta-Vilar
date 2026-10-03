@@ -7,8 +7,14 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
 }
 
 const STATE_LABEL: Record<string, string> = {
-  idle: 'De pie', walk: 'Andando', run: 'Corriendo', jump: 'Saltando',
-  wade: 'Vadeando', swim: 'Nadando', knocked: '¡Atropellado!', driving: 'Conduciendo',
+  idle: 'De pie',
+  walk: 'Andando',
+  run: 'Corriendo',
+  jump: 'Saltando',
+  wade: 'Vadeando',
+  swim: 'Nadando',
+  knocked: '¡Atropellado!',
+  driving: 'Conduciendo',
 };
 
 /** DOM overlay: zone title, interaction prompt, speedometer, state and help. */

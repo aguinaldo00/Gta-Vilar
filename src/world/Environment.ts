@@ -48,7 +48,10 @@ export class Environment {
     this.bgScene.add(this.sky);
     this.bgScene.add(buildMountains(rng));
     // Valley floor out to the mountains, so the land never ends at the edge of the town.
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(14000, 48).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#6f8a45' }));
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(14000, 48).rotateX(-Math.PI / 2),
+      new THREE.MeshLambertMaterial({ color: '#6f8a45' }),
+    );
     floor.position.y = -0.6;
     this.bgScene.add(floor);
     this.bgScene.fog = new THREE.Fog(HAZE, 600, 11000);
@@ -112,11 +115,17 @@ export class Environment {
  * real elevation data: the OSM export has none.
  */
 function buildMountains(rng: Rng): THREE.Mesh {
-  const seg = 220, rings = 18;
-  const r0 = 2600, r1 = 14000;
-  const pos: number[] = [], col: number[] = [], idx: number[] = [];
+  const seg = 220,
+    rings = 18;
+  const r0 = 2600,
+    r1 = 14000;
+  const pos: number[] = [],
+    col: number[] = [],
+    idx: number[] = [];
   const phase = Array.from({ length: 6 }, () => rng.range(0, Math.PI * 2));
-  const low = new THREE.Color('#71805a'), mid = new THREE.Color('#828569'), rock = new THREE.Color('#a39d8e');
+  const low = new THREE.Color('#71805a'),
+    mid = new THREE.Color('#828569'),
+    rock = new THREE.Color('#a39d8e');
   const c = new THREE.Color();
   for (let j = 0; j <= rings; j++) {
     const t = j / rings;
@@ -131,7 +140,9 @@ function buildMountains(rng: Rng): THREE.Mesh {
       const envelope = Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5);
       const h = (120 + ridge * (380 + 520 * t)) * envelope - 40;
       pos.push(Math.cos(a) * r, h, Math.sin(a) * r);
-      c.copy(low).lerp(mid, Math.min(1, h / 350)).lerp(rock, Math.max(0, Math.min(1, (h - 420) / 300)));
+      c.copy(low)
+        .lerp(mid, Math.min(1, h / 350))
+        .lerp(rock, Math.max(0, Math.min(1, (h - 420) / 300)));
       col.push(c.r, c.g, c.b);
       if (i < seg && j < rings) {
         const k = j * (seg + 1) + i;
@@ -144,7 +155,10 @@ function buildMountains(rng: Rng): THREE.Mesh {
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true, side: THREE.DoubleSide }));
+  const m = new THREE.Mesh(
+    g,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true, side: THREE.DoubleSide }),
+  );
   m.frustumCulled = false;
   return m;
 }

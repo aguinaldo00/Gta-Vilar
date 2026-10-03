@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { Rng } from '../core/math';
 import { type CollisionWorld, Layer } from '../physics/CollisionWorld';
 import { Batcher } from './Batcher';
@@ -69,7 +69,15 @@ export class World {
     const mats = new Materials();
     const batch = new Batcher();
     const ctx: BuildContext = {
-      scene, batch, mats, collision, animators: this.animators, rng, terrain: this.terrain, roads: this.roads, quality,
+      scene,
+      batch,
+      mats,
+      collision,
+      animators: this.animators,
+      rng,
+      terrain: this.terrain,
+      roads: this.roads,
+      quality,
     };
     this.env = new Environment(scene, renderer, rng, quality);
     buildGround(this.terrain, batch, groundMaterial(quality.groundTexture, mats.detail), quality.detail === 1);
@@ -101,7 +109,8 @@ export class World {
 
   private buildBounds(collision: CollisionWorld): void {
     const B = this.bounds;
-    const W = B.maxX - B.minX, H = B.maxZ - B.minZ;
+    const W = B.maxX - B.minX,
+      H = B.maxZ - B.minZ;
     const o = { top: 200, mask: Layer.Bodies };
     collision.addBox((B.minX + B.maxX) / 2, B.minZ - 3, W + 20, 10, o);
     collision.addBox((B.minX + B.maxX) / 2, B.maxZ + 3, W + 20, 10, o);

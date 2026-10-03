@@ -9,8 +9,19 @@ import { Unit } from './props';
 
 /** Court atlas cells (4 x 2). */
 const CELL: Record<string, number> = {
-  soccer: 0, futsal: 1, multi: 1, basketball: 2, tennis: 3, racquet: 5, padel: 4, pelota: 5, skateboard: 5,
-  skittles: 6, bullfighting: 6, boules: 7, table_tennis: 5,
+  soccer: 0,
+  futsal: 1,
+  multi: 1,
+  basketball: 2,
+  tennis: 3,
+  racquet: 5,
+  padel: 4,
+  pelota: 5,
+  skateboard: 5,
+  skittles: 6,
+  bullfighting: 6,
+  boules: 7,
+  table_tennis: 5,
 };
 
 /**
@@ -23,7 +34,17 @@ function courtAtlas(): THREE.CanvasTexture {
   c.width = S * 4;
   c.height = S * 2;
   const g = c.getContext('2d')!;
-  const cell = (i: number, draw: (L: (x0: number, y0: number, x1: number, y1: number) => void, R: (x: number, y: number, w: number, h: number) => void, A: (x: number, y: number, r: number, a0?: number, a1?: number) => void) => void, bg: string, line = 'rgba(255,255,255,0.92)', lw = 4) => {
+  const cell = (
+    i: number,
+    draw: (
+      L: (x0: number, y0: number, x1: number, y1: number) => void,
+      R: (x: number, y: number, w: number, h: number) => void,
+      A: (x: number, y: number, r: number, a0?: number, a1?: number) => void,
+    ) => void,
+    bg: string,
+    line = 'rgba(255,255,255,0.92)',
+    lw = 4,
+  ) => {
     g.save();
     g.translate((i % 4) * S, Math.floor(i / 4) * S);
     g.fillStyle = bg;
@@ -31,11 +52,21 @@ function courtAtlas(): THREE.CanvasTexture {
     g.strokeStyle = line;
     g.lineWidth = lw;
     const m = 18; // margin
-    const X = (u: number) => m + u * (S - 2 * m), Y = (v: number) => m + v * (S - 2 * m);
+    const X = (u: number) => m + u * (S - 2 * m),
+      Y = (v: number) => m + v * (S - 2 * m);
     draw(
-      (x0, y0, x1, y1) => { g.beginPath(); g.moveTo(X(x0), Y(y0)); g.lineTo(X(x1), Y(y1)); g.stroke(); },
+      (x0, y0, x1, y1) => {
+        g.beginPath();
+        g.moveTo(X(x0), Y(y0));
+        g.lineTo(X(x1), Y(y1));
+        g.stroke();
+      },
       (x, y, w, h) => g.strokeRect(X(x), Y(y), X(x + w) - X(x), Y(y + h) - Y(y)),
-      (x, y, r, a0 = 0, a1 = Math.PI * 2) => { g.beginPath(); g.ellipse(X(x), Y(y), r * (S - 2 * m), r * (S - 2 * m), 0, a0, a1); g.stroke(); },
+      (x, y, r, a0 = 0, a1 = Math.PI * 2) => {
+        g.beginPath();
+        g.ellipse(X(x), Y(y), r * (S - 2 * m), r * (S - 2 * m), 0, a0, a1);
+        g.stroke();
+      },
     );
     g.restore();
   };
@@ -46,42 +77,95 @@ function courtAtlas(): THREE.CanvasTexture {
     g.fillRect((k * S) / 12, 0, S / 12, S);
   }
   g.restore();
-  cell(0, (L, R, A) => {
-    R(0, 0, 1, 1); L(0.5, 0, 0.5, 1); A(0.5, 0.5, 0.13);
-    R(0, 0.2, 0.16, 0.6); R(1 - 0.16, 0.2, 0.16, 0.6); R(0, 0.37, 0.055, 0.26); R(1 - 0.055, 0.37, 0.055, 0.26);
-    A(0.11, 0.5, 0.12, -0.9, 0.9); A(0.89, 0.5, 0.12, Math.PI - 0.9, Math.PI + 0.9);
-  }, 'rgba(0,0,0,0)');
+  cell(
+    0,
+    (L, R, A) => {
+      R(0, 0, 1, 1);
+      L(0.5, 0, 0.5, 1);
+      A(0.5, 0.5, 0.13);
+      R(0, 0.2, 0.16, 0.6);
+      R(1 - 0.16, 0.2, 0.16, 0.6);
+      R(0, 0.37, 0.055, 0.26);
+      R(1 - 0.055, 0.37, 0.055, 0.26);
+      A(0.11, 0.5, 0.12, -0.9, 0.9);
+      A(0.89, 0.5, 0.12, Math.PI - 0.9, Math.PI + 0.9);
+    },
+    'rgba(0,0,0,0)',
+  );
   // Futsal / multi-sport: blue court, green surround.
-  cell(1, (L, R, A) => {
-    R(0, 0, 1, 1); L(0.5, 0, 0.5, 1); A(0.5, 0.5, 0.1);
-    A(0, 0.5, 0.3, -Math.PI / 2, Math.PI / 2); A(1, 0.5, 0.3, Math.PI / 2, Math.PI * 1.5);
-  }, '#2f6d9a');
+  cell(
+    1,
+    (L, R, A) => {
+      R(0, 0, 1, 1);
+      L(0.5, 0, 0.5, 1);
+      A(0.5, 0.5, 0.1);
+      A(0, 0.5, 0.3, -Math.PI / 2, Math.PI / 2);
+      A(1, 0.5, 0.3, Math.PI / 2, Math.PI * 1.5);
+    },
+    '#2f6d9a',
+  );
   // Basketball: orange-red court with keys and three-point arcs.
-  cell(2, (L, R, A) => {
-    R(0, 0, 1, 1); L(0.5, 0, 0.5, 1); A(0.5, 0.5, 0.12);
-    R(0, 0.33, 0.2, 0.34); R(0.8, 0.33, 0.2, 0.34);
-    A(0.05, 0.5, 0.45, -1.25, 1.25); A(0.95, 0.5, 0.45, Math.PI - 1.25, Math.PI + 1.25);
-  }, '#b65a3a');
+  cell(
+    2,
+    (L, R, A) => {
+      R(0, 0, 1, 1);
+      L(0.5, 0, 0.5, 1);
+      A(0.5, 0.5, 0.12);
+      R(0, 0.33, 0.2, 0.34);
+      R(0.8, 0.33, 0.2, 0.34);
+      A(0.05, 0.5, 0.45, -1.25, 1.25);
+      A(0.95, 0.5, 0.45, Math.PI - 1.25, Math.PI + 1.25);
+    },
+    '#b65a3a',
+  );
   // Tennis: green hard court with doubles and service lines.
-  cell(3, (L, R) => {
-    R(0, 0, 1, 1); L(0, 0.125, 1, 0.125); L(0, 0.875, 1, 0.875);
-    L(0.23, 0.125, 0.23, 0.875); L(0.77, 0.125, 0.77, 0.875); L(0.23, 0.5, 0.77, 0.5); L(0.5, 0, 0.5, 1);
-  }, '#3f7a54');
+  cell(
+    3,
+    (L, R) => {
+      R(0, 0, 1, 1);
+      L(0, 0.125, 1, 0.125);
+      L(0, 0.875, 1, 0.875);
+      L(0.23, 0.125, 0.23, 0.875);
+      L(0.77, 0.125, 0.77, 0.875);
+      L(0.23, 0.5, 0.77, 0.5);
+      L(0.5, 0, 0.5, 1);
+    },
+    '#3f7a54',
+  );
   // Padel: blue turf with service lines.
-  cell(4, (L, R) => {
-    R(0, 0, 1, 1); L(0.5, 0, 0.5, 1); L(0.15, 0, 0.15, 1); L(0.85, 0, 0.85, 1); L(0.15, 0.5, 0.85, 0.5);
-  }, '#2a62a8');
+  cell(
+    4,
+    (L, R) => {
+      R(0, 0, 1, 1);
+      L(0.5, 0, 0.5, 1);
+      L(0.15, 0, 0.15, 1);
+      L(0.85, 0, 0.85, 1);
+      L(0.15, 0.5, 0.85, 0.5);
+    },
+    '#2a62a8',
+  );
   // Frontón / racquet / skate: concrete with the cancha lines.
-  cell(5, (L) => {
-    for (let k = 1; k < 7; k++) L(k / 7, 0, k / 7, 1);
-  }, '#a7a49c', 'rgba(250,250,250,0.55)', 3);
+  cell(
+    5,
+    (L) => {
+      for (let k = 1; k < 7; k++) L(k / 7, 0, k / 7, 1);
+    },
+    '#a7a49c',
+    'rgba(250,250,250,0.55)',
+    3,
+  );
   // Bolera / sand ring: raked sand.
-  cell(6, () => {
-    for (let k = 0; k < 900; k++) {
-      g.fillStyle = `rgba(${120 + Math.random() * 60},${100 + Math.random() * 40},${70 + Math.random() * 30},0.35)`;
-      g.fillRect(6 * 0 + (2 % 4) * S + Math.random() * S, S + Math.random() * S, 3, 3);
-    }
-  }, '#c8a874', 'rgba(0,0,0,0)');
+  cell(
+    6,
+    () => {
+      for (let k = 0; k < 900; k++) {
+        g.fillStyle = `rgba(${120 + Math.random() * 60},${100 + Math.random() * 40},${70 + Math.random() * 30},0.35)`;
+        g.fillRect(6 * 0 + (2 % 4) * S + Math.random() * S, S + Math.random() * S, 3, 3);
+      }
+    },
+    '#c8a874',
+    'rgba(0,0,0,0)',
+  );
   // Petanque: gravel.
   cell(7, () => undefined, '#b9ab90', 'rgba(0,0,0,0)');
   // Grain on every cell.
@@ -103,9 +187,18 @@ function fenceTexture(): THREE.CanvasTexture {
   g.strokeStyle = '#ffffff';
   g.lineWidth = 3;
   g.beginPath();
-  g.moveTo(0, 0); g.lineTo(64, 64); g.moveTo(64, 0); g.lineTo(0, 64);
-  g.moveTo(32, -32); g.lineTo(96, 32); g.moveTo(-32, 32); g.lineTo(32, 96);
-  g.moveTo(32, 96); g.lineTo(96, 32); g.moveTo(-32, 32); g.lineTo(32, -32);
+  g.moveTo(0, 0);
+  g.lineTo(64, 64);
+  g.moveTo(64, 0);
+  g.lineTo(0, 64);
+  g.moveTo(32, -32);
+  g.lineTo(96, 32);
+  g.moveTo(-32, 32);
+  g.lineTo(32, 96);
+  g.moveTo(32, 96);
+  g.lineTo(96, 32);
+  g.moveTo(-32, 32);
+  g.lineTo(32, -32);
   g.stroke();
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -118,36 +211,62 @@ let fenceMat: THREE.MeshStandardMaterial | null = null;
 /** Shared chain-link material (one draw call per chunk for every fence and net). */
 export function fenceMaterial(): THREE.MeshStandardMaterial {
   if (!fenceMat) {
-    fenceMat = new THREE.MeshStandardMaterial({ map: fenceTexture(), color: '#9aa39c', alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4 });
+    fenceMat = new THREE.MeshStandardMaterial({
+      map: fenceTexture(),
+      color: '#9aa39c',
+      alphaTest: 0.4,
+      side: THREE.DoubleSide,
+      roughness: 0.6,
+      metalness: 0.4,
+    });
     fenceMat.name = 'fence';
     fenceMat.userData.castShadow = false;
   }
   return fenceMat;
 }
 
-interface Court { lb: LocalBatch; L: number; W: number; ring: Pt[]; cx: number; cz: number; rot: number }
+interface Court {
+  lb: LocalBatch;
+  L: number;
+  W: number;
+  ring: Pt[];
+  cx: number;
+  cz: number;
+  rot: number;
+}
 
 /** Court frame: local +X along the long side. */
 function courtFrame(ctx: BuildContext, ring: Pt[]): Court {
   const o = orientedBox(ring);
-  let rot = o.angle, L = o.w, W = o.d;
-  if (W > L) { rot += Math.PI / 2; [L, W] = [W, L]; }
+  let rot = o.angle,
+    L = o.w,
+    W = o.d;
+  if (W > L) {
+    rot += Math.PI / 2;
+    [L, W] = [W, L];
+  }
   return { lb: new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot), L, W, ring, cx: o.cx, cz: o.cz, rot };
 }
 
 /** Pitch surface: the real polygon, UV-mapped in court space onto its atlas cell. */
 function surface(ctx: BuildContext, c: Court, cellIdx: number, mat: THREE.Material, y: number): void {
-  const pos: number[] = [], uv: number[] = [];
-  const cos = Math.cos(c.rot), sin = Math.sin(c.rot);
-  const cu = (cellIdx % 4) / 4, cv = 1 - (Math.floor(cellIdx / 4) + 1) / 2;
+  const pos: number[] = [],
+    uv: number[] = [];
+  const cos = Math.cos(c.rot),
+    sin = Math.sin(c.rot);
+  const cu = (cellIdx % 4) / 4,
+    cv = 1 - (Math.floor(cellIdx / 4) + 1) / 2;
   for (const tri of triangulate(c.ring)) {
     const t = [...tri];
     // Upward winding.
     if ((t[1][1] - t[0][1]) * (t[2][0] - t[0][0]) - (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) < 0) [t[1], t[2]] = [t[2], t[1]];
     for (const [x, z] of t) {
-      const dx = x - c.cx, dz = z - c.cz;
-      const lx = dx * cos - dz * sin, lz = dx * sin + dz * cos;
-      const u = Math.min(1, Math.max(0, lx / c.L + 0.5)), v = Math.min(1, Math.max(0, lz / c.W + 0.5));
+      const dx = x - c.cx,
+        dz = z - c.cz;
+      const lx = dx * cos - dz * sin,
+        lz = dx * sin + dz * cos;
+      const u = Math.min(1, Math.max(0, lx / c.L + 0.5)),
+        v = Math.min(1, Math.max(0, lz / c.W + 0.5));
       pos.push(x, y, z);
       uv.push(cu + (0.01 + u * 0.98) / 4, cv + (0.01 + (1 - v) * 0.98) / 2);
     }
@@ -161,15 +280,26 @@ function surface(ctx: BuildContext, c: Court, cellIdx: number, mat: THREE.Materi
 
 function fenceAround(ctx: BuildContext, c: Court, h: number, fence: THREE.Material, gap = true): void {
   const post = ctx.mats.tint('#2f4a3a');
-  const corners: [number, number][] = [[-c.L / 2, -c.W / 2], [c.L / 2, -c.W / 2], [c.L / 2, c.W / 2], [-c.L / 2, c.W / 2]];
+  const corners: [number, number][] = [
+    [-c.L / 2, -c.W / 2],
+    [c.L / 2, -c.W / 2],
+    [c.L / 2, c.W / 2],
+    [-c.L / 2, c.W / 2],
+  ];
   for (let i = 0; i < 4; i++) {
-    const [ax, az] = corners[i], [bx, bz] = corners[(i + 1) % 4];
+    const [ax, az] = corners[i],
+      [bx, bz] = corners[(i + 1) % 4];
     let len = Math.hypot(bx - ax, bz - az);
     const ang = Math.atan2(-(bz - az), bx - ax);
-    let sx = ax, sz = az;
+    let sx = ax,
+      sz = az;
     // Entrance gap at the start of the first long side.
-    if (gap && i === 0) { sx += 1.4; len -= 1.4; }
-    const mx = (sx + bx) / 2, mz = (sz + bz) / 2;
+    if (gap && i === 0) {
+      sx += 1.4;
+      len -= 1.4;
+    }
+    const mx = (sx + bx) / 2,
+      mz = (sz + bz) / 2;
     const geo = new THREE.PlaneGeometry(1, 1);
     const uvs = geo.attributes.uv as THREE.BufferAttribute;
     for (let k = 0; k < uvs.count; k++) uvs.setXY(k, uvs.getX(k) * len * 2, uvs.getY(k) * h * 2);
@@ -220,13 +350,15 @@ function tennisNet(ctx: BuildContext, c: Court, w: number, net: THREE.Material):
 /** Frontón: tall front wall and a side wall along the left of the cancha. */
 function fronton(ctx: BuildContext, c: Court): void {
   const wall = ctx.mats.tint('#d6d0c4');
-  const H = 9, T = 0.8;
+  const H = 9,
+    T = 0.8;
   const fx = -c.L / 2 - T / 2;
   c.lb.add(Unit.box, wall, fx, H / 2, 0, 0, T, H, c.W + T);
   c.lb.add(Unit.box, ctx.mats.tint('#c43b2e'), fx + T / 2 + 0.02, 0.9, 0, 0, 0.03, 0.08, c.W); // chapa line
   const sl = c.L * 0.75;
   c.lb.add(Unit.box, wall, fx + sl / 2, H * 0.4, -c.W / 2 - T / 2, 0, sl, H * 0.8, T);
-  for (let k = 1; k < 7; k++) c.lb.add(Unit.box, ctx.mats.tint('#f4f4f0'), -c.L / 2 + (k * c.L) / 7, 1.5, -c.W / 2 + 0.02, 0, 0.06, 3, 0.03);
+  for (let k = 1; k < 7; k++)
+    c.lb.add(Unit.box, ctx.mats.tint('#f4f4f0'), -c.L / 2 + (k * c.L) / 7, 1.5, -c.W / 2 + 0.02, 0, 0.06, 3, 0.03);
   const [wx, wz] = c.lb.point(fx, 0);
   ctx.collision.addBox(wx, wz, T, c.W + T, { rot: c.rot, top: H });
   const [sx, sz] = c.lb.point(fx + sl / 2, -c.W / 2 - T / 2);
@@ -239,12 +371,17 @@ function bolera(ctx: BuildContext, c: Court): void {
   for (const z of [-c.W / 2, c.W / 2]) c.lb.add(Unit.box, wood, 0, 0.15, z, 0, c.L, 0.3, 0.12);
   for (const x of [-c.L / 2, c.L / 2]) c.lb.add(Unit.box, wood, x, 0.15, 0, 0, 0.12, 0.3, c.W);
   const bx = c.L / 2 - Math.min(6, c.L * 0.25);
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-    c.lb.add(Unit.cyl, ctx.mats.tint('#e2c48e'), bx + i * 0.6, 0.25, j * 0.6, 0, 0.11, 0.5, 0.11);
-    c.lb.add(Unit.sphere, ctx.mats.tint('#e2c48e'), bx + i * 0.6, 0.52, j * 0.6, 0, 0.12, 0.12, 0.12);
-  }
+  for (let i = -1; i <= 1; i++)
+    for (let j = -1; j <= 1; j++) {
+      c.lb.add(Unit.cyl, ctx.mats.tint('#e2c48e'), bx + i * 0.6, 0.25, j * 0.6, 0, 0.11, 0.5, 0.11);
+      c.lb.add(Unit.sphere, ctx.mats.tint('#e2c48e'), bx + i * 0.6, 0.52, j * 0.6, 0, 0.12, 0.12, 0.12);
+    }
   c.lb.add(Unit.box, wood, -c.L / 2 + 2.5, 0.08, 0, 0, 0.5, 0.16, 1.6);
-  for (const [x, z] of [[-c.L / 2 + 2.6, 1.2], [-c.L / 2 + 2.9, 1.4]]) c.lb.add(Unit.sphere, ctx.mats.tint('#5a3a22'), x, 0.11, z, 0, 0.22, 0.22, 0.22);
+  for (const [x, z] of [
+    [-c.L / 2 + 2.6, 1.2],
+    [-c.L / 2 + 2.9, 1.4],
+  ])
+    c.lb.add(Unit.sphere, ctx.mats.tint('#5a3a22'), x, 0.11, z, 0, 0.22, 0.22, 0.22);
 }
 
 function borderCurb(ctx: BuildContext, c: Court): void {
@@ -268,12 +405,13 @@ function buildPitch(ctx: BuildContext, a: MapArea, mats: { court: THREE.Material
   const c = courtFrame(ctx, ring);
   if (c.L < 3 || c.W < 2) return;
   const big = c.L > 70;
-  surface(ctx, c, sport === 'soccer' && !big ? 1 : CELL[sport] ?? 1, mats.court, 0.055);
+  surface(ctx, c, sport === 'soccer' && !big ? 1 : (CELL[sport] ?? 1), mats.court, 0.055);
   switch (sport) {
     case 'soccer':
     case 'futsal':
     case 'multi': {
-      const gw = big ? 7.32 : 3, gh = big ? 2.44 : 2;
+      const gw = big ? 7.32 : 3,
+        gh = big ? 2.44 : 2;
       for (const x of [-c.L / 2 + 0.3, c.L / 2 - 0.3]) goal(ctx, c, x, Math.min(gw, c.W * 0.5), gh, mats.net);
       if (sport === 'multi' && c.L > 16) for (const x of [-c.L / 2 + 1.2, c.L / 2 - 1.2]) hoop(ctx, c, x);
       if (!big && !a.c) fenceAround(ctx, c, 3, mats.fence);
@@ -336,7 +474,8 @@ function playground(ctx: BuildContext, x: number, z: number, i: number): void {
   const a = hash01(x, z) * Math.PI;
   const lb = new LocalBatch(ctx.batch, x, ctx.terrain.heightAt(x, z), z, a);
   const { mats } = ctx;
-  const red = mats.tint(['#c0392b', '#2e86c1', '#27ae60'][i % 3]), yellow = mats.tint('#f1c40f');
+  const red = mats.tint(['#c0392b', '#2e86c1', '#27ae60'][i % 3]),
+    yellow = mats.tint('#f1c40f');
   // Swing set (A-frames + beam), two seats on chains.
   for (const sx of [-1.6, 1.6]) for (const sz of [-0.7, 0.7]) lb.addMatrix(Unit.cyl, red, beamMatrix(sx, 0, sz - 1.5, sx, 2.3, -1.5, 0.08));
   lb.add(Unit.cyl, red, 0, 2.3, -1.5, 0, 0.09, 3.3, 0.09, 0, Math.PI / 2);

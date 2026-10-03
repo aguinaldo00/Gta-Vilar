@@ -11,7 +11,19 @@ import { fenceMaterial } from './Sports';
 /** Buildings drawn here instead of by the generic extruder. */
 export const CUSTOM_FACILITIES = /^(Polideportivo de Villarcayo)$/;
 
-const CAR_COLOURS = ['#e9e9e6', '#e9e9e6', '#b9bcbf', '#8c9095', '#2a2c30', '#1f2f4f', '#7a1d1d', '#c8b99a', '#3d4f3a', '#e9e9e6', '#5c6670'];
+const CAR_COLOURS = [
+  '#e9e9e6',
+  '#e9e9e6',
+  '#b9bcbf',
+  '#8c9095',
+  '#2a2c30',
+  '#1f2f4f',
+  '#7a1d1d',
+  '#c8b99a',
+  '#3d4f3a',
+  '#e9e9e6',
+  '#5c6670',
+];
 
 /** Parked car (batched boxes): body, cabin, glass, wheels. Local +Z = nose. */
 function parkedCar(ctx: BuildContext, x: number, z: number, rot: number, seed: number): void {
@@ -19,7 +31,8 @@ function parkedCar(ctx: BuildContext, x: number, z: number, rot: number, seed: n
   const { mats } = ctx;
   const paint = mats.tint(CAR_COLOURS[Math.floor(hash01(seed, 3.1) * CAR_COLOURS.length)]);
   const van = hash01(seed, 9.7) < 0.15;
-  const L = van ? 4.7 : 4.2 + hash01(seed) * 0.4, W = 1.78;
+  const L = van ? 4.7 : 4.2 + hash01(seed) * 0.4,
+    W = 1.78;
   lb.add(Unit.box, paint, 0, 0.62, 0, 0, W, 0.55, L);
   if (van) {
     lb.add(Unit.box, paint, 0, 1.35, -0.35, 0, W - 0.04, 0.95, L - 1.0);
@@ -47,8 +60,13 @@ function carParks(ctx: BuildContext): void {
     if (a.k !== 'parking') continue;
     const ring = toPts(a.o);
     const o = orientedBox(ring);
-    let rot = o.angle, L = o.w, W = o.d;
-    if (W > L) { rot += Math.PI / 2; [L, W] = [W, L]; }
+    let rot = o.angle,
+      L = o.w,
+      W = o.d;
+    if (W > L) {
+      rot += Math.PI / 2;
+      [L, W] = [W, L];
+    }
     if (L * W > 20000) continue;
     const lb = new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot);
     const inside = (lx: number, lz: number) => {
@@ -65,15 +83,25 @@ function carParks(ctx: BuildContext): void {
     const rows: { z: number; dir: number }[] = [];
     if (parallel) rows.push({ z: 0, dir: 0 });
     else if (W < 11) rows.push({ z: -W / 2 + 2.6, dir: 1 });
-    else for (let z = -W / 2 + 2.6; z + 2.5 <= W / 2; z += 16) {
-      rows.push({ z, dir: 1 });
-      if (z + 11 + 2.5 <= W / 2) rows.push({ z: z + 11, dir: -1 });
-    }
+    else
+      for (let z = -W / 2 + 2.6; z + 2.5 <= W / 2; z += 16) {
+        rows.push({ z, dir: 1 });
+        if (z + 11 + 2.5 <= W / 2) rows.push({ z: z + 11, dir: -1 });
+      }
     const pitch = parallel ? 6 : 2.5;
     for (const row of rows) {
       for (let x = -L / 2 + pitch / 2; x <= L / 2 - pitch / 2; x += pitch) {
-        const hw = parallel ? 2.9 : 1.2, hd = parallel ? 1.1 : 2.4;
-        if (![[x - hw, row.z - hd], [x + hw, row.z - hd], [x - hw, row.z + hd], [x + hw, row.z + hd]].every(([px, pz]) => inside(px, pz))) continue;
+        const hw = parallel ? 2.9 : 1.2,
+          hd = parallel ? 1.1 : 2.4;
+        if (
+          ![
+            [x - hw, row.z - hd],
+            [x + hw, row.z - hd],
+            [x - hw, row.z + hd],
+            [x + hw, row.z + hd],
+          ].every(([px, pz]) => inside(px, pz))
+        )
+          continue;
         if (!clearOfRoads(x, row.z)) continue;
         // Bay lines.
         if (parallel) lb.add(Unit.box, line, x - pitch / 2, 0.035, row.z, 0, 0.1, 0.02, 2.2);
@@ -81,7 +109,9 @@ function carParks(ctx: BuildContext): void {
         seed++;
         if (hash01(seed, 0.37) < (ctx.quality.detail ? 0.32 : 0.55)) continue;
         const [wx, wz] = lb.point(x + (hash01(seed, 5) - 0.5) * 0.3, row.z);
-        const heading = parallel ? rot + Math.PI / 2 + (hash01(seed, 7) < 0.5 ? 0 : Math.PI) : rot + (row.dir > 0 ? Math.PI : 0) + (hash01(seed, 2) - 0.5) * 0.08;
+        const heading = parallel
+          ? rot + Math.PI / 2 + (hash01(seed, 7) < 0.5 ? 0 : Math.PI)
+          : rot + (row.dir > 0 ? Math.PI : 0) + (hash01(seed, 2) - 0.5) * 0.08;
         parkedCar(ctx, wx, wz, heading, seed);
       }
     }
@@ -90,14 +120,21 @@ function carParks(ctx: BuildContext): void {
 
 /** Walls of a ring between y0 and y1 (outward faces), world-scaled UVs. */
 function ringWalls(ring: Pt[], y0: number, y1: number, tile: number): THREE.BufferGeometry {
-  const pos: number[] = [], uv: number[] = [];
+  const pos: number[] = [],
+    uv: number[] = [];
   let u = 0;
   const ccw = ring.reduce((s, p, i) => s + (ring[(i + 1) % ring.length][0] - p[0]) * (ring[(i + 1) % ring.length][1] + p[1]), 0) < 0;
   for (let i = 0; i < ring.length; i++) {
-    let a = ring[i], b = ring[(i + 1) % ring.length];
+    let a = ring[i],
+      b = ring[(i + 1) % ring.length];
     if (!ccw) [a, b] = [b, a];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const q = [[a[0], y0, a[1], u, y0], [b[0], y0, b[1], u + len, y0], [b[0], y1, b[1], u + len, y1], [a[0], y1, a[1], u, y1]];
+    const q = [
+      [a[0], y0, a[1], u, y0],
+      [b[0], y0, b[1], u + len, y0],
+      [b[0], y1, b[1], u + len, y1],
+      [a[0], y1, a[1], u, y1],
+    ];
     for (const k of [0, 2, 1, 0, 3, 2]) {
       pos.push(q[k][0], q[k][1], q[k][2]);
       uv.push(q[k][3] / tile, q[k][4] / tile);
@@ -112,7 +149,11 @@ function ringWalls(ring: Pt[], y0: number, y1: number, tile: number): THREE.Buff
 }
 
 /** Polideportivo: brick plinth, ribbed metal cladding, high clerestory, barrel-vault roof and its sign. */
-function polideportivo(ctx: BuildContext, sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry, signMat: THREE.Material): void {
+function polideportivo(
+  ctx: BuildContext,
+  sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry,
+  signMat: THREE.Material,
+): void {
   const b = MAP.buildings.find((x) => x.n === 'Polideportivo de Villarcayo');
   if (!b) return;
   const ring = toPts(b.o);
@@ -123,10 +164,17 @@ function polideportivo(ctx: BuildContext, sign: (text: string, bg: string, fg: s
   batch.addWorld(ringWalls(ring, 3.4, H - 1.6, 1.2), mats.tint('#c9ced1'));
   batch.addWorld(ringWalls(ring, H - 1.6, H, 2), mats.glass);
   const o = orientedBox(ring);
-  let rot = o.angle, L = o.w, W = o.d;
-  if (W > L) { rot += Math.PI / 2; [L, W] = [W, L]; }
+  let rot = o.angle,
+    L = o.w,
+    W = o.d;
+  if (W > L) {
+    rot += Math.PI / 2;
+    [L, W] = [W, L];
+  }
   const lb = new LocalBatch(batch, o.cx, 0, o.cz, rot);
-  const rise = Math.min(4, W * 0.15), R = (W * W) / 4 / (2 * rise) + rise / 2, th = 2 * Math.asin(W / 2 / R);
+  const rise = Math.min(4, W * 0.15),
+    R = (W * W) / 4 / (2 * rise) + rise / 2,
+    th = 2 * Math.asin(W / 2 / R);
   const vault = new THREE.CylinderGeometry(R, R, L + 0.8, 24, 1, true, -th / 2, th);
   vault.rotateX(-Math.PI / 2).rotateY(Math.PI / 2);
   lb.add(vault, mats.tint('#a9b1b6'), 0, H + rise - R, 0);
@@ -134,10 +182,16 @@ function polideportivo(ctx: BuildContext, sign: (text: string, bg: string, fg: s
   // Name over the entrance on the long side facing the street.
   const c = centroid(ring);
   const road = ctx.roads.nearest(c[0], c[1], 80, (r) => VEHICLE_ROADS.has(r.k));
-  const side = road && ((road.x - o.cx) * Math.sin(rot) + (road.z - o.cz) * Math.cos(rot)) < 0 ? -1 : 1;
+  const side = road && (road.x - o.cx) * Math.sin(rot) + (road.z - o.cz) * Math.cos(rot) < 0 ? -1 : 1;
   const sz = side * (W / 2 + 0.25);
-  lb.addMatrix(sign('POLIDEPORTIVO MUNICIPAL', '#1d4e89', '#ffffff'), signMat,
-    new THREE.Matrix4().makeRotationY(side > 0 ? 0 : Math.PI).setPosition(0, 4.6, sz).multiply(new THREE.Matrix4().makeScale(8, 1, 1)));
+  lb.addMatrix(
+    sign('POLIDEPORTIVO MUNICIPAL', '#1d4e89', '#ffffff'),
+    signMat,
+    new THREE.Matrix4()
+      .makeRotationY(side > 0 ? 0 : Math.PI)
+      .setPosition(0, 4.6, sz)
+      .multiply(new THREE.Matrix4().makeScale(8, 1, 1)),
+  );
   lb.add(Unit.box, mats.glass, 0, 1.3, sz, 0, 4, 2.6, 0.12);
   lb.add(Unit.box, mats.tint('#d9d5cc'), 0, 3.0, sz + side * 1.2, 0, 6, 0.3, 2.6);
   ctx.collision.addBox(o.cx, o.cz, L, W, { rot, top: H + rise });
@@ -152,16 +206,23 @@ function sportsFences(ctx: BuildContext): void {
     const ring = toPts(a.o);
     const h = 2.2;
     for (let i = 0; i < ring.length; i++) {
-      const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
+      const [ax, az] = ring[i],
+        [bx, bz] = ring[(i + 1) % ring.length];
       const len = Math.hypot(bx - ax, bz - az);
       const n = Math.max(1, Math.round(len / 3));
       for (let k = 0; k < n; k++) {
-        const t0 = k / n, t1 = (k + 1) / n;
-        const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
-        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+        const t0 = k / n,
+          t1 = (k + 1) / n;
+        const x0 = ax + (bx - ax) * t0,
+          z0 = az + (bz - az) * t0,
+          x1 = ax + (bx - ax) * t1,
+          z1 = az + (bz - az) * t1;
+        const mx = (x0 + x1) / 2,
+          mz = (z0 + z1) / 2;
         const r = ctx.roads.nearest(mx, mz, 3);
         if (r && r.d < 1) continue;
-        const seg = len / n, ang = Math.atan2(-(z1 - z0), x1 - x0);
+        const seg = len / n,
+          ang = Math.atan2(-(z1 - z0), x1 - x0);
         const g = new THREE.PlaneGeometry(1, 1);
         const uv = g.attributes.uv as THREE.BufferAttribute;
         for (let j = 0; j < uv.count; j++) uv.setXY(j, uv.getX(j) * seg * 2, uv.getY(j) * h * 2);
@@ -174,17 +235,26 @@ function sportsFences(ctx: BuildContext): void {
 }
 
 /** Estación de Servicio Rivera: canopy, pump islands, price totem. */
-function gasolinera(ctx: BuildContext, sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry, signMat: THREE.Material): void {
+function gasolinera(
+  ctx: BuildContext,
+  sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry,
+  signMat: THREE.Material,
+): void {
   const p = MAP.pois.find((x) => x.k === 'fuel');
   if (!p) return;
   const road = ctx.roads.nearest(p.x, p.z, 60, (r) => VEHICLE_ROADS.has(r.k));
   const rot = road ? Math.atan2(road.dx, road.dz) + Math.PI / 2 : 0; // local +Z towards the road side
   // Canopy on the forecourt: the first spot beside the road, clear of streets and buildings.
-  let cx = p.x, cz = p.z;
+  let cx = p.x,
+    cz = p.z;
   if (road) {
-    const nx0 = p.x - road.x, nz0 = p.z - road.z;
+    const nx0 = p.x - road.x,
+      nz0 = p.z - road.z;
     const d = Math.hypot(nx0, nz0) || 1;
-    const nx = nx0 / d, nz = nz0 / d, tx = -nz, tz = nx;
+    const nx = nx0 / d,
+      nz = nz0 / d,
+      tx = -nz,
+      tz = nx;
     const near = MAP.buildings.filter((b) => Math.hypot(b.o[0] - p.x, b.o[1] - p.z) < 80).map((b) => toPts(b.o));
     const free = (x: number, z: number) => {
       const r = ctx.roads.nearest(x, z, 3, (rd) => VEHICLE_ROADS.has(rd.k));
@@ -192,9 +262,21 @@ function gasolinera(ctx: BuildContext, sign: (text: string, bg: string, fg: stri
     };
     for (let off = road.road.w / 2 + 5.5; off < road.road.w / 2 + 30; off += 1.5) {
       for (const slide of [0, 6, -6, 12, -12]) {
-        const x = road.x + nx * off + tx * slide, z = road.z + nz * off + tz * slide;
-        const corners = [[-8, -4.5], [8, -4.5], [-8, 4.5], [8, 4.5], [0, 0]].map(([a, b]) => [x + tx * a + nx * b, z + tz * a + nz * b]);
-        if (corners.every(([qx, qz]) => free(qx, qz))) { cx = x; cz = z; off = Infinity; break; }
+        const x = road.x + nx * off + tx * slide,
+          z = road.z + nz * off + tz * slide;
+        const corners = [
+          [-8, -4.5],
+          [8, -4.5],
+          [-8, 4.5],
+          [8, 4.5],
+          [0, 0],
+        ].map(([a, b]) => [x + tx * a + nx * b, z + tz * a + nz * b]);
+        if (corners.every(([qx, qz]) => free(qx, qz))) {
+          cx = x;
+          cz = z;
+          off = Infinity;
+          break;
+        }
       }
     }
   }
@@ -221,7 +303,14 @@ function gasolinera(ctx: BuildContext, sign: (text: string, bg: string, fg: stri
   }
   // Price totem by the road.
   lb.add(Unit.box, white, -9.5, 3, 4, 0, 0.5, 6, 1.6);
-  lb.addMatrix(sign('RIVERA', '#c8102e', '#ffffff'), signMat, new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(-9.24, 5.3, 4).multiply(new THREE.Matrix4().makeScale(1.5, 0.19, 1)));
+  lb.addMatrix(
+    sign('RIVERA', '#c8102e', '#ffffff'),
+    signMat,
+    new THREE.Matrix4()
+      .makeRotationY(Math.PI / 2)
+      .setPosition(-9.24, 5.3, 4)
+      .multiply(new THREE.Matrix4().makeScale(1.5, 0.19, 1)),
+  );
   for (let k = 0; k < 3; k++) lb.add(Unit.box, mats.glow('#ffb52e'), -9.24, 4.3 - k * 0.6, 4, 0, 0.02, 0.4, 1.2);
   const [tx, tz] = lb.point(-9.5, 4);
   ctx.collision.addBox(tx, tz, 0.5, 1.6, { rot: face, top: 6 });
@@ -241,22 +330,41 @@ function bus(ctx: BuildContext, lb: LocalBatch, x: number, z: number, ry: number
   add(Unit.box, mats.glass, 0, 2.4, 0, 2.54, 1.0, 11.2);
   add(Unit.box, mats.glass, 0, 2.1, 6.01, 2.3, 1.6, 0.04);
   add(Unit.box, mats.tint('#1d4e89'), 0, 1.35, 0, 2.55, 0.35, 12.02);
-  for (const sz of [-3.8, 4]) for (const sx of [-1.15, 1.15]) {
-    lb.addMatrix(Unit.cyl, mats.tint('#1b1b1b'), o.matrix.clone().multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2).setPosition(sx, 0.5, sz).multiply(new THREE.Matrix4().makeScale(1, 0.3, 1))));
-  }
+  for (const sz of [-3.8, 4])
+    for (const sx of [-1.15, 1.15]) {
+      lb.addMatrix(
+        Unit.cyl,
+        mats.tint('#1b1b1b'),
+        o.matrix.clone().multiply(
+          new THREE.Matrix4()
+            .makeRotationZ(Math.PI / 2)
+            .setPosition(sx, 0.5, sz)
+            .multiply(new THREE.Matrix4().makeScale(1, 0.3, 1)),
+        ),
+      );
+    }
   const [wx, wz] = lb.point(x, z);
   ctx.collision.addBox(wx, wz, 2.5, 12, { rot: lb.rot + ry, top: 3.4 });
 }
 
 /** Estación de Autobuses: platform canopy, benches, bays and a coach; shelters at the other stops. */
-function busStations(ctx: BuildContext, sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry, signMat: THREE.Material): void {
+function busStations(
+  ctx: BuildContext,
+  sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry,
+  signMat: THREE.Material,
+): void {
   const { mats } = ctx;
   for (const a of MAP.areas) {
     if (a.k !== 'busstation') continue;
     const ring = toPts(a.o);
     const o = orientedBox(ring);
-    let rot = o.angle, L = o.w, W = o.d;
-    if (W > L) { rot += Math.PI / 2; [L, W] = [W, L]; }
+    let rot = o.angle,
+      L = o.w,
+      W = o.d;
+    if (W > L) {
+      rot += Math.PI / 2;
+      [L, W] = [W, L];
+    }
     const lb = new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot);
     const cl = Math.min(L - 2, 30);
     const z0 = -W / 2 + 2.5;
@@ -266,7 +374,11 @@ function busStations(ctx: BuildContext, sign: (text: string, bg: string, fg: str
       lb.add(Unit.box, mats.tint('#3a4a5a'), x, 1.7, z0 - 1.6, 0, 0.18, 3.4, 0.18);
       lb.add(Unit.box, mats.wood, x + 2.5, 0.65, z0 - 1.2, 0, 1.8, 0.08, 0.45);
     }
-    lb.addMatrix(sign('ESTACIÓN DE AUTOBUSES', '#1d4e89', '#ffffff'), signMat, new THREE.Matrix4().makeScale(6, 0.75, 1).setPosition(0, 3.95, z0 + 2.31));
+    lb.addMatrix(
+      sign('ESTACIÓN DE AUTOBUSES', '#1d4e89', '#ffffff'),
+      signMat,
+      new THREE.Matrix4().makeScale(6, 0.75, 1).setPosition(0, 3.95, z0 + 2.31),
+    );
     lb.add(Unit.box, mats.tint('#1d4e89'), 0, 3.95, z0 + 2.28, 0, 6.1, 0.8, 0.04);
     for (let x = -cl / 2; x <= cl / 2; x += 4) lb.add(Unit.box, mats.tint('#e5b31a'), x, 0.035, z0 + 5, 0, 0.12, 0.02, 6);
     if (W > 12) bus(ctx, lb, -cl / 4, z0 + 5.2, Math.PI / 2);
@@ -291,11 +403,14 @@ function busStations(ctx: BuildContext, sign: (text: string, bg: string, fg: str
  * station, the bus station, car parks full of parked cars and the fences
  * of the sports grounds.
  */
-export function buildFacilities(ctx: BuildContext, sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry, signMat: THREE.Material): void {
+export function buildFacilities(
+  ctx: BuildContext,
+  sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry,
+  signMat: THREE.Material,
+): void {
   polideportivo(ctx, sign, signMat);
   gasolinera(ctx, sign, signMat);
   busStations(ctx, sign, signMat);
   carParks(ctx);
   sportsFences(ctx);
 }
-

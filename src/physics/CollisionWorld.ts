@@ -71,24 +71,52 @@ export class CollisionWorld {
     const ex = Math.abs(cos) * hx + Math.abs(sin) * hz;
     const ez = Math.abs(sin) * hx + Math.abs(cos) * hz;
     return this.insert({
-      x, z, hx, hz, r: 0, cos, sin, circle: false,
-      bottom: o.bottom ?? -10, top: o.top, mask: o.mask ?? Layer.Solid,
-      minX: x - ex, maxX: x + ex, minZ: z - ez, maxZ: z + ez, stamp: 0,
+      x,
+      z,
+      hx,
+      hz,
+      r: 0,
+      cos,
+      sin,
+      circle: false,
+      bottom: o.bottom ?? -10,
+      top: o.top,
+      mask: o.mask ?? Layer.Solid,
+      minX: x - ex,
+      maxX: x + ex,
+      minZ: z - ez,
+      maxZ: z + ez,
+      stamp: 0,
     });
   }
 
   addCircle(x: number, z: number, r: number, o: ColliderOptions): Collider {
     return this.insert({
-      x, z, hx: r, hz: r, r, cos: 1, sin: 0, circle: true,
-      bottom: o.bottom ?? -10, top: o.top, mask: o.mask ?? Layer.Bodies,
-      minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r, stamp: 0,
+      x,
+      z,
+      hx: r,
+      hz: r,
+      r,
+      cos: 1,
+      sin: 0,
+      circle: true,
+      bottom: o.bottom ?? -10,
+      top: o.top,
+      mask: o.mask ?? Layer.Bodies,
+      minX: x - r,
+      maxX: x + r,
+      minZ: z - r,
+      maxZ: z + r,
+      stamp: 0,
     });
   }
 
   private insert(c: Collider): Collider {
     this.colliders.push(c);
-    const ix0 = Math.floor(c.minX / CELL), ix1 = Math.floor(c.maxX / CELL);
-    const iz0 = Math.floor(c.minZ / CELL), iz1 = Math.floor(c.maxZ / CELL);
+    const ix0 = Math.floor(c.minX / CELL),
+      ix1 = Math.floor(c.maxX / CELL);
+    const iz0 = Math.floor(c.minZ / CELL),
+      iz1 = Math.floor(c.maxZ / CELL);
     for (let ix = ix0; ix <= ix1; ix++) {
       for (let iz = iz0; iz <= iz1; iz++) {
         const key = cellKey(ix, iz);
@@ -103,8 +131,10 @@ export class CollisionWorld {
   query(minX: number, minZ: number, maxX: number, maxZ: number, out: Collider[]): Collider[] {
     out.length = 0;
     const s = ++this.stamp;
-    const ix0 = Math.floor(minX / CELL), ix1 = Math.floor(maxX / CELL);
-    const iz0 = Math.floor(minZ / CELL), iz1 = Math.floor(maxZ / CELL);
+    const ix0 = Math.floor(minX / CELL),
+      ix1 = Math.floor(maxX / CELL);
+    const iz0 = Math.floor(minZ / CELL),
+      iz1 = Math.floor(maxZ / CELL);
     for (let ix = ix0; ix <= ix1; ix++) {
       for (let iz = iz0; iz <= iz1; iz++) {
         const list = this.grid.get(cellKey(ix, iz));
@@ -180,8 +210,14 @@ export class CollisionWorld {
    * ignored so bodies can walk onto curbs, steps and platforms.
    */
   resolveCircle(
-    x: number, z: number, r: number, mask: number,
-    feetY: number, height: number, step: number, contacts?: Contact[],
+    x: number,
+    z: number,
+    r: number,
+    mask: number,
+    feetY: number,
+    height: number,
+    step: number,
+    contacts?: Contact[],
   ): { x: number; z: number } {
     const t = this.tmp;
     for (let it = 0; it < 4; it++) {
@@ -213,11 +249,7 @@ export class CollisionWorld {
   }
 
   /** Distance along a normalized ray to the first collider hit, or `maxT`. */
-  raycast(
-    ox: number, oy: number, oz: number,
-    dx: number, dy: number, dz: number,
-    maxT: number, mask: number,
-  ): number {
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, mask: number): number {
     const ex = ox + dx * maxT;
     const ez = oz + dz * maxT;
     const list = this.query(Math.min(ox, ex), Math.min(oz, ez), Math.max(ox, ex), Math.max(oz, ez), this.found);

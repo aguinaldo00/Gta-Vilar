@@ -26,9 +26,19 @@ const EARTH_R = 6371008.8;
 
 // ---------------------------------------------------------------- parsing
 
-interface OsmNode { lat: number; lon: number; tags: Tags | null }
-interface OsmWay { nds: string[]; tags: Tags }
-interface OsmRel { members: { type: string; ref: string; role: string }[]; tags: Tags }
+interface OsmNode {
+  lat: number;
+  lon: number;
+  tags: Tags | null;
+}
+interface OsmWay {
+  nds: string[];
+  tags: Tags;
+}
+interface OsmRel {
+  members: { type: string; ref: string; role: string }[];
+  tags: Tags;
+}
 
 const xml = readFileSync(IN, 'utf8');
 const nodes = new Map<string, OsmNode>();
@@ -42,7 +52,12 @@ function attrs(s: string): Tags {
 }
 
 function decode(s: string): string {
-  return s.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }
 
 function childTags(body: string): Tags {
@@ -87,7 +102,10 @@ const plazaWay = [...ways.values()].find((w) => w.tags.place === 'square' && w.t
 const townhall = [...nodes.values()].find((n) => n.tags?.amenity === 'townhall');
 let lat0: number, lon0: number;
 if (plazaWay) {
-  const ring = plazaWay.nds.slice(0, -1).map((id) => nodes.get(id)!).filter(Boolean);
+  const ring = plazaWay.nds
+    .slice(0, -1)
+    .map((id) => nodes.get(id)!)
+    .filter(Boolean);
   lat0 = ring.reduce((s, n) => s + n.lat, 0) / ring.length;
   lon0 = ring.reduce((s, n) => s + n.lon, 0) / ring.length;
 } else if (townhall) {
@@ -124,7 +142,8 @@ function signedArea(r: Ring): number {
 }
 
 function centroid(r: Ring): Pt {
-  let x = 0, z = 0;
+  let x = 0,
+    z = 0;
   for (const p of r) {
     x += p[0];
     z += p[1];
@@ -135,14 +154,16 @@ function centroid(r: Ring): Pt {
 function pointInRing(p: Pt, r: Ring): boolean {
   let inside = false;
   for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-    const [xi, zi] = r[i], [xj, zj] = r[j];
+    const [xi, zi] = r[i],
+      [xj, zj] = r[j];
     if (zi > p[1] !== zj > p[1] && p[0] < ((xj - xi) * (p[1] - zi)) / (zj - zi) + xi) inside = !inside;
   }
   return inside;
 }
 
 function segDist(p: Pt, a: Pt, b: Pt): number {
-  const dx = b[0] - a[0], dz = b[1] - a[1];
+  const dx = b[0] - a[0],
+    dz = b[1] - a[1];
   const l2 = dx * dx + dz * dz || 1;
   const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / l2));
   return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dz);
@@ -156,7 +177,8 @@ function simplify(pts: Pt[], tol: number): Pt[] {
   const stack: [number, number][] = [[0, pts.length - 1]];
   while (stack.length) {
     const [a, b] = stack.pop()!;
-    let best = -1, bestD = tol;
+    let best = -1,
+      bestD = tol;
     for (let i = a + 1; i < b; i++) {
       const d = segDist(pts[i], pts[a], pts[b]);
       if (d > bestD) {
@@ -184,16 +206,16 @@ function cleanRing(pts: Pt[], tol: number): Ring | null {
 
 /** Sutherland–Hodgman clip of a ring against the bounds rectangle. */
 function clipRing(r: Ring): Ring | null {
-  const edges: ((p: Pt) => number)[] = [
-    (p) => p[0] - B.minX, (p) => B.maxX - p[0], (p) => p[1] - B.minZ, (p) => B.maxZ - p[1],
-  ];
+  const edges: ((p: Pt) => number)[] = [(p) => p[0] - B.minX, (p) => B.maxX - p[0], (p) => p[1] - B.minZ, (p) => B.maxZ - p[1]];
   let out = r;
   for (const f of edges) {
     const input = out;
     out = [];
     for (let i = 0; i < input.length; i++) {
-      const cur = input[i], prev = input[(i + input.length - 1) % input.length];
-      const fc = f(cur), fp = f(prev);
+      const cur = input[i],
+        prev = input[(i + input.length - 1) % input.length];
+      const fc = f(cur),
+        fp = f(prev);
       if (fc >= 0) {
         if (fp < 0) out.push(lerpPt(prev, cur, fp / (fp - fc)));
         out.push(cur);
@@ -220,7 +242,8 @@ function clipLine(pts: Pt[]): Pt[][] {
       const prevIn = inB(prev);
       if (inside !== prevIn) {
         // Binary search for the boundary crossing.
-        let a = prev, b = p;
+        let a = prev,
+          b = p;
         for (let k = 0; k < 20; k++) {
           const m = lerpPt(a, b, 0.5);
           if (inB(m) === prevIn) a = m;
@@ -263,7 +286,12 @@ const flat = (r: Pt[]) => r.flatMap(([x, z]) => [q(x), q(z)]);
 
 // ---------------------------------------------------------- polygon source
 
-interface Poly { id: string; tags: Tags; outer: Ring; holes: Ring[] }
+interface Poly {
+  id: string;
+  tags: Tags;
+  outer: Ring;
+  holes: Ring[];
+}
 
 /** Every closed way and multipolygon relation as polygons (clipped to bounds). */
 function collectPolygons(): Poly[] {
@@ -282,7 +310,9 @@ function collectPolygons(): Poly[] {
     let tags = r.tags;
     // Old-style multipolygons keep their tags on the outer way.
     if (Object.keys(tags).length <= 1 && outerIds.length === 1) tags = ways.get(outerIds[0])?.tags ?? tags;
-    const holes = assembleRings(innerIds).map((h) => cleanRing(h, 0.25)).filter((h): h is Ring => !!h);
+    const holes = assembleRings(innerIds)
+      .map((h) => cleanRing(h, 0.25))
+      .filter((h): h is Ring => !!h);
     for (const o of assembleRings(outerIds)) {
       const ring = cleanRing(o, 0.25);
       const clipped = ring && clipRing(ring);
@@ -313,7 +343,14 @@ for (const r of rels.values()) {
  * listed in `hid` so the game does not build invisible walls.
  */
 interface BuildingOut {
-  o: number[]; h?: number[][]; lv?: number; mlv?: number; ht?: number; t: string; n?: string; mat?: string;
+  o: number[];
+  h?: number[][];
+  lv?: number;
+  mlv?: number;
+  ht?: number;
+  t: string;
+  n?: string;
+  mat?: string;
   /** Outline whose volume is described by parts. */ hp?: 1;
   /** This is a part. */ part?: 1;
   /** Hidden wall indices (edge i joins vertex i and i+1). */ hid?: number[];
@@ -331,10 +368,41 @@ function buildingType(t: Tags): string {
   if (b === 'roof' || b === 'carport' || b === 'grandstand' || t.location === 'roof') return 'canopy';
   if (b === 'ruins') return 'ruins';
   if (b === 'greenhouse') return 'greenhouse';
-  if (['industrial', 'warehouse', 'factory', 'manufacture', 'barn', 'farm_auxiliary', 'hangar', 'storage_tank', 'silo', 'livestock', 'farm'].includes(b)) return 'industrial';
+  if (
+    [
+      'industrial',
+      'warehouse',
+      'factory',
+      'manufacture',
+      'barn',
+      'farm_auxiliary',
+      'hangar',
+      'storage_tank',
+      'silo',
+      'livestock',
+      'farm',
+    ].includes(b)
+  )
+    return 'industrial';
   if (['garage', 'garages', 'shed', 'hut', 'kiosk', 'cabin', 'toilets', 'service', 'transformer_tower'].includes(b)) return 'small';
   if (b === 'tower') return 'tower';
-  if (['apartments', 'retail', 'commercial', 'office', 'public', 'government', 'civic', 'school', 'hospital', 'sports_hall', 'supermarket', 'hotel'].includes(b)) return 'block';
+  if (
+    [
+      'apartments',
+      'retail',
+      'commercial',
+      'office',
+      'public',
+      'government',
+      'civic',
+      'school',
+      'hospital',
+      'sports_hall',
+      'supermarket',
+      'hotel',
+    ].includes(b)
+  )
+    return 'block';
   return 'house';
 }
 
@@ -349,7 +417,9 @@ for (const p of polygons) {
   if (!t.building || t.building === 'no' || t['building:part'] || t.leisure === 'bandstand') continue;
   if (p.id.startsWith('w') && relOuterWays.has(p.id) && rels.size) {
     // Prefer the relation version (with courtyards) when it exists and is itself a building.
-    const owner = [...rels.entries()].find(([, r]) => r.tags.type === 'multipolygon' && r.members.some((m) => `w${m.ref}` === p.id && m.role !== 'inner'));
+    const owner = [...rels.entries()].find(
+      ([, r]) => r.tags.type === 'multipolygon' && r.members.some((m) => `w${m.ref}` === p.id && m.role !== 'inner'),
+    );
     if (owner && (owner[1].tags.building || Object.keys(owner[1].tags).length <= 1)) continue;
   }
   const area = Math.abs(signedArea(p.outer));
@@ -366,12 +436,18 @@ for (const p of polygons) {
   if (t['building:material']) b.mat = t['building:material'];
   buildings.push(b);
   buildingCentroids.push(centroid(p.outer));
-  const xs = p.outer.map((q) => q[0]), zs = p.outer.map((q) => q[1]);
+  const xs = p.outer.map((q) => q[0]),
+    zs = p.outer.map((q) => q[1]);
   outlines.push({ b, ring: p.outer, bb: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)] });
 }
 
 // Parts: exact cadastral geometry (no simplification) so shared walls can be matched by node id.
-interface PartTmp { out: BuildingOut; ids: string[]; bottom: number; top: number }
+interface PartTmp {
+  out: BuildingOut;
+  ids: string[];
+  bottom: number;
+  top: number;
+}
 const partsTmp: PartTmp[] = [];
 const CUSTOM_MODELS = new Set(['townhall', 'torre']);
 for (const [, w] of ways) {
@@ -418,23 +494,58 @@ for (const p of partsTmp) {
 // ---------------------------------------------------------------- areas
 
 const AREA_KIND: [string, string, string][] = [
-  ['natural', 'water', 'water'], ['leisure', 'swimming_area', 'water'], ['leisure', 'swimming_pool', 'pool'],
-  ['amenity', 'parking', 'parking'], ['highway', 'pedestrian', 'pedestrian'], ['place', 'square', 'pedestrian'],
-  ['leisure', 'pitch', 'pitch'], ['leisure', 'playground', 'playground'], ['leisure', 'track', 'track'],
-  ['leisure', 'park', 'park'], ['leisure', 'garden', 'garden'], ['leisure', 'sports_centre', 'sports'],
-  ['tourism', 'camp_site', 'camp'], ['amenity', 'marketplace', 'pedestrian'], ['amenity', 'school', 'school'],
-  ['landuse', 'cemetery', 'cemetery'], ['landuse', 'village_green', 'park'], ['landuse', 'recreation_ground', 'park'],
-  ['landuse', 'grass', 'grass'], ['landuse', 'meadow', 'meadow'], ['natural', 'grassland', 'meadow'],
-  ['landuse', 'farmland', 'farmland'], ['landuse', 'farmyard', 'farmyard'], ['landuse', 'orchard', 'orchard'],
-  ['landuse', 'allotments', 'allotments'], ['landuse', 'forest', 'forest'], ['natural', 'wood', 'forest'],
-  ['landuse', 'logging', 'forest'], ['natural', 'scrub', 'scrub'], ['natural', 'beach', 'beach'],
-  ['landuse', 'residential', 'residential'], ['landuse', 'industrial', 'industrial'], ['landuse', 'commercial', 'industrial'],
-  ['landuse', 'retail', 'industrial'], ['landuse', 'brownfield', 'brownfield'], ['landuse', 'construction', 'brownfield'],
-  ['landuse', 'greenfield', 'meadow'], ['landuse', 'education', 'school'], ['leisure', 'festival_grounds', 'park'],
-  ['amenity', 'bus_station', 'busstation'], ['amenity', 'fuel', 'fuel'],
+  ['natural', 'water', 'water'],
+  ['leisure', 'swimming_area', 'water'],
+  ['leisure', 'swimming_pool', 'pool'],
+  ['amenity', 'parking', 'parking'],
+  ['highway', 'pedestrian', 'pedestrian'],
+  ['place', 'square', 'pedestrian'],
+  ['leisure', 'pitch', 'pitch'],
+  ['leisure', 'playground', 'playground'],
+  ['leisure', 'track', 'track'],
+  ['leisure', 'park', 'park'],
+  ['leisure', 'garden', 'garden'],
+  ['leisure', 'sports_centre', 'sports'],
+  ['tourism', 'camp_site', 'camp'],
+  ['amenity', 'marketplace', 'pedestrian'],
+  ['amenity', 'school', 'school'],
+  ['landuse', 'cemetery', 'cemetery'],
+  ['landuse', 'village_green', 'park'],
+  ['landuse', 'recreation_ground', 'park'],
+  ['landuse', 'grass', 'grass'],
+  ['landuse', 'meadow', 'meadow'],
+  ['natural', 'grassland', 'meadow'],
+  ['landuse', 'farmland', 'farmland'],
+  ['landuse', 'farmyard', 'farmyard'],
+  ['landuse', 'orchard', 'orchard'],
+  ['landuse', 'allotments', 'allotments'],
+  ['landuse', 'forest', 'forest'],
+  ['natural', 'wood', 'forest'],
+  ['landuse', 'logging', 'forest'],
+  ['natural', 'scrub', 'scrub'],
+  ['natural', 'beach', 'beach'],
+  ['landuse', 'residential', 'residential'],
+  ['landuse', 'industrial', 'industrial'],
+  ['landuse', 'commercial', 'industrial'],
+  ['landuse', 'retail', 'industrial'],
+  ['landuse', 'brownfield', 'brownfield'],
+  ['landuse', 'construction', 'brownfield'],
+  ['landuse', 'greenfield', 'meadow'],
+  ['landuse', 'education', 'school'],
+  ['leisure', 'festival_grounds', 'park'],
+  ['amenity', 'bus_station', 'busstation'],
+  ['amenity', 'fuel', 'fuel'],
 ];
 
-interface AreaOut { k: string; o: number[]; h?: number[][]; n?: string; s?: string; c?: 1; l?: 'n' | 'b' }
+interface AreaOut {
+  k: string;
+  o: number[];
+  h?: number[][];
+  n?: string;
+  s?: string;
+  c?: 1;
+  l?: 'n' | 'b';
+}
 const areas: AreaOut[] = [];
 for (const p of polygons) {
   const t = p.tags;
@@ -465,10 +576,34 @@ for (const p of polygons) {
 // ---------------------------------------------------------------- roads
 
 const ROAD_WIDTH: Record<string, number> = {
-  motorway: 10, trunk: 9, primary: 7.5, secondary: 7, tertiary: 6.5, unclassified: 5, residential: 5.5,
-  living_street: 4.5, service: 3.5, track: 3, pedestrian: 4, footway: 2, path: 1.5, cycleway: 2.5, bridleway: 2, steps: 2,
+  motorway: 10,
+  trunk: 9,
+  primary: 7.5,
+  secondary: 7,
+  tertiary: 6.5,
+  unclassified: 5,
+  residential: 5.5,
+  living_street: 4.5,
+  service: 3.5,
+  track: 3,
+  pedestrian: 4,
+  footway: 2,
+  path: 1.5,
+  cycleway: 2.5,
+  bridleway: 2,
+  steps: 2,
 };
-const VEHICLE = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service']);
+const VEHICLE = new Set([
+  'motorway',
+  'trunk',
+  'primary',
+  'secondary',
+  'tertiary',
+  'unclassified',
+  'residential',
+  'living_street',
+  'service',
+]);
 const URBAN = new Set(['primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street']);
 
 // Vía Verde (old Santander–Mediterráneo railway) members.
@@ -493,14 +628,24 @@ for (const c of buildingCentroids) {
 }
 function buildingsNear(p: Pt, r: number): number {
   let n = 0;
-  const cx = Math.floor(p[0] / 50), cz = Math.floor(p[1] / 50);
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-    for (const c of bGrid.get(`${cx + i},${cz + j}`) ?? []) if (Math.hypot(c[0] - p[0], c[1] - p[1]) < r) n++;
-  }
+  const cx = Math.floor(p[0] / 50),
+    cz = Math.floor(p[1] / 50);
+  for (let i = -1; i <= 1; i++)
+    for (let j = -1; j <= 1; j++) {
+      for (const c of bGrid.get(`${cx + i},${cz + j}`) ?? []) if (Math.hypot(c[0] - p[0], c[1] - p[1]) < r) n++;
+    }
   return n;
 }
 
-interface RoadOut { p: number[]; k: string; w: number; n?: string; b?: 1; sw?: number; j?: number[] }
+interface RoadOut {
+  p: number[];
+  k: string;
+  w: number;
+  n?: string;
+  b?: 1;
+  sw?: number;
+  j?: number[];
+}
 const roads: RoadOut[] = [];
 const rails: { p: number[] }[] = [];
 for (const [id, w] of ways) {
@@ -511,7 +656,8 @@ for (const [id, w] of ways) {
   }
   const hw = t.highway;
   if (!hw || !ROAD_WIDTH[hw] || t.area === 'yes' || t.tunnel === 'yes' || t.tunnel === 'culvert') continue;
-  if (hw === 'pedestrian' && w.nds[0] === w.nds[w.nds.length - 1] && polygons.some((p) => p.id === `w${id}` && p.tags.area === 'yes')) continue;
+  if (hw === 'pedestrian' && w.nds[0] === w.nds[w.nds.length - 1] && polygons.some((p) => p.id === `w${id}` && p.tags.area === 'yes'))
+    continue;
   const kind = isVia ? 'viaverde' : hw;
   let width = isVia ? 4 : ROAD_WIDTH[hw];
   const tw = parseFloat(t.width);
@@ -563,8 +709,10 @@ for (const [id, w] of ways) {
     continue;
   }
   for (const part of clipLine(pts)) {
-    if (t.waterway === 'river') rivers.push({ p: flat(simplify(part, 0.5)), w: parseFloat(t.width) || 16, ...(t.name ? { n: t.name } : {}) });
-    else if (['stream', 'canal', 'ditch', 'drain'].includes(t.waterway)) streams.push({ p: flat(simplify(part, 0.5)), w: t.waterway === 'canal' ? 4 : 2 });
+    if (t.waterway === 'river')
+      rivers.push({ p: flat(simplify(part, 0.5)), w: parseFloat(t.width) || 16, ...(t.name ? { n: t.name } : {}) });
+    else if (['stream', 'canal', 'ditch', 'drain'].includes(t.waterway))
+      streams.push({ p: flat(simplify(part, 0.5)), w: t.waterway === 'canal' ? 4 : 2 });
   }
 }
 
@@ -582,7 +730,8 @@ function roadAngleAt(nid: string): number | null {
     if (!w.tags.highway || !VEHICLE.has(w.tags.highway)) continue;
     const i = w.nds.indexOf(nid);
     if (i < 0) continue;
-    const a = nodePt(w.nds[Math.max(0, i - 1)]), b = nodePt(w.nds[Math.min(w.nds.length - 1, i + 1)]);
+    const a = nodePt(w.nds[Math.max(0, i - 1)]),
+      b = nodePt(w.nds[Math.min(w.nds.length - 1, i + 1)]);
     if (!a || !b) continue;
     return Math.atan2(b[0] - a[0], b[1] - a[1]);
   }
@@ -604,7 +753,8 @@ for (const [id, n] of nodes) {
   }
   if (t.amenity === 'townhall') pois.push({ k: 'townhall', n: t.name, x: q(p[0]), z: q(p[1]) });
   if (t.historic === 'locomotive') pois.push({ k: 'locomotive', n: t.name, x: q(p[0]), z: q(p[1]) });
-  if (t.man_made === 'tower' && t['tower:type'] === 'bell_tower') pois.push({ k: 'belltower', x: q(p[0]), z: q(p[1]), ht: parseFloat(t.height) || 0 });
+  if (t.man_made === 'tower' && t['tower:type'] === 'bell_tower')
+    pois.push({ k: 'belltower', x: q(p[0]), z: q(p[1]), ht: parseFloat(t.height) || 0 });
   if (t.historic === 'memorial' && t.memorial === 'bench') pois.push({ k: 'statue', n: t.name, x: q(p[0]), z: q(p[1]) });
   if (t.amenity === 'fuel') pois.push({ k: 'fuel', n: t.name, x: q(p[0]), z: q(p[1]) });
   if (t.highway === 'bus_stop') pois.push({ k: 'bus_stop', n: t.name, x: q(p[0]), z: q(p[1]) });
@@ -640,26 +790,114 @@ for (const p of polygons) {
  * (shop window, awning and a sign with the real name).
  */
 const SHOP_LABEL: Record<string, string> = {
-  hairdresser: 'Peluquería', butcher: 'Carnicería', car_repair: 'Taller', clothes: 'Moda', variety_store: 'Bazar',
-  supermarket: 'Supermercado', seafood: 'Pescadería', greengrocer: 'Frutería', bakery: 'Panadería', tobacco: 'Estanco',
-  stationery: 'Papelería', shoes: 'Calzados', mobile_phone: 'Telefonía', massage: 'Masajes', lottery: 'Loterías',
-  hardware: 'Ferretería', electronics: 'Electrónica', convenience: 'Alimentación', confectionery: 'Confitería',
-  beauty: 'Estética', pastry: 'Pastelería', optician: 'Óptica', laundry: 'Lavandería', jewelry: 'Joyería',
-  florist: 'Floristería', deli: 'Charcutería', furniture: 'Muebles', pet: 'Mascotas', photo: 'Fotografía',
-  gift: 'Regalos', herbalist: 'Herbolario', haberdashery: 'Mercería', dry_cleaning: 'Tintorería', computer: 'Informática',
-  chemist: 'Droguería', kiosk: 'Kiosco', food: 'Alimentación', copyshop: 'Copistería', garden_centre: 'Jardinería',
-  bar: 'Bar', pub: 'Pub', restaurant: 'Restaurante', cafe: 'Cafetería', fast_food: 'Comida rápida', bank: 'Banco',
-  pharmacy: 'Farmacia', post_office: 'Correos', library: 'Biblioteca', cinema: 'Cine', theatre: 'Teatro',
-  police: 'Guardia Civil', courthouse: 'Juzgados', veterinary: 'Veterinario', dentist: 'Clínica dental', clinic: 'Centro de salud',
-  nightclub: 'Discoteca', community_centre: 'Centro cívico', social_facility: 'Residencia', school: 'Colegio',
-  music_school: 'Escuela de música', language_school: 'Academia', driving_school: 'Autoescuela', arts_centre: 'Casa de cultura',
-  fuel: 'Gasolinera', conference_centre: 'Centro de congresos', events_venue: 'Salón de eventos', hotel: 'Hotel', hostel: 'Albergue', guest_house: 'Casa rural', fitness_centre: 'Gimnasio',
-  physiotherapist: 'Fisioterapia', lawyer: 'Abogados', insurance: 'Seguros', estate_agent: 'Inmobiliaria',
-  architect: 'Arquitectura', government: 'Oficina', notary: 'Notaría', association: 'Asociación', bus_station: 'Autobuses',
+  hairdresser: 'Peluquería',
+  butcher: 'Carnicería',
+  car_repair: 'Taller',
+  clothes: 'Moda',
+  variety_store: 'Bazar',
+  supermarket: 'Supermercado',
+  seafood: 'Pescadería',
+  greengrocer: 'Frutería',
+  bakery: 'Panadería',
+  tobacco: 'Estanco',
+  stationery: 'Papelería',
+  shoes: 'Calzados',
+  mobile_phone: 'Telefonía',
+  massage: 'Masajes',
+  lottery: 'Loterías',
+  hardware: 'Ferretería',
+  electronics: 'Electrónica',
+  convenience: 'Alimentación',
+  confectionery: 'Confitería',
+  beauty: 'Estética',
+  pastry: 'Pastelería',
+  optician: 'Óptica',
+  laundry: 'Lavandería',
+  jewelry: 'Joyería',
+  florist: 'Floristería',
+  deli: 'Charcutería',
+  furniture: 'Muebles',
+  pet: 'Mascotas',
+  photo: 'Fotografía',
+  gift: 'Regalos',
+  herbalist: 'Herbolario',
+  haberdashery: 'Mercería',
+  dry_cleaning: 'Tintorería',
+  computer: 'Informática',
+  chemist: 'Droguería',
+  kiosk: 'Kiosco',
+  food: 'Alimentación',
+  copyshop: 'Copistería',
+  garden_centre: 'Jardinería',
+  bar: 'Bar',
+  pub: 'Pub',
+  restaurant: 'Restaurante',
+  cafe: 'Cafetería',
+  fast_food: 'Comida rápida',
+  bank: 'Banco',
+  pharmacy: 'Farmacia',
+  post_office: 'Correos',
+  library: 'Biblioteca',
+  cinema: 'Cine',
+  theatre: 'Teatro',
+  police: 'Guardia Civil',
+  courthouse: 'Juzgados',
+  veterinary: 'Veterinario',
+  dentist: 'Clínica dental',
+  clinic: 'Centro de salud',
+  nightclub: 'Discoteca',
+  community_centre: 'Centro cívico',
+  social_facility: 'Residencia',
+  school: 'Colegio',
+  music_school: 'Escuela de música',
+  language_school: 'Academia',
+  driving_school: 'Autoescuela',
+  arts_centre: 'Casa de cultura',
+  fuel: 'Gasolinera',
+  conference_centre: 'Centro de congresos',
+  events_venue: 'Salón de eventos',
+  hotel: 'Hotel',
+  hostel: 'Albergue',
+  guest_house: 'Casa rural',
+  fitness_centre: 'Gimnasio',
+  physiotherapist: 'Fisioterapia',
+  lawyer: 'Abogados',
+  insurance: 'Seguros',
+  estate_agent: 'Inmobiliaria',
+  architect: 'Arquitectura',
+  government: 'Oficina',
+  notary: 'Notaría',
+  association: 'Asociación',
+  bus_station: 'Autobuses',
 };
-const SHOP_AMENITY = new Set(['bar', 'pub', 'restaurant', 'cafe', 'fast_food', 'bank', 'pharmacy', 'post_office', 'library', 'cinema',
-  'theatre', 'police', 'courthouse', 'veterinary', 'dentist', 'clinic', 'nightclub', 'community_centre', 'social_facility',
-  'music_school', 'language_school', 'driving_school', 'arts_centre', 'events_venue', 'conference_centre', 'bus_station']);
+const SHOP_AMENITY = new Set([
+  'bar',
+  'pub',
+  'restaurant',
+  'cafe',
+  'fast_food',
+  'bank',
+  'pharmacy',
+  'post_office',
+  'library',
+  'cinema',
+  'theatre',
+  'police',
+  'courthouse',
+  'veterinary',
+  'dentist',
+  'clinic',
+  'nightclub',
+  'community_centre',
+  'social_facility',
+  'music_school',
+  'language_school',
+  'driving_school',
+  'arts_centre',
+  'events_venue',
+  'conference_centre',
+  'bus_station',
+]);
 
 /** Category used by the game for colours and dressing. */
 function shopCategory(tags: Tags): { c: string; label: string } | null {
@@ -670,15 +908,43 @@ function shopCategory(tags: Tags): { c: string; label: string } | null {
   if (t.amenity === 'fuel') return { c: 'shop', label: 'Gasolinera' };
   if (t.amenity && SHOP_AMENITY.has(t.amenity)) {
     const a = t.amenity;
-    const c = ['bar', 'pub', 'nightclub'].includes(a) ? 'bar' : ['restaurant', 'fast_food'].includes(a) ? 'food' : a === 'cafe' ? 'cafe'
-      : a === 'bank' ? 'bank' : a === 'pharmacy' ? 'pharmacy' : a === 'police' ? 'police'
-      : ['dentist', 'clinic', 'veterinary'].includes(a) ? 'health' : 'civic';
+    const c = ['bar', 'pub', 'nightclub'].includes(a)
+      ? 'bar'
+      : ['restaurant', 'fast_food'].includes(a)
+        ? 'food'
+        : a === 'cafe'
+          ? 'cafe'
+          : a === 'bank'
+            ? 'bank'
+            : a === 'pharmacy'
+              ? 'pharmacy'
+              : a === 'police'
+                ? 'police'
+                : ['dentist', 'clinic', 'veterinary'].includes(a)
+                  ? 'health'
+                  : 'civic';
     return { c, label: SHOP_LABEL[a] ?? a };
   }
   if (t.shop && t.shop !== 'vacant') {
     const s = t.shop;
-    const c = ['butcher', 'bakery', 'pastry', 'confectionery', 'greengrocer', 'seafood', 'deli', 'supermarket', 'convenience', 'food'].includes(s) ? 'grocery'
-      : ['hairdresser', 'beauty', 'massage'].includes(s) ? 'beauty' : s === 'car_repair' || s === 'car' ? 'garage' : 'shop';
+    const c = [
+      'butcher',
+      'bakery',
+      'pastry',
+      'confectionery',
+      'greengrocer',
+      'seafood',
+      'deli',
+      'supermarket',
+      'convenience',
+      'food',
+    ].includes(s)
+      ? 'grocery'
+      : ['hairdresser', 'beauty', 'massage'].includes(s)
+        ? 'beauty'
+        : s === 'car_repair' || s === 'car'
+          ? 'garage'
+          : 'shop';
     return { c, label: SHOP_LABEL[s] ?? 'Tienda' };
   }
   if (t.tourism && ['hotel', 'hostel', 'guest_house'].includes(t.tourism)) return { c: 'hotel', label: SHOP_LABEL[t.tourism] };
@@ -700,7 +966,13 @@ function shortName(t: Tags, fallback: string): string {
 }
 
 // Walls that can hold a shop front: ground-level outlines and parts.
-interface Wall { a: Pt; b: Pt; n: Pt; len: number; key: string }
+interface Wall {
+  a: Pt;
+  b: Pt;
+  n: Pt;
+  len: number;
+  key: string;
+}
 const wallGrid = new Map<string, Wall[]>();
 const WG = 30;
 buildings.forEach((b, bi) => {
@@ -712,11 +984,13 @@ buildings.forEach((b, bi) => {
   const hid = new Set(b.hid ?? []);
   for (let i = 0; i < ring.length; i++) {
     if (hid.has(i)) continue;
-    const a = ring[i], c = ring[(i + 1) % ring.length];
+    const a = ring[i],
+      c = ring[(i + 1) % ring.length];
     const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
     if (len < 2.5) continue;
     // Outward normal: right of the edge for CCW rings (X right, Z up), left otherwise.
-    const dx = (c[0] - a[0]) / len, dz = (c[1] - a[1]) / len;
+    const dx = (c[0] - a[0]) / len,
+      dz = (c[1] - a[1]) / len;
     const n: Pt = ccw ? [dz, -dx] : [-dz, dx];
     const w: Wall = { a, b: c, n, len, key: `${bi}:${i}` };
     const k = `${Math.floor((a[0] + c[0]) / 2 / WG)},${Math.floor((a[1] + c[1]) / 2 / WG)}`;
@@ -727,24 +1001,40 @@ const roadSegGrid = new Map<string, { a: Pt; b: Pt; w: number }[]>();
 for (const r of roads) {
   if (!VEHICLE.has(r.k) && r.k !== 'pedestrian' && r.k !== 'footway') continue;
   for (let i = 2; i < r.p.length; i += 2) {
-    const a: Pt = [r.p[i - 2], r.p[i - 1]], b: Pt = [r.p[i], r.p[i + 1]];
+    const a: Pt = [r.p[i - 2], r.p[i - 1]],
+      b: Pt = [r.p[i], r.p[i + 1]];
     const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / WG));
     const keys = new Set<string>();
-    for (let s = 0; s <= n; s++) keys.add(`${Math.floor((a[0] + ((b[0] - a[0]) * s) / n) / WG)},${Math.floor((a[1] + ((b[1] - a[1]) * s) / n) / WG)}`);
+    for (let s = 0; s <= n; s++)
+      keys.add(`${Math.floor((a[0] + ((b[0] - a[0]) * s) / n) / WG)},${Math.floor((a[1] + ((b[1] - a[1]) * s) / n) / WG)}`);
     for (const k of keys) (roadSegGrid.get(k) ?? roadSegGrid.set(k, []).get(k)!).push({ a, b, w: r.w });
   }
 }
 function streetGap(p: Pt): number {
   let best = Infinity;
-  const cx = Math.floor(p[0] / WG), cz = Math.floor(p[1] / WG);
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-    for (const s of roadSegGrid.get(`${cx + i},${cz + j}`) ?? []) best = Math.min(best, segDist(p, s.a, s.b) - s.w / 2);
-  }
+  const cx = Math.floor(p[0] / WG),
+    cz = Math.floor(p[1] / WG);
+  for (let i = -1; i <= 1; i++)
+    for (let j = -1; j <= 1; j++) {
+      for (const s of roadSegGrid.get(`${cx + i},${cz + j}`) ?? []) best = Math.min(best, segDist(p, s.a, s.b) - s.w / 2);
+    }
   return best;
 }
-const plazaRing = plazaWay ? plazaWay.nds.slice(0, -1).map(nodePt).filter((p): p is Pt => !!p) : null;
+const plazaRing = plazaWay
+  ? plazaWay.nds
+      .slice(0, -1)
+      .map(nodePt)
+      .filter((p): p is Pt => !!p)
+  : null;
 
-interface ShopOut { x: number; z: number; a: number; w: number; c: string; n: string }
+interface ShopOut {
+  x: number;
+  z: number;
+  a: number;
+  w: number;
+  c: string;
+  n: string;
+}
 const shops: ShopOut[] = [];
 const usedOnWall = new Map<string, [number, number][]>();
 function placeShop(p: Pt, t: Tags): void {
@@ -752,19 +1042,21 @@ function placeShop(p: Pt, t: Tags): void {
   if (!cat || !inB(p)) return;
   const label = shortName(t, cat.label);
   let best: { w: Wall; s: number; t: number } | null = null;
-  const cx = Math.floor(p[0] / WG), cz = Math.floor(p[1] / WG);
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-    for (const w of wallGrid.get(`${cx + i},${cz + j}`) ?? []) {
-      const d = segDist(p, w.a, w.b);
-      if (d > 30) continue;
-      const tt = Math.max(0, Math.min(1, ((p[0] - w.a[0]) * (w.b[0] - w.a[0]) + (p[1] - w.a[1]) * (w.b[1] - w.a[1])) / (w.len * w.len)));
-      const m: Pt = [w.a[0] + (w.b[0] - w.a[0]) * tt + w.n[0] * 2.5, w.a[1] + (w.b[1] - w.a[1]) * tt + w.n[1] * 2.5];
-      const gap = streetGap(m);
-      const open = gap < 10 || (plazaRing && pointInRing(m, plazaRing));
-      const score = d + (open ? 0 : 30) + (w.len < 4 ? 6 : 0) + Math.max(0, gap) * 0.3;
-      if (!best || score < best.s) best = { w, s: score, t: tt };
+  const cx = Math.floor(p[0] / WG),
+    cz = Math.floor(p[1] / WG);
+  for (let i = -1; i <= 1; i++)
+    for (let j = -1; j <= 1; j++) {
+      for (const w of wallGrid.get(`${cx + i},${cz + j}`) ?? []) {
+        const d = segDist(p, w.a, w.b);
+        if (d > 30) continue;
+        const tt = Math.max(0, Math.min(1, ((p[0] - w.a[0]) * (w.b[0] - w.a[0]) + (p[1] - w.a[1]) * (w.b[1] - w.a[1])) / (w.len * w.len)));
+        const m: Pt = [w.a[0] + (w.b[0] - w.a[0]) * tt + w.n[0] * 2.5, w.a[1] + (w.b[1] - w.a[1]) * tt + w.n[1] * 2.5];
+        const gap = streetGap(m);
+        const open = gap < 10 || (plazaRing && pointInRing(m, plazaRing));
+        const score = d + (open ? 0 : 30) + (w.len < 4 ? 6 : 0) + Math.max(0, gap) * 0.3;
+        if (!best || score < best.s) best = { w, s: score, t: tt };
+      }
     }
-  }
   if (!best || best.s > 45) return;
   const { w } = best;
   const width = Math.min(w.len - 0.8, Math.max(3.2, Math.min(7, 1.6 + label.length * 0.32)));
@@ -773,7 +1065,8 @@ function placeShop(p: Pt, t: Tags): void {
   const half = width / 2 / w.len;
   const used = usedOnWall.get(w.key) ?? [];
   const free = (c: number) => used.every(([u0, u1]) => c + half < u0 || c - half > u1);
-  const lo = 0.4 / w.len + half, hi = 1 - 0.4 / w.len - half;
+  const lo = 0.4 / w.len + half,
+    hi = 1 - 0.4 / w.len - half;
   let tc = Math.max(lo, Math.min(hi, best.t));
   if (!free(tc)) {
     const options = [];
@@ -785,8 +1078,12 @@ function placeShop(p: Pt, t: Tags): void {
   used.push([tc - half, tc + half]);
   usedOnWall.set(w.key, used);
   shops.push({
-    x: q(w.a[0] + (w.b[0] - w.a[0]) * tc), z: q(w.a[1] + (w.b[1] - w.a[1]) * tc),
-    a: Math.round(Math.atan2(w.n[0], w.n[1]) * 1000) / 1000, w: q(width), c: cat.c, n: label,
+    x: q(w.a[0] + (w.b[0] - w.a[0]) * tc),
+    z: q(w.a[1] + (w.b[1] - w.a[1]) * tc),
+    a: Math.round(Math.atan2(w.n[0], w.n[1]) * 1000) / 1000,
+    w: q(width),
+    c: cat.c,
+    n: label,
   });
 }
 for (const n of nodes.values()) if (n.tags) placeShop(project(n.lat, n.lon), n.tags);
@@ -797,12 +1094,15 @@ for (const p of polygons) {
 
 // Picnic tables: mapped ones plus a few around each picnic site (the riverside "mesas" in El Soto).
 const tables: number[] = [];
-const isClear = (p: Pt) => streetGap(p) > 2.5 && !rivers.some((r) => {
-  for (let i = 2; i < r.p.length; i += 2) if (segDist(p, [r.p[i - 2], r.p[i - 1]], [r.p[i], r.p[i + 1]]) < r.w / 2 + 4) return true;
-  return false;
-}) && !buildingCentroids.some((c) => Math.hypot(c[0] - p[0], c[1] - p[1]) < 8);
+const isClear = (p: Pt) =>
+  streetGap(p) > 2.5 &&
+  !rivers.some((r) => {
+    for (let i = 2; i < r.p.length; i += 2) if (segDist(p, [r.p[i - 2], r.p[i - 1]], [r.p[i], r.p[i + 1]]) < r.w / 2 + 4) return true;
+    return false;
+  }) &&
+  !buildingCentroids.some((c) => Math.hypot(c[0] - p[0], c[1] - p[1]) < 8);
 let seed = 7;
-const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 for (const n of nodes.values()) {
   const t = n.tags;
   if (!t) continue;
@@ -811,7 +1111,8 @@ for (const n of nodes.values()) {
   if (t.leisure === 'picnic_table') tables.push(q(p[0]), q(p[1]), Math.round(rnd() * 314) / 100, t.material === 'stone' ? 1 : 0);
   if (t.tourism === 'picnic_site') {
     for (let k = 0, placed = 0; k < 60 && placed < 7; k++) {
-      const a = rnd() * Math.PI * 2, r = 4 + rnd() * 22;
+      const a = rnd() * Math.PI * 2,
+        r = 4 + rnd() * 22;
       const c: Pt = [p[0] + Math.cos(a) * r, p[1] + Math.sin(a) * r];
       if (!isClear(c) || tables.some((_, i) => i % 4 === 0 && Math.hypot(tables[i] - c[0], tables[i + 1] - c[1]) < 5)) continue;
       tables.push(q(c[0]), q(c[1]), Math.round(rnd() * 314) / 100, 0);
@@ -821,11 +1122,15 @@ for (const n of nodes.values()) {
 }
 for (const p of polygons) {
   if (p.tags.tourism !== 'picnic_site') continue;
-  const xs = p.outer.map((v) => v[0]), zs = p.outer.map((v) => v[1]);
+  const xs = p.outer.map((v) => v[0]),
+    zs = p.outer.map((v) => v[1]);
   const area = Math.abs(signedArea(p.outer));
   const want = Math.max(2, Math.min(10, Math.round(area / 500)));
   for (let k = 0, placed = 0; k < 200 && placed < want; k++) {
-    const c: Pt = [Math.min(...xs) + rnd() * (Math.max(...xs) - Math.min(...xs)), Math.min(...zs) + rnd() * (Math.max(...zs) - Math.min(...zs))];
+    const c: Pt = [
+      Math.min(...xs) + rnd() * (Math.max(...xs) - Math.min(...xs)),
+      Math.min(...zs) + rnd() * (Math.max(...zs) - Math.min(...zs)),
+    ];
     if (!pointInRing(c, p.outer) || !isClear(c)) continue;
     if (tables.some((_, i) => i % 4 === 0 && Math.hypot(tables[i] - c[0], tables[i + 1] - c[1]) < 6)) continue;
     tables.push(q(c[0]), q(c[1]), Math.round(rnd() * 314) / 100, 0);
@@ -835,8 +1140,16 @@ for (const p of polygons) {
 
 // Playground equipment points (centroid of each mapped playground).
 const playgrounds: number[] = [];
-for (const p of polygons) if (p.tags.leisure === 'playground') { const c = centroid(p.outer); playgrounds.push(q(c[0]), q(c[1])); }
-for (const n of nodes.values()) if (n.tags?.leisure === 'playground') { const p = project(n.lat, n.lon); if (inB(p)) playgrounds.push(q(p[0]), q(p[1])); }
+for (const p of polygons)
+  if (p.tags.leisure === 'playground') {
+    const c = centroid(p.outer);
+    playgrounds.push(q(c[0]), q(c[1]));
+  }
+for (const n of nodes.values())
+  if (n.tags?.leisure === 'playground') {
+    const p = project(n.lat, n.lon);
+    if (inB(p)) playgrounds.push(q(p[0]), q(p[1]));
+  }
 
 // ---------------------------------------------------------------- output
 
@@ -848,14 +1161,32 @@ const out = {
     projection: 'equirectangular; x east, z south, metres',
     bounds: B,
   },
-  buildings, areas, roads, rails, rivers, streams, weirs,
-  trees, pines, lamps, benches, crossings, pois, shops, tables, playgrounds,
+  buildings,
+  areas,
+  roads,
+  rails,
+  rivers,
+  streams,
+  weirs,
+  trees,
+  pines,
+  lamps,
+  benches,
+  crossings,
+  pois,
+  shops,
+  tables,
+  playgrounds,
 };
 mkdirSync(dirname(OUT), { recursive: true });
 const json = JSON.stringify(out);
 writeFileSync(OUT, json);
 console.log(`origin ${lat0.toFixed(6)}, ${lon0.toFixed(6)}  bounds ${JSON.stringify(B)}`);
-console.log(`buildings ${buildings.length} (parts ${partsTmp.length}, outlines with parts ${outlines.filter((o) => o.b.hp).length})  areas ${areas.length}  roads ${roads.length}  rails ${rails.length}  rivers ${rivers.length}  streams ${streams.length}  weirs ${weirs.length}`);
-console.log(`trees ${trees.length / 2}  lamps ${lamps.length / 2}  benches ${benches.length / 2}  crossings ${crossings.length / 3}  pois ${pois.length}`);
+console.log(
+  `buildings ${buildings.length} (parts ${partsTmp.length}, outlines with parts ${outlines.filter((o) => o.b.hp).length})  areas ${areas.length}  roads ${roads.length}  rails ${rails.length}  rivers ${rivers.length}  streams ${streams.length}  weirs ${weirs.length}`,
+);
+console.log(
+  `trees ${trees.length / 2}  lamps ${lamps.length / 2}  benches ${benches.length / 2}  crossings ${crossings.length / 3}  pois ${pois.length}`,
+);
 console.log(`shops ${shops.length}  picnic tables ${tables.length / 4}  playgrounds ${playgrounds.length / 2}`);
 console.log(`→ ${OUT} (${(json.length / 1024).toFixed(0)} KB)`);

@@ -2,7 +2,17 @@ import * as THREE from 'three';
 import { lerp, smoothstep } from '../core/math';
 import type { Batcher } from './Batcher';
 import {
-  type Bounds2, type Pt, type Segment, SpatialGrid, pointInRing, ringBounds, ringDist, segBounds, segDist, segmentsOf, toPts,
+  type Bounds2,
+  type Pt,
+  type Segment,
+  SpatialGrid,
+  pointInRing,
+  ringBounds,
+  ringDist,
+  segBounds,
+  segDist,
+  segmentsOf,
+  toPts,
 } from './geo';
 import { MAP, type MapData } from './mapData';
 
@@ -44,7 +54,8 @@ export class TerrainModel {
 
   /** Distance to the river centre line and the river half-width there. */
   riverDistance(x: number, z: number): { d: number; hw: number } {
-    let d = Infinity, hw = 0;
+    let d = Infinity,
+      hw = 0;
     for (const s of this.river.query(x, z, x, z, this.found)) {
       const dd = segDist(x, z, s.ax, s.az, s.bx, s.bz);
       if (dd < d) {
@@ -109,16 +120,58 @@ export class TerrainModel {
 // ------------------------------------------------------------ ground colour
 
 const AREA_COLORS: Record<string, string> = {
-  farmland: '#b4a35e', meadow: '#86a24a', grass: '#7fa448', scrub: '#6b7f45', forest: '#4b6f33', orchard: '#7b9a46',
-  allotments: '#8c9c54', residential: '#a19d8a', industrial: '#a29d92', brownfield: '#9c8c6c', farmyard: '#a08a65',
-  park: '#6f9c45', garden: '#6c9a42', cemetery: '#899a72', camp: '#7a9a50', school: '#a7a08c', sports: '#8aa05c',
-  pitch: '#4e8a3a', playground: '#b8a274', parking: '#6c6c6e', pedestrian: '#c5bdae', water: '#7d6e52', beach: '#d6c597',
-  track: '#9c7b5a', pool: '#cfd3d3',
+  farmland: '#b4a35e',
+  meadow: '#86a24a',
+  grass: '#7fa448',
+  scrub: '#6b7f45',
+  forest: '#4b6f33',
+  orchard: '#7b9a46',
+  allotments: '#8c9c54',
+  residential: '#a19d8a',
+  industrial: '#a29d92',
+  brownfield: '#9c8c6c',
+  farmyard: '#a08a65',
+  park: '#6f9c45',
+  garden: '#6c9a42',
+  cemetery: '#899a72',
+  camp: '#7a9a50',
+  school: '#a7a08c',
+  sports: '#8aa05c',
+  pitch: '#4e8a3a',
+  playground: '#b8a274',
+  parking: '#6c6c6e',
+  pedestrian: '#c5bdae',
+  water: '#7d6e52',
+  beach: '#d6c597',
+  track: '#9c7b5a',
+  pool: '#cfd3d3',
 };
 const AREA_ORDER = [
-  'farmland', 'meadow', 'grass', 'scrub', 'orchard', 'allotments', 'residential', 'forest', 'industrial', 'brownfield',
-  'farmyard', 'park', 'garden', 'cemetery', 'camp', 'school', 'sports', 'pitch', 'track', 'playground', 'parking',
-  'pedestrian', 'beach', 'water', 'pool',
+  'farmland',
+  'meadow',
+  'grass',
+  'scrub',
+  'orchard',
+  'allotments',
+  'residential',
+  'forest',
+  'industrial',
+  'brownfield',
+  'farmyard',
+  'park',
+  'garden',
+  'cemetery',
+  'camp',
+  'school',
+  'sports',
+  'pitch',
+  'track',
+  'playground',
+  'parking',
+  'pedestrian',
+  'beach',
+  'water',
+  'pool',
 ];
 
 /**
@@ -127,7 +180,8 @@ const AREA_ORDER = [
  */
 export function groundTexture(size: number): THREE.CanvasTexture {
   const B = MAP.meta.bounds;
-  const W = B.maxX - B.minX, H = B.maxZ - B.minZ;
+  const W = B.maxX - B.minX,
+    H = B.maxZ - B.minZ;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
@@ -137,7 +191,8 @@ export function groundTexture(size: number): THREE.CanvasTexture {
 
   // Subtle large-scale variation so open fields are not one flat colour.
   for (let i = 0; i < 900; i++) {
-    const x = B.minX + Math.random() * W, z = B.minZ + Math.random() * H;
+    const x = B.minX + Math.random() * W,
+      z = B.minZ + Math.random() * H;
     g.fillStyle = Math.random() < 0.5 ? 'rgba(60,80,30,0.08)' : 'rgba(170,170,90,0.08)';
     g.beginPath();
     g.ellipse(x, z, 20 + Math.random() * 60, 15 + Math.random() * 40, Math.random() * 3, 0, Math.PI * 2);
@@ -146,10 +201,17 @@ export function groundTexture(size: number): THREE.CanvasTexture {
 
   // Patchwork of plots (fincas) wherever OSM has no land use: the valley around
   // town is a mosaic of hay meadows, pasture and cereal strips.
-  const plotColours = ['rgba(122,150,70,0.45)', 'rgba(140,160,80,0.45)', 'rgba(170,165,95,0.4)', 'rgba(100,130,60,0.45)', 'rgba(185,170,105,0.35)'];
+  const plotColours = [
+    'rgba(122,150,70,0.45)',
+    'rgba(140,160,80,0.45)',
+    'rgba(170,165,95,0.4)',
+    'rgba(100,130,60,0.45)',
+    'rgba(185,170,105,0.35)',
+  ];
   for (let x = B.minX; x < B.maxX; x += 140) {
     for (let z = B.minZ; z < B.maxZ; z += 110) {
-      const w = 60 + Math.random() * 90, h = 40 + Math.random() * 70;
+      const w = 60 + Math.random() * 90,
+        h = 40 + Math.random() * 70;
       g.save();
       g.translate(x + Math.random() * 60, z + Math.random() * 50);
       g.rotate(0.35 + (Math.random() - 0.5) * 0.25);
@@ -181,8 +243,10 @@ export function groundTexture(size: number): THREE.CanvasTexture {
       g.strokeStyle = 'rgba(70,50,20,0.12)';
       g.lineWidth = 1.2;
       const ang = (i * 0.7) % Math.PI;
-      const xs = a.o.filter((_, k) => k % 2 === 0), zs = a.o.filter((_, k) => k % 2 === 1);
-      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
+      const xs = a.o.filter((_, k) => k % 2 === 0),
+        zs = a.o.filter((_, k) => k % 2 === 1);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2,
+        cz = (Math.min(...zs) + Math.max(...zs)) / 2;
       const R = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
       g.beginPath();
       for (let s = -R; s <= R; s += 4) {
@@ -204,7 +268,11 @@ export function groundTexture(size: number): THREE.CanvasTexture {
   // River bed and banks.
   g.lineCap = g.lineJoin = 'round';
   for (const r of MAP.rivers) {
-    for (const [w, col] of [[r.w + 6, '#6f7a45'], [r.w + 2, '#8a7a58'], [r.w - 4, '#6e6046']] as const) {
+    for (const [w, col] of [
+      [r.w + 6, '#6f7a45'],
+      [r.w + 2, '#8a7a58'],
+      [r.w - 4, '#6e6046'],
+    ] as const) {
       g.strokeStyle = col;
       g.lineWidth = w;
       g.beginPath();
@@ -246,12 +314,16 @@ export function groundMaterial(size: number, detail: THREE.Texture): THREE.MeshS
 export function buildGround(terrain: TerrainModel, batch: Batcher, mat: THREE.Material, fine = true): void {
   const B = MAP.meta.bounds;
   const TILE = 50;
-  const W = B.maxX - B.minX, H = B.maxZ - B.minZ;
-  const nx = Math.ceil(W / TILE), nz = Math.ceil(H / TILE);
+  const W = B.maxX - B.minX,
+    H = B.maxZ - B.minZ;
+  const nx = Math.ceil(W / TILE),
+    nz = Math.ceil(H / TILE);
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < nz; j++) {
-      const x0 = B.minX + i * TILE, z0 = B.minZ + j * TILE;
-      const x1 = Math.min(B.maxX, x0 + TILE), z1 = Math.min(B.maxZ, z0 + TILE);
+      const x0 = B.minX + i * TILE,
+        z0 = B.minZ + j * TILE;
+      const x1 = Math.min(B.maxX, x0 + TILE),
+        z1 = Math.min(B.maxZ, z0 + TILE);
       const detailed = terrain.affects((x0 + x1) / 2, (z0 + z1) / 2, TILE / 2);
       const seg = detailed ? (fine ? 20 : 12) : 1;
       batch.addWorld(tile(terrain, x0, z0, x1, z1, seg, detailed, B, W, H), mat);
@@ -260,10 +332,20 @@ export function buildGround(terrain: TerrainModel, batch: Batcher, mat: THREE.Ma
 }
 
 function tile(
-  terrain: TerrainModel, x0: number, z0: number, x1: number, z1: number, seg: number, detailed: boolean,
-  B: { minX: number; minZ: number }, W: number, H: number,
+  terrain: TerrainModel,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  seg: number,
+  detailed: boolean,
+  B: { minX: number; minZ: number },
+  W: number,
+  H: number,
 ): THREE.BufferGeometry {
-  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const pos: number[] = [],
+    uv: number[] = [],
+    idx: number[] = [];
   for (let j = 0; j <= seg; j++) {
     for (let i = 0; i <= seg; i++) {
       const x = x0 + ((x1 - x0) * i) / seg;
@@ -274,7 +356,10 @@ function tile(
   }
   for (let j = 0; j < seg; j++) {
     for (let i = 0; i < seg; i++) {
-      const a = j * (seg + 1) + i, b = a + 1, c = a + seg + 1, d = c + 1;
+      const a = j * (seg + 1) + i,
+        b = a + 1,
+        c = a + seg + 1,
+        d = c + 1;
       idx.push(a, c, b, b, c, d);
     }
   }

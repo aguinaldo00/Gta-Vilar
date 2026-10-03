@@ -148,7 +148,10 @@ export class Materials {
 
     for (const [name, value] of Object.entries(this)) {
       if (value instanceof THREE.Material) value.name = name;
-      else if (Array.isArray(value)) value.forEach((m, i) => m instanceof THREE.Material && (m.name = `${name}${i}`));
+      else if (Array.isArray(value))
+        value.forEach((m, i) => {
+          if (m instanceof THREE.Material) m.name = `${name}${i}`;
+        });
     }
 
     // Fold materials into shared vertex-coloured ones (fewer draw calls).
@@ -162,10 +165,30 @@ export class Materials {
     fold(this.corrugatedRust, this.corrugatedVC, '#c27a52');
     fold(this.wood, this.propsVC, '#8a6440');
     for (const m of [
-      this.stoneTrim, this.glass, this.darkWood, this.iron, this.ironGreen, this.white, this.bronze, this.lampGlass,
-      this.rail, this.sleeper, this.rust, this.trunk, this.concrete, this.redPaint, this.coachGreen, this.hay,
-      this.flowers, this.hedge, this.springLeaf, this.pine, ...this.awnings, ...this.foliage,
-    ]) fold(m, this.propsVC);
+      this.stoneTrim,
+      this.glass,
+      this.darkWood,
+      this.iron,
+      this.ironGreen,
+      this.white,
+      this.bronze,
+      this.lampGlass,
+      this.rail,
+      this.sleeper,
+      this.rust,
+      this.trunk,
+      this.concrete,
+      this.redPaint,
+      this.coachGreen,
+      this.hay,
+      this.flowers,
+      this.hedge,
+      this.springLeaf,
+      this.pine,
+      ...this.awnings,
+      ...this.foliage,
+    ])
+      fold(m, this.propsVC);
     this.detail = this.terrain.map!;
     this.roadAtlas = roadAtlasMaterial([this.asphalt.map!, this.sidewalk.map!, this.paving.map!, this.dirt.map!, this.gravel.map!, null]);
     this.glowVC.name = 'glowVC';
@@ -227,17 +250,15 @@ function roadAtlasMaterial(tiles: (THREE.Texture | null)[]): Lambert {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float atlasCell;\nvarying float vCell;')
       .replace('#include <uv_vertex>', '#include <uv_vertex>\n  vCell = atlasCell;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vCell;')
-      .replace(
-        '#include <map_fragment>',
-        `float cellI = floor(vCell + 0.5);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vCell;').replace(
+      '#include <map_fragment>',
+      `float cellI = floor(vCell + 0.5);
   vec2 cell = vec2(mod(cellI, 4.0), floor(cellI / 4.0));
   vec2 scale = vec2(0.25, 0.5) * 0.96;
   vec2 auv = (cell + 0.02) * vec2(0.25, 0.5) + fract(vMapUv) * scale;
   vec4 sampledDiffuseColor = textureGrad(map, auv, dFdx(vMapUv) * scale, dFdy(vMapUv) * scale);
   diffuseColor *= sampledDiffuseColor;`,
-      );
+    );
   };
   return m;
 }
@@ -250,21 +271,29 @@ function roadAtlasMaterial(tiles: (THREE.Texture | null)[]): Lambert {
 function storeyAtlas(m: Lambert): Lambert {
   m.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
+      .replace(
+        '#include <common>',
+        `#include <common>
 vec2 storeyCell(vec2 uv) {
   // Ground floor: doorway (cell 1) or barred window (cell 2), chosen per bay.
   float ground = step(uv.y, 0.999);
   float door = step(fract(sin(floor(uv.x) * 12.9898 + 4.1) * 43758.5453), 0.4);
   float cell = ground * (2.0 - door);
   return vec2((cell + 0.01 + fract(uv.x) * 0.98) * 0.25, 0.01 + fract(uv.y) * 0.98);
-}`)
-      .replace('#include <map_fragment>', `
+}`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        `
   vec2 cellUv = storeyCell(vMapUv);
   vec2 gscale = vec2(0.245, 0.98);
   vec4 sampledDiffuseColor = textureGrad(map, cellUv, dFdx(vMapUv) * gscale, dFdy(vMapUv) * gscale);
-  diffuseColor *= sampledDiffuseColor;`)
-      .replace('vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
-        'vec3 mapN = textureGrad( normalMap, storeyCell(vNormalMapUv), dFdx(vNormalMapUv) * vec2(0.245, 0.98), dFdy(vNormalMapUv) * vec2(0.245, 0.98) ).xyz * 2.0 - 1.0;');
+  diffuseColor *= sampledDiffuseColor;`,
+      )
+      .replace(
+        'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
+        'vec3 mapN = textureGrad( normalMap, storeyCell(vNormalMapUv), dFdx(vNormalMapUv) * vec2(0.245, 0.98), dFdy(vNormalMapUv) * vec2(0.245, 0.98) ).xyz * 2.0 - 1.0;',
+      );
   };
   return m;
 }
@@ -273,9 +302,9 @@ vec2 storeyCell(vec2 uv) {
 function windSway(m: Lambert): Lambert {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = waterTime;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;').replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
   #ifdef USE_INSTANCING
     vec2 treePos = vec2(instanceMatrix[3].x, instanceMatrix[3].z);
   #else
@@ -283,7 +312,8 @@ function windSway(m: Lambert): Lambert {
   #endif
   float sway = max(0.0, position.y - 2.0) * 0.045;
   transformed.x += sin(uTime * 1.5 + treePos.x * 0.21 + position.y * 0.35) * sway;
-  transformed.z += cos(uTime * 1.2 + treePos.y * 0.17) * sway * 0.7;`);
+  transformed.z += cos(uTime * 1.2 + treePos.y * 0.17) * sway * 0.7;`,
+    );
   };
   return m;
 }

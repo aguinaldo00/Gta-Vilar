@@ -17,7 +17,8 @@ export function signedArea(r: Pt[]): number {
 }
 
 export function centroid(r: Pt[]): Pt {
-  let x = 0, z = 0;
+  let x = 0,
+    z = 0;
   for (const p of r) {
     x += p[0];
     z += p[1];
@@ -28,14 +29,16 @@ export function centroid(r: Pt[]): Pt {
 export function pointInRing(x: number, z: number, r: Pt[]): boolean {
   let inside = false;
   for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-    const [xi, zi] = r[i], [xj, zj] = r[j];
+    const [xi, zi] = r[i],
+      [xj, zj] = r[j];
     if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
   }
   return inside;
 }
 
 export function segDist(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
-  const dx = bx - ax, dz = bz - az;
+  const dx = bx - ax,
+    dz = bz - az;
   const l2 = dx * dx + dz * dz || 1;
   const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l2));
   return Math.hypot(px - ax - t * dx, pz - az - t * dz);
@@ -73,8 +76,12 @@ export function orientedBox(r: Pt[]): { cx: number; cz: number; w: number; d: nu
     const [bx, bz] = r[(i + 1) % r.length];
     const len = Math.hypot(bx - ax, bz - az);
     if (len < 1e-6) continue;
-    const ux = (bx - ax) / len, uz = (bz - az) / len;
-    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+    const ux = (bx - ax) / len,
+      uz = (bz - az) / len;
+    let minU = Infinity,
+      maxU = -Infinity,
+      minV = Infinity,
+      maxV = -Infinity;
     for (const [x, z] of r) {
       const u = x * ux + z * uz;
       const v = -x * uz + z * ux;
@@ -85,10 +92,14 @@ export function orientedBox(r: Pt[]): { cx: number; cz: number; w: number; d: nu
     }
     const area = (maxU - minU) * (maxV - minV);
     if (area < best.area) {
-      const cu = (minU + maxU) / 2, cv = (minV + maxV) / 2;
+      const cu = (minU + maxU) / 2,
+        cv = (minV + maxV) / 2;
       best = {
-        area, w: maxU - minU, d: maxV - minV,
-        cx: cu * ux - cv * uz, cz: cu * uz + cv * ux,
+        area,
+        w: maxU - minU,
+        d: maxV - minV,
+        cx: cu * ux - cv * uz,
+        cz: cu * uz + cv * ux,
         // rotation.y that maps local +X onto the edge direction (ux, uz)
         angle: Math.atan2(-uz, ux),
       };
@@ -170,8 +181,10 @@ export function segmentsOf<T>(pts: Pt[], hw: number, owner: T): Segment<T>[] {
 
 export function segBounds(s: Segment<unknown>, pad: number): Bounds2 {
   return {
-    minX: Math.min(s.ax, s.bx) - s.hw - pad, maxX: Math.max(s.ax, s.bx) + s.hw + pad,
-    minZ: Math.min(s.az, s.bz) - s.hw - pad, maxZ: Math.max(s.az, s.bz) + s.hw + pad,
+    minX: Math.min(s.ax, s.bx) - s.hw - pad,
+    maxX: Math.max(s.ax, s.bx) + s.hw + pad,
+    minZ: Math.min(s.az, s.bz) - s.hw - pad,
+    maxZ: Math.max(s.az, s.bz) + s.hw + pad,
   };
 }
 

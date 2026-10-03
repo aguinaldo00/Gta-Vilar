@@ -12,11 +12,14 @@ export const CUSTOM_CHURCHES = /^(Iglesia de Santa Marina|Ermita de San Roque|Er
 
 /** Triangles → non-indexed geometry with planar UVs (metres / tile). */
 function tris(points: number[][], tile = 2): THREE.BufferGeometry {
-  const pos: number[] = [], uv: number[] = [];
+  const pos: number[] = [],
+    uv: number[] = [];
   for (let i = 0; i < points.length; i += 3) {
     const [a, b, c] = [points[i], points[i + 1], points[i + 2]];
     const n = new THREE.Vector3().crossVectors(
-      new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), new THREE.Vector3(c[0] - a[0], c[1] - a[1], c[2] - a[2]));
+      new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]),
+      new THREE.Vector3(c[0] - a[0], c[1] - a[1], c[2] - a[2]),
+    );
     const ax = Math.abs(n.x) > Math.abs(n.z) ? 'x' : 'z';
     for (const p of [a, b, c]) {
       pos.push(p[0], p[1], p[2]);
@@ -33,12 +36,24 @@ function tris(points: number[][], tile = 2): THREE.BufferGeometry {
 
 /** Gable roof over a L x W rectangle (ridge along X), slopes only; UVs run down the slope. */
 function gableSlopes(L: number, W: number, eave: number, ridge: number, over = 0.5): THREE.BufferGeometry {
-  const x0 = -L / 2 - over, x1 = L / 2 + over, z = W / 2 + over;
+  const x0 = -L / 2 - over,
+    x1 = L / 2 + over,
+    z = W / 2 + over;
   const drop = ((ridge - eave) * over) / (W / 2);
   const e = eave - drop;
   const pos = [
-    [x0, e, z], [x1, e, z], [x1, ridge, 0], [x0, e, z], [x1, ridge, 0], [x0, ridge, 0],
-    [x1, e, -z], [x0, e, -z], [x0, ridge, 0], [x1, e, -z], [x0, ridge, 0], [x1, ridge, 0],
+    [x0, e, z],
+    [x1, e, z],
+    [x1, ridge, 0],
+    [x0, e, z],
+    [x1, ridge, 0],
+    [x0, ridge, 0],
+    [x1, e, -z],
+    [x0, e, -z],
+    [x0, ridge, 0],
+    [x1, e, -z],
+    [x0, ridge, 0],
+    [x1, ridge, 0],
   ];
   const slope = Math.hypot(z, ridge - e);
   const g = tris(pos);
@@ -49,15 +64,22 @@ function gableSlopes(L: number, W: number, eave: number, ridge: number, over = 0
 
 /** Gable-end triangle at x, facing ±X. */
 function gableEnd(x: number, W: number, eave: number, ridge: number, dir: 1 | -1): THREE.BufferGeometry {
-  const a = [x, eave, -W / 2], b = [x, eave, W / 2], c = [x, ridge, 0];
+  const a = [x, eave, -W / 2],
+    b = [x, eave, W / 2],
+    c = [x, ridge, 0];
   return tris(dir > 0 ? [a, c, b] : [a, b, c]);
 }
 
 /** Frame: local +X along the long axis, +X end is the front (towards `front`). */
 function frame(ctx: BuildContext, ring: Pt[], front: Pt): { lb: LocalBatch; L: number; W: number; rot: number; cx: number; cz: number } {
   const o = orientedBox(ring);
-  let rot = o.angle, L = o.w, W = o.d;
-  if (W > L) { rot += Math.PI / 2; [L, W] = [W, L]; }
+  let rot = o.angle,
+    L = o.w,
+    W = o.d;
+  if (W > L) {
+    rot += Math.PI / 2;
+    [L, W] = [W, L];
+  }
   // Local +X in world is (cos rot, -sin rot); flip if the front lies behind.
   if ((front[0] - o.cx) * Math.cos(rot) - (front[1] - o.cz) * Math.sin(rot) < 0) rot += Math.PI;
   return { lb: new LocalBatch(ctx.batch, o.cx, 0, o.cz, rot), L, W, rot, cx: o.cx, cz: o.cz };
@@ -77,13 +99,14 @@ function vidrieraTexture(): THREE.CanvasTexture {
   g.fillRect(0, 0, 256, 256);
   const colors = ['#1f4fa8', '#c0392b', '#e5b31a', '#2e8b57', '#6a3d9a', '#e67e22', '#3aa0d8'];
   let s = 3;
-  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    g.fillStyle = colors[Math.floor(rnd() * colors.length)];
-    g.fillRect(x * 32 + 5, y * 32 + 5, 22, 22);
-    g.fillStyle = 'rgba(255,255,255,0.18)';
-    g.fillRect(x * 32 + 5, y * 32 + 5, 22, 6);
-  }
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let y = 0; y < 8; y++)
+    for (let x = 0; x < 8; x++) {
+      g.fillStyle = colors[Math.floor(rnd() * colors.length)];
+      g.fillRect(x * 32 + 5, y * 32 + 5, 22, 22);
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(x * 32 + 5, y * 32 + 5, 22, 6);
+    }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -109,7 +132,8 @@ function santaMarina(ctx: BuildContext): void {
   const { mats } = ctx;
   const concrete = mats.tint('#d9d5cc');
   const slate = mats.tint('#5d6369');
-  const eave = 2.2, ridge = Math.min(19, W * 0.75);
+  const eave = 2.2,
+    ridge = Math.min(19, W * 0.75);
   // Low side walls, roof planes, ridge beam.
   for (const z of [-W / 2, W / 2]) lb.add(Unit.box, concrete, 0, eave / 2, z, 0, L, eave, 0.4);
   lb.add(gableSlopes(L, W, eave, ridge, 0.9), slate, 0, 0, 0);
@@ -181,12 +205,18 @@ function ermita(ctx: BuildContext, name: string, bells: number): void {
   const long = Math.max(o.w, o.d);
   // Front: the short end closest to the road.
   const ax = o.w >= o.d ? o.angle : o.angle + Math.PI / 2;
-  const ends: Pt[] = [[c[0] + Math.cos(ax) * long / 2, c[1] - Math.sin(ax) * long / 2], [c[0] - Math.cos(ax) * long / 2, c[1] + Math.sin(ax) * long / 2]];
-  const front = road ? ends.sort((p, q) => Math.hypot(p[0] - road.x, p[1] - road.z) - Math.hypot(q[0] - road.x, q[1] - road.z))[0] : ends[0];
+  const ends: Pt[] = [
+    [c[0] + (Math.cos(ax) * long) / 2, c[1] - (Math.sin(ax) * long) / 2],
+    [c[0] - (Math.cos(ax) * long) / 2, c[1] + (Math.sin(ax) * long) / 2],
+  ];
+  const front = road
+    ? ends.sort((p, q) => Math.hypot(p[0] - road.x, p[1] - road.z) - Math.hypot(q[0] - road.x, q[1] - road.z))[0]
+    : ends[0];
   const f = frame(ctx, ring, front);
   const { lb, L, W } = f;
   const { mats } = ctx;
-  const eave = Math.min(6.5, 3.2 + W * 0.3), ridge = eave + W * 0.32;
+  const eave = Math.min(6.5, 3.2 + W * 0.3),
+    ridge = eave + W * 0.32;
   lb.add(boxGeo(L, eave, W, 2), mats.stone, 0, eave / 2, 0);
   for (const dir of [1, -1] as const) lb.add(gableEnd((dir * L) / 2, W, eave, ridge, dir), mats.stone, 0, 0, 0);
   lb.add(gableSlopes(L, W, eave, ridge, 0.45), mats.roof, 0, 0, 0);
@@ -202,7 +232,9 @@ function ermita(ctx: BuildContext, name: string, bells: number): void {
   for (const z of [-1.05, 1.05]) lb.add(Unit.box, mats.stoneTrim, fx + 0.06, 1.45, z, 0, 0.2, 2.9, 0.35);
   lb.add(Unit.box, mats.tint('#cbbf9f'), fx + 0.05, 3.75, 0, 0, 0.08, 0.6, 1.8);
   lb.add(new THREE.CylinderGeometry(0.45, 0.45, 0.1, 12), mats.tint('#2a3038'), fx + 0.02, eave + 0.9, 0, 0, 1, 1, 1, 0, Math.PI / 2);
-  const ew = bells > 1 ? 4.2 : 2.6, eh = 3.6, ey = ridge - 0.6;
+  const ew = bells > 1 ? 4.2 : 2.6,
+    eh = 3.6,
+    ey = ridge - 0.6;
   lb.add(Unit.box, mats.stone, L / 2 - 0.4, ey + eh / 2, 0, 0, 0.8, eh, ew);
   lb.add(new THREE.ConeGeometry(ew * 0.72, 1.3, 4).rotateY(Math.PI / 4), mats.stone, L / 2 - 0.4, ey + eh + 0.6, 0, 0, 0.35, 1, 1);
   const holes = bells > 1 ? [-1, 1] : [0];

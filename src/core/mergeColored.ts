@@ -8,7 +8,13 @@ function colouredMaterial(opacity: number): THREE.MeshStandardMaterial {
   const key = String(opacity);
   let m = shared.get(key);
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: opacity < 1, opacity, roughness: opacity < 1 ? 0.1 : 0.55, metalness: 0.05 });
+    m = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      transparent: opacity < 1,
+      opacity,
+      roughness: opacity < 1 ? 0.1 : 0.55,
+      metalness: 0.05,
+    });
     shared.set(key, m);
   }
   return m;
@@ -44,6 +50,6 @@ export function mergeColoured(group: THREE.Object3D, keep: (m: THREE.Mesh) => bo
     merged.castShadow = op === 1;
     merged.receiveShadow = true;
     group.add(merged);
-    geos.forEach((g) => g.dispose());
+    for (const g of geos) g.dispose();
   }
 }

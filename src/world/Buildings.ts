@@ -25,10 +25,14 @@ export function buildingHeight(b: MapBuilding, distToCentre: number): number {
   if (b.ht) return b.ht;
   const lv = b.lv;
   switch (b.t) {
-    case 'church': return Math.max(11, (lv ?? 1) * 4);
-    case 'industrial': return lv ? lv * 4.5 : 7;
-    case 'small': return lv ? lv * 2.8 : 2.8;
-    case 'tower': return (lv ?? 4) * 4.5;
+    case 'church':
+      return Math.max(11, (lv ?? 1) * 4);
+    case 'industrial':
+      return lv ? lv * 4.5 : 7;
+    case 'small':
+      return lv ? lv * 2.8 : 2.8;
+    case 'tower':
+      return (lv ?? 4) * 4.5;
     default: {
       const levels = lv ?? (distToCentre < 350 ? 3 : 2);
       return levels * FLOOR_H + 0.5;
@@ -45,15 +49,22 @@ class Mesh3 {
 
   /** Triangle; flipped if needed so its normal agrees with (nx, ny, nz). */
   tri(a: number[], b: number[], c: number[], ua: number[], ub: number[], uc: number[], n: number[], color: THREE.Color): void {
-    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    const cx = e1[1] * e2[2] - e1[2] * e2[1], cy = e1[2] * e2[0] - e1[0] * e2[2], cz = e1[0] * e2[1] - e1[1] * e2[0];
+    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+      e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const cx = e1[1] * e2[2] - e1[2] * e2[1],
+      cy = e1[2] * e2[0] - e1[0] * e2[2],
+      cz = e1[0] * e2[1] - e1[1] * e2[0];
     if (cx * n[0] + cy * n[1] + cz * n[2] < 0) {
       [b, c] = [c, b];
       [ub, uc] = [uc, ub];
     }
     const len = Math.hypot(cx, cy, cz) || 1;
     const fn = cx * n[0] + cy * n[1] + cz * n[2] < 0 ? [-cx / len, -cy / len, -cz / len] : [cx / len, cy / len, cz / len];
-    for (const [p, u] of [[a, ua], [b, ub], [c, uc]]) {
+    for (const [p, u] of [
+      [a, ua],
+      [b, ub],
+      [c, uc],
+    ]) {
       this.pos.push(p[0], p[1], p[2]);
       this.nrm.push(fn[0], fn[1], fn[2]);
       this.uv.push(u[0], u[1]);
@@ -61,7 +72,18 @@ class Mesh3 {
     }
   }
 
-  quad(a: number[], b: number[], c: number[], d: number[], ua: number[], ub: number[], uc: number[], ud: number[], n: number[], color: THREE.Color): void {
+  quad(
+    a: number[],
+    b: number[],
+    c: number[],
+    d: number[],
+    ua: number[],
+    ub: number[],
+    uc: number[],
+    ud: number[],
+    n: number[],
+    color: THREE.Color,
+  ): void {
     this.tri(a, b, c, ua, ub, uc, n, color);
     this.tri(a, c, d, ua, uc, ud, n, color);
   }
@@ -94,12 +116,16 @@ function remapEdges(edges: number[] | undefined, n: number, reversed: boolean): 
 function walls(m: Mesh3, ring: Pt[], y0: number, y1: number, color: THREE.Color, tileU: number, tileV: number, hidden?: Set<number>): void {
   let u = 0;
   for (let i = 0; i < ring.length; i++) {
-    const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
+    const [ax, az] = ring[i],
+      [bx, bz] = ring[(i + 1) % ring.length];
     const len = Math.hypot(bx - ax, bz - az);
     if (len < 0.05) continue;
     if (!hidden?.has(i)) {
       const n = [(bz - az) / len, 0, -(bx - ax) / len];
-      const u0 = u / tileU, u1 = (u + len) / tileU, v0 = y0 / tileV, v1 = y1 / tileV;
+      const u0 = u / tileU,
+        u1 = (u + len) / tileU,
+        v0 = y0 / tileV,
+        v1 = y1 / tileV;
       m.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], [u0, v0], [u1, v0], [u1, v1], [u0, v1], n, color);
     }
     u += len;
@@ -113,11 +139,13 @@ function hipRoof(m: Mesh3, q: Pt[], h: number, rise: number, color: THREE.Color)
   // Short edges: (1,2) and (3,0) when edges 0 and 2 are the long ones.
   const [s1a, s1b, s2a, s2b] = longFirst ? [1, 2, 3, 0] : [0, 1, 2, 3];
   const mid = (a: number, b: number): Pt => [(q[a][0] + q[b][0]) / 2, (q[a][1] + q[b][1]) / 2];
-  const m1 = mid(s1a, s1b), m2 = mid(s2a, s2b);
+  const m1 = mid(s1a, s1b),
+    m2 = mid(s2a, s2b);
   const axisLen = Math.hypot(m2[0] - m1[0], m2[1] - m1[1]);
   const shortLen = (e[longFirst ? 1 : 0] + e[longFirst ? 3 : 2]) / 2;
   const inset = Math.min(shortLen / 2, axisLen / 2);
-  const ux = (m2[0] - m1[0]) / axisLen, uz = (m2[1] - m1[1]) / axisLen;
+  const ux = (m2[0] - m1[0]) / axisLen,
+    uz = (m2[1] - m1[1]) / axisLen;
   const top = h + rise;
   const r1 = [m1[0] + ux * inset, top, m1[1] + uz * inset];
   const r2 = [m2[0] - ux * inset, top, m2[1] - uz * inset];
@@ -125,15 +153,22 @@ function hipRoof(m: Mesh3, q: Pt[], h: number, rise: number, color: THREE.Color)
   const uvOf = (p: number[]) => [p[0] / 2, -p[2] / 2 + p[1]];
   const up = (a: number[], b: number[], c: number[]) => {
     // Outward-and-up normal: away from the quad centre.
-    const cx = (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, cz = (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4;
-    const mx = (a[0] + b[0] + c[0]) / 3 - cx, mz = (a[2] + b[2] + c[2]) / 3 - cz;
+    const cx = (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4,
+      cz = (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4;
+    const mx = (a[0] + b[0] + c[0]) / 3 - cx,
+      mz = (a[2] + b[2] + c[2]) / 3 - cz;
     m.tri(a, b, c, uvOf(a), uvOf(b), uvOf(c), [mx, 2, mz], color);
   };
   // Long sides: trapezoids between a long edge and the ridge.
   const nearR = (p: number[]) => (Math.hypot(p[0] - r1[0], p[2] - r1[2]) < Math.hypot(p[0] - r2[0], p[2] - r2[2]) ? r1 : r2);
-  for (const [a, b] of [[s1b, s2a], [s2b, s1a]]) {
-    const A = P(a), Bv = P(b);
-    const ra = nearR(A), rb = nearR(Bv);
+  for (const [a, b] of [
+    [s1b, s2a],
+    [s2b, s1a],
+  ]) {
+    const A = P(a),
+      Bv = P(b);
+    const ra = nearR(A),
+      rb = nearR(Bv);
     up(A, Bv, rb);
     if (ra !== rb) up(A, rb, ra);
   }
@@ -147,19 +182,25 @@ function inset(ring: Pt[], d: number): Pt[] | null {
   const n = ring.length;
   const out: Pt[] = [];
   for (let i = 0; i < n; i++) {
-    const p = ring[(i + n - 1) % n], c = ring[i], nx = ring[(i + 1) % n];
-    const l1 = Math.hypot(c[0] - p[0], c[1] - p[1]), l2 = Math.hypot(nx[0] - c[0], nx[1] - c[1]);
+    const p = ring[(i + n - 1) % n],
+      c = ring[i],
+      nx = ring[(i + 1) % n];
+    const l1 = Math.hypot(c[0] - p[0], c[1] - p[1]),
+      l2 = Math.hypot(nx[0] - c[0], nx[1] - c[1]);
     if (l1 < 1e-3 || l2 < 1e-3) return null;
     // Inward normals for a CCW ring are (-dz, dx).
-    const n1 = [-(c[1] - p[1]) / l1, (c[0] - p[0]) / l1], n2 = [-(nx[1] - c[1]) / l2, (nx[0] - c[0]) / l2];
-    const bx = n1[0] + n2[0], bz = n1[1] + n2[1];
+    const n1 = [-(c[1] - p[1]) / l1, (c[0] - p[0]) / l1],
+      n2 = [-(nx[1] - c[1]) / l2, (nx[0] - c[0]) / l2];
+    const bx = n1[0] + n2[0],
+      bz = n1[1] + n2[1];
     const bl = Math.hypot(bx, bz);
     if (bl < 0.3) return null;
     const k = d / ((bx * n1[0] + bz * n1[1]) / bl);
     if (k > d * 3) return null;
     out.push([c[0] + (bx / bl) * k, c[1] + (bz / bl) * k]);
   }
-  const a0 = signedArea(ring), a1 = signedArea(out);
+  const a0 = signedArea(ring),
+    a1 = signedArea(out);
   return a1 > 0 && a1 > a0 * 0.15 ? out : null;
 }
 
@@ -169,7 +210,9 @@ function skirtRoof(m: Mesh3, ring: Pt[], holes: Pt[][], h: number, color: THREE.
   const uvOf = (p: number[]) => [p[0] / 2, -p[2] / 2 + p[1]];
   if (!inner) {
     for (const [a, b, c] of triangulate(ring, holes)) {
-      const A = [a[0], h, a[1]], B = [b[0], h, b[1]], C = [c[0], h, c[1]];
+      const A = [a[0], h, a[1]],
+        B = [b[0], h, b[1]],
+        C = [c[0], h, c[1]];
       m.tri(A, B, C, uvOf(A), uvOf(B), uvOf(C), [0, 1, 0], flatColor);
     }
     return;
@@ -178,13 +221,17 @@ function skirtRoof(m: Mesh3, ring: Pt[], holes: Pt[][], h: number, color: THREE.
   const c = centroid(ring);
   for (let i = 0; i < ring.length; i++) {
     const j = (i + 1) % ring.length;
-    const A = [ring[i][0], h, ring[i][1]], B = [ring[j][0], h, ring[j][1]];
-    const C = [inner[j][0], h + rise, inner[j][1]], D = [inner[i][0], h + rise, inner[i][1]];
+    const A = [ring[i][0], h, ring[i][1]],
+      B = [ring[j][0], h, ring[j][1]];
+    const C = [inner[j][0], h + rise, inner[j][1]],
+      D = [inner[i][0], h + rise, inner[i][1]];
     const n = [(A[0] + B[0]) / 2 - c[0], 2, (A[2] + B[2]) / 2 - c[1]];
     m.quad(A, B, C, D, uvOf(A), uvOf(B), uvOf(C), uvOf(D), n, color);
   }
   for (const [a, b, cc] of triangulate(inner)) {
-    const A = [a[0], h + rise, a[1]], B = [b[0], h + rise, b[1]], C = [cc[0], h + rise, cc[1]];
+    const A = [a[0], h + rise, a[1]],
+      B = [b[0], h + rise, b[1]],
+      C = [cc[0], h + rise, cc[1]];
     m.tri(A, B, C, uvOf(A), uvOf(B), uvOf(C), [0, 1, 0], color);
   }
 }
@@ -193,7 +240,9 @@ function isConvexQuad(r: Pt[]): boolean {
   if (r.length !== 4) return false;
   let sign = 0;
   for (let i = 0; i < 4; i++) {
-    const a = r[i], b = r[(i + 1) % 4], c = r[(i + 2) % 4];
+    const a = r[i],
+      b = r[(i + 1) % 4],
+      c = r[(i + 2) % 4];
     const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
     const s = Math.sign(cr);
     if (sign === 0) sign = s;
@@ -257,7 +306,9 @@ export function buildBuildings(ctx: BuildContext): void {
     } else if (industrial || (b.t === 'block' && area > 600) || lowAnnex) {
       flatRoof(roofMesh, outer, holes, top, lowAnnex ? TERRACE : FLAT_ROOF);
     } else if (isConvexQuad(outer) && !holes.length && area < 900) {
-      const short = Math.min(...[0, 1, 2, 3].map((i) => Math.hypot(outer[(i + 1) % 4][0] - outer[i][0], outer[(i + 1) % 4][1] - outer[i][1])));
+      const short = Math.min(
+        ...[0, 1, 2, 3].map((i) => Math.hypot(outer[(i + 1) % 4][0] - outer[i][0], outer[(i + 1) % 4][1] - outer[i][1])),
+      );
       // A small overhang (alero) beyond the walls, as on the real houses.
       const eave = inset(outer, -0.35) ?? outer;
       hipRoof(roofMesh, eave, top - 0.05, Math.min(4.5, short * 0.32), WHITE);
@@ -274,21 +325,26 @@ export function buildBuildings(ctx: BuildContext): void {
       let best: { i: number; len: number } | null = null;
       for (let i = 0; i < outer.length; i++) {
         if (hidden.has(i)) continue;
-        const [ax, az] = outer[i], [bx, bz] = outer[(i + 1) % outer.length];
+        const [ax, az] = outer[i],
+          [bx, bz] = outer[(i + 1) % outer.length];
         const len = Math.hypot(bx - ax, bz - az);
         if (len < 5) continue;
-        const nx = (bz - az) / len, nz = -(bx - ax) / len;
+        const nx = (bz - az) / len,
+          nz = -(bx - ax) / len;
         const hit = roads.nearest((ax + bx) / 2 + nx * 4, (az + bz) / 2 + nz * 4, 3, (r) => VEHICLE_ROADS.has(r.k) || r.k === 'pedestrian');
         if (hit && (!best || len > best.len)) best = { i, len };
       }
       if (best) {
-        const [ax, az] = outer[best.i], [bx, bz] = outer[(best.i + 1) % outer.length];
+        const [ax, az] = outer[best.i],
+          [bx, bz] = outer[(best.i + 1) % outer.length];
         const len = best.len;
-        const nx = (bz - az) / len, nz = -(bx - ax) / len;
+        const nx = (bz - az) / len,
+          nz = -(bx - ax) / len;
         const gw = Math.min(len - 1.6, 3 + hash01(idx, 7) * 4);
         const gh = h - FLOOR_H - 0.9;
         const gd = 0.9;
-        const mx = (ax + bx) / 2 + nx * (gd / 2), mz = (az + bz) / 2 + nz * (gd / 2);
+        const mx = (ax + bx) / 2 + nx * (gd / 2),
+          mz = (az + bz) / 2 + nz * (gd / 2);
         const rot = Math.atan2(-(bz - az), bx - ax);
         const gy = FLOOR_H + 0.3 + gh / 2;
         const geo = new THREE.BoxGeometry(gw, gh, gd);
@@ -304,13 +360,18 @@ export function buildBuildings(ctx: BuildContext): void {
     for (const [k, ring] of [outer, ...holes].entries()) {
       for (let i = 0; i < ring.length; i++) {
         if (k === 0 && hidden.has(i)) continue;
-        const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
+        const [ax, az] = ring[i],
+          [bx, bz] = ring[(i + 1) % ring.length];
         const len = Math.hypot(bx - ax, bz - az);
         if (len < 0.2) continue;
-        const nx = (bz - az) / len, nz = -(bx - ax) / len; // outward
+        const nx = (bz - az) / len,
+          nz = -(bx - ax) / len; // outward
         const t = 0.5;
         collision.addBox((ax + bx) / 2 - nx * (t / 2), (az + bz) / 2 - nz * (t / 2), len + 0.15, t, {
-          rot: Math.atan2(-(bz - az), bx - ax), bottom: y0, top: top + 2, mask: Layer.Solid,
+          rot: Math.atan2(-(bz - az), bx - ax),
+          bottom: y0,
+          top: top + 2,
+          mask: Layer.Solid,
         });
       }
     }
@@ -319,7 +380,9 @@ export function buildBuildings(ctx: BuildContext): void {
 
 function flatRoof(m: Mesh3, outer: Pt[], holes: Pt[][], h: number, color: THREE.Color): void {
   for (const [p, q, s] of triangulate(outer, holes)) {
-    const A = [p[0], h, p[1]], B = [q[0], h, q[1]], C = [s[0], h, s[1]];
+    const A = [p[0], h, p[1]],
+      B = [q[0], h, q[1]],
+      C = [s[0], h, s[1]];
     m.tri(A, B, C, [A[0] / 2, -A[2] / 2], [B[0] / 2, -B[2] / 2], [C[0] / 2, -C[2] / 2], [0, 1, 0], color);
   }
 }

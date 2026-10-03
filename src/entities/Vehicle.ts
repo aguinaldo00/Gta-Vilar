@@ -140,7 +140,9 @@ export class Vehicle {
     this.accelLong = damp(this.accelLong, (vF - prevVF) / dt, 8, dt);
 
     // Integrate, then resolve against the world.
-    const px = this.x, pz = this.z, ph = this.heading;
+    const px = this.x,
+      pz = this.z,
+      ph = this.heading;
     this.heading = wrapAngle(this.heading + this.yawRate * dt);
     this.x += this.vx * dt;
     this.z += this.vz * dt;
@@ -190,7 +192,8 @@ export class Vehicle {
     this.vz += j * nz;
     this.yawRate += j * rCrossN * invI * 0.6;
     // Friction along the wall.
-    const tx = -nz, tz = nx;
+    const tx = -nz,
+      tz = nx;
     const vt = this.vx * tx + this.vz * tz;
     this.vx -= tx * vt * 0.15;
     this.vz -= tz * vt * 0.15;
@@ -201,9 +204,16 @@ export class Vehicle {
   /** Keeps the wheels out of the river and off the steep boundary hills. */
   private resolveTerrain(world: World, px: number, pz: number, ph: number): void {
     const s = this.spec;
-    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
-    const hl = s.length / 2, hw = s.width / 2;
-    for (const [a, b] of [[hl, hw], [hl, -hw], [-hl, hw], [-hl, -hw]]) {
+    const fx = Math.sin(this.heading),
+      fz = Math.cos(this.heading);
+    const hl = s.length / 2,
+      hw = s.width / 2;
+    for (const [a, b] of [
+      [hl, hw],
+      [hl, -hw],
+      [-hl, hw],
+      [-hl, -hw],
+    ]) {
       const x = this.x + fx * a - fz * b;
       const z = this.z + fz * a + fx * b;
       const h = world.heightAt(x, z);
@@ -238,11 +248,16 @@ export class Vehicle {
 
   private updatePose(world: World, dt: number): void {
     const s = this.spec;
-    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
-    const hb = s.wheelBase / 2, ht = s.width / 2 - 0.15;
+    const fx = Math.sin(this.heading),
+      fz = Math.cos(this.heading);
+    const hb = s.wheelBase / 2,
+      ht = s.width / 2 - 0.15;
     const sample = (a: number, b: number) => world.heightAt(this.x + fx * a - fz * b, this.z + fz * a + fx * b);
     // b > 0 samples the right-hand side (local -X).
-    const fR = sample(hb, ht), fL = sample(hb, -ht), rR = sample(-hb, ht), rL = sample(-hb, -ht);
+    const fR = sample(hb, ht),
+      fL = sample(hb, -ht),
+      rR = sample(-hb, ht),
+      rL = sample(-hb, -ht);
     const target = (fR + fL + rR + rL) / 4;
     this.y = target > this.y ? damp(this.y, target, 25, dt) : damp(this.y, target, 12, dt);
     this.pitch = damp(this.pitch, Math.atan2((fR + fL - rR - rL) / 2, s.wheelBase), 10, dt);
@@ -269,7 +284,8 @@ export class Vehicle {
     this.skidding =
       (Math.abs(this.slip) > 2.5 || (c.handbrake && Math.abs(this.speed) > 4) || (this.braking && Math.abs(this.speed) > 14)) &&
       s.kind !== 'tractor';
-    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    const fx = Math.sin(this.heading),
+      fz = Math.cos(this.heading);
     const rear = this.rig.wheels.filter((w) => !w.front);
     rear.forEach((w, i) => {
       if (!this.skidding) {
@@ -294,9 +310,12 @@ export class Vehicle {
     if ((a.x - b.x) ** 2 + (a.z - b.z) ** 2 > reach * reach) return;
     for (const oa of a.offsets) {
       for (const ob of b.offsets) {
-        const ax = a.x + a.forwardX * oa, az = a.z + a.forwardZ * oa;
-        const bx = b.x + b.forwardX * ob, bz = b.z + b.forwardZ * ob;
-        let nx = ax - bx, nz = az - bz;
+        const ax = a.x + a.forwardX * oa,
+          az = a.z + a.forwardZ * oa;
+        const bx = b.x + b.forwardX * ob,
+          bz = b.z + b.forwardZ * ob;
+        let nx = ax - bx,
+          nz = az - bz;
         const d = Math.hypot(nx, nz);
         const overlap = a.radius + b.radius - d;
         if (overlap <= 0) continue;
@@ -308,7 +327,8 @@ export class Vehicle {
           nz /= d;
         }
         const total = a.spec.mass + b.spec.mass;
-        const ka = b.spec.mass / total, kb = a.spec.mass / total;
+        const ka = b.spec.mass / total,
+          kb = a.spec.mass / total;
         a.x += nx * overlap * ka;
         a.z += nz * overlap * ka;
         b.x -= nx * overlap * kb;
@@ -320,8 +340,8 @@ export class Vehicle {
         a.vz += (j / a.spec.mass) * nz;
         b.vx -= (j / b.spec.mass) * nx;
         b.vz -= (j / b.spec.mass) * nz;
-        a.yawRate += (oa * (a.forwardZ * nx - a.forwardX * nz) * j) / a.spec.mass * 0.15;
-        b.yawRate -= (ob * (b.forwardZ * nx - b.forwardX * nz) * j) / b.spec.mass * 0.15;
+        a.yawRate += ((oa * (a.forwardZ * nx - a.forwardX * nz) * j) / a.spec.mass) * 0.15;
+        b.yawRate -= ((ob * (b.forwardZ * nx - b.forwardX * nz) * j) / b.spec.mass) * 0.15;
         a.impact = Math.max(a.impact, -rel);
         b.impact = Math.max(b.impact, -rel);
       }
@@ -336,8 +356,10 @@ export class Vehicle {
     const res = { hit: false, nx: 0, nz: 0, speed: 0 };
     if (feetY > this.y + this.spec.height - 0.3) return res;
     for (const o of this.offsets) {
-      const cx = this.x + this.forwardX * o, cz = this.z + this.forwardZ * o;
-      let nx = p.x - cx, nz = p.z - cz;
+      const cx = this.x + this.forwardX * o,
+        cz = this.z + this.forwardZ * o;
+      let nx = p.x - cx,
+        nz = p.z - cz;
       const d = Math.hypot(nx, nz);
       const overlap = this.radius + r - d;
       if (overlap <= 0) continue;
@@ -357,8 +379,10 @@ export class Vehicle {
 
   /** Is (x, z) within reach of a door? */
   isNear(x: number, z: number, reach: number): boolean {
-    const dx = x - this.x, dz = z - this.z;
-    const fx = this.forwardX, fz = this.forwardZ;
+    const dx = x - this.x,
+      dz = z - this.z;
+    const fx = this.forwardX,
+      fz = this.forwardZ;
     const along = dx * fx + dz * fz;
     const side = dx * fz - dz * fx;
     return Math.abs(along) < this.spec.length / 2 + reach && Math.abs(side) < this.spec.width / 2 + reach;

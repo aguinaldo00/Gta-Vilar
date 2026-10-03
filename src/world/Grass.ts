@@ -8,7 +8,8 @@ import { waterTime } from './Water';
  */
 function grassMask(size: number): THREE.CanvasTexture {
   const B = MAP.meta.bounds;
-  const W = B.maxX - B.minX, H = B.maxZ - B.minZ;
+  const W = B.maxX - B.minX,
+    H = B.maxZ - B.minZ;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
@@ -21,15 +22,59 @@ function grassMask(size: number): THREE.CanvasTexture {
     g.closePath();
   };
   const fills: Record<string, string> = {
-    farmland: 'rgb(200,200,0)', meadow: 'rgb(255,120,0)', grass: 'rgb(255,40,0)', park: 'rgb(235,30,0)',
-    garden: 'rgb(170,20,0)', residential: 'rgb(110,40,0)', orchard: 'rgb(200,60,0)', forest: 'rgb(150,40,0)',
-    scrub: 'rgb(200,140,0)', cemetery: 'rgb(80,40,0)', camp: 'rgb(200,50,0)', allotments: 'rgb(120,60,0)',
-    industrial: 'rgb(0,0,0)', parking: 'rgb(0,0,0)', pedestrian: 'rgb(0,0,0)', water: 'rgb(0,0,0)', pool: 'rgb(0,0,0)',
-    pitch: 'rgb(0,0,0)', playground: 'rgb(0,0,0)', track: 'rgb(0,0,0)', school: 'rgb(60,20,0)', sports: 'rgb(60,20,0)',
-    brownfield: 'rgb(120,160,0)', farmyard: 'rgb(60,100,0)', beach: 'rgb(0,0,0)',
+    farmland: 'rgb(200,200,0)',
+    meadow: 'rgb(255,120,0)',
+    grass: 'rgb(255,40,0)',
+    park: 'rgb(235,30,0)',
+    garden: 'rgb(170,20,0)',
+    residential: 'rgb(110,40,0)',
+    orchard: 'rgb(200,60,0)',
+    forest: 'rgb(150,40,0)',
+    scrub: 'rgb(200,140,0)',
+    cemetery: 'rgb(80,40,0)',
+    camp: 'rgb(200,50,0)',
+    allotments: 'rgb(120,60,0)',
+    industrial: 'rgb(0,0,0)',
+    parking: 'rgb(0,0,0)',
+    pedestrian: 'rgb(0,0,0)',
+    water: 'rgb(0,0,0)',
+    pool: 'rgb(0,0,0)',
+    pitch: 'rgb(0,0,0)',
+    playground: 'rgb(0,0,0)',
+    track: 'rgb(0,0,0)',
+    school: 'rgb(60,20,0)',
+    sports: 'rgb(60,20,0)',
+    brownfield: 'rgb(120,160,0)',
+    farmyard: 'rgb(60,100,0)',
+    beach: 'rgb(0,0,0)',
   };
-  const order = ['farmland', 'meadow', 'grass', 'scrub', 'orchard', 'allotments', 'residential', 'forest', 'park', 'garden', 'cemetery', 'camp',
-    'brownfield', 'farmyard', 'school', 'sports', 'industrial', 'parking', 'pitch', 'playground', 'track', 'pedestrian', 'beach', 'water', 'pool'];
+  const order = [
+    'farmland',
+    'meadow',
+    'grass',
+    'scrub',
+    'orchard',
+    'allotments',
+    'residential',
+    'forest',
+    'park',
+    'garden',
+    'cemetery',
+    'camp',
+    'brownfield',
+    'farmyard',
+    'school',
+    'sports',
+    'industrial',
+    'parking',
+    'pitch',
+    'playground',
+    'track',
+    'pedestrian',
+    'beach',
+    'water',
+    'pool',
+  ];
   for (const a of [...MAP.areas].sort((x, y) => order.indexOf(x.k) - order.indexOf(y.k))) {
     const f = fills[a.k];
     if (!f) continue;
@@ -70,17 +115,23 @@ function grassMask(size: number): THREE.CanvasTexture {
 
 /** One tuft: three tapered blades (6 triangles) fanned around the origin, height 1, base at y = 0. */
 function tuft(): THREE.InstancedBufferGeometry {
-  const pos: number[] = [], col: number[] = [];
-  const base = new THREE.Color('#3d5a24'), tip = new THREE.Color('#9fb25e');
+  const pos: number[] = [],
+    col: number[] = [];
+  const base = new THREE.Color('#3d5a24'),
+    tip = new THREE.Color('#9fb25e');
   for (let b = 0; b < 3; b++) {
     const a = (b / 3) * Math.PI + 0.3;
-    const ca = Math.cos(a), sa = Math.sin(a);
+    const ca = Math.cos(a),
+      sa = Math.sin(a);
     const lean = 0.18 * (b - 1);
     const w = 0.075;
     const p = (x: number, y: number) => [x * ca + lean * y, y, x * sa + lean * y * 0.5];
     // Tapered blade: two triangles (base to a narrow tip).
     const v = [p(-w, 0), p(w, 0), p(w * 0.15, 1), p(-w * 0.15, 1)];
-    for (const [i, j, k] of [[0, 1, 2], [0, 2, 3]]) {
+    for (const [i, j, k] of [
+      [0, 1, 2],
+      [0, 2, 3],
+    ]) {
       for (const n of [i, j, k]) {
         pos.push(...v[n]);
         const c = base.clone().lerp(tip, v[n][1]);
@@ -91,7 +142,13 @@ function tuft(): THREE.InstancedBufferGeometry {
   const g = new THREE.InstancedBufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+  g.setAttribute(
+    'normal',
+    new THREE.Float32BufferAttribute(
+      new Float32Array(pos.length).map((_, i) => (i % 3 === 1 ? 1 : 0)),
+      3,
+    ),
+  );
   return g;
 }
 
@@ -127,12 +184,17 @@ export class Grass {
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>
+        .replace(
+          '#include <common>',
+          `#include <common>
 uniform vec3 uCam; uniform float uTime; uniform sampler2D uMask; uniform vec4 uBounds; uniform float uSpacing; uniform float uRadius;
 attribute vec2 aCell;
-float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
+float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`,
+        )
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')
-        .replace('#include <begin_vertex>', `
+        .replace(
+          '#include <begin_vertex>',
+          `
   vec2 grid = floor(uCam.xz / uSpacing) * uSpacing;
   vec2 wp = grid + aCell * uSpacing;
   float r1 = h21(wp), r2 = h21(wp + 17.3), r3 = h21(wp + 41.7);
@@ -151,7 +213,8 @@ float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); 
   transformed.z += cos(uTime * 1.5 + wp.y * 0.3) * 0.12 * tip * hgt;
   transformed.xz += wp;
   // Dry fields and meadows turn golden; small per-tuft brightness variation.
-  vColor.rgb *= mix(vec3(1.0), vec3(1.25, 1.12, 0.7), m.g) * (0.9 + 0.25 * r2);`);
+  vColor.rgb *= mix(vec3(1.0), vec3(1.25, 1.12, 0.7), m.g) * (0.9 + 0.25 * r2);`,
+        );
     };
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false;

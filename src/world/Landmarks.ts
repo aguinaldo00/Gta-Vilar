@@ -18,14 +18,32 @@ class Placer {
   readonly lb: LocalBatch;
   readonly group = new THREE.Group();
 
-  constructor(private readonly ctx: BuildContext, readonly x: number, readonly z: number, readonly rot: number, y = 0) {
+  constructor(
+    private readonly ctx: BuildContext,
+    readonly x: number,
+    readonly z: number,
+    readonly rot: number,
+    y = 0,
+  ) {
     this.lb = new LocalBatch(ctx.batch, x, y, z, rot);
     this.group.position.set(x, y, z);
     this.group.rotation.y = rot;
     ctx.scene.add(this.group);
   }
 
-  add(geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, ry = 0, sx = 1, sy = 1, sz = 1, rx = 0, rz = 0): void {
+  add(
+    geo: THREE.BufferGeometry,
+    mat: THREE.Material,
+    x: number,
+    y: number,
+    z: number,
+    ry = 0,
+    sx = 1,
+    sy = 1,
+    sz = 1,
+    rx = 0,
+    rz = 0,
+  ): void {
     this.lb.add(geo, mat, x, y, z, ry, sx, sy, sz, rx, rz);
   }
 
@@ -64,15 +82,18 @@ function buildAyuntamiento(ctx: BuildContext): void {
   const options = [0, Math.PI, Math.PI / 2, -Math.PI / 2].map((o) => obb.angle + o);
   const toT = [target.x - obb.cx, target.z - obb.cz];
   const rot = options.reduce((best, r) =>
-    Math.sin(r) * toT[0] + Math.cos(r) * toT[1] > Math.sin(best) * toT[0] + Math.cos(best) * toT[1] ? r : best);
+    Math.sin(r) * toT[0] + Math.cos(r) * toT[1] > Math.sin(best) * toT[0] + Math.cos(best) * toT[1] ? r : best,
+  );
   const swapped = Math.abs(Math.sin(rot - obb.angle)) > 0.5;
   const w = swapped ? obb.d : obb.w;
   const d = swapped ? obb.w : obb.d;
 
   const P = new Placer(ctx, obb.cx, obb.cz, rot, BASE);
   const { mats } = ctx;
-  const gf = 4.8, uf = 5.0;
-  const front = d / 2, back = -d / 2;
+  const gf = 4.8,
+    uf = 5.0;
+  const front = d / 2,
+    back = -d / 2;
   const arches = Math.max(3, Math.round(w / 6.4) | 1);
   const spacing = w / arches;
   const half = Math.min(2.2, spacing / 2 - 0.65);
@@ -101,7 +122,8 @@ function buildAyuntamiento(ctx: BuildContext): void {
   arcade.translate(0, 0, -1);
   P.add(arcade, mats.stone, 0, 0, front);
   const edges = [-w / 2, ...archXs.flatMap((ax) => [ax - half, ax + half]), w / 2];
-  for (let i = 0; i < edges.length; i += 2) P.box((edges[i] + edges[i + 1]) / 2, front - 0.5, edges[i + 1] - edges[i], 1, { top: gf + BASE });
+  for (let i = 0; i < edges.length; i += 2)
+    P.box((edges[i] + edges[i + 1]) / 2, front - 0.5, edges[i + 1] - edges[i], 1, { top: gf + BASE });
 
   const coreFront = back + coreD;
   archXs.forEach((ax, i) => {
@@ -125,7 +147,11 @@ function buildAyuntamiento(ctx: BuildContext): void {
     }
   }
   const midW = archXs.length >= 3 ? archXs[archXs.length - 2] - archXs[1] + 2.4 : 3;
-  const balconies: [number, number][] = [[0, midW], [archXs[0], 2.6], [archXs[archXs.length - 1], 2.6]];
+  const balconies: [number, number][] = [
+    [0, midW],
+    [archXs[0], 2.6],
+    [archXs[archXs.length - 1], 2.6],
+  ];
   for (const [bx, bw] of balconies) {
     P.add(Unit.box, mats.stoneTrim, bx, upperY + 0.42, front + 0.4, 0, bw, 0.16, 0.8);
     P.add(boxGeo(bw, 0.95, 0.04, 2.4, 0.95), mats.ironwork, bx, upperY + 0.98, front + 0.78);
@@ -136,7 +162,9 @@ function buildAyuntamiento(ctx: BuildContext): void {
   P.add(hipRoof(w, d, Math.min(3.6, d * 0.25), 0.5), mats.roof, 0, topY + 0.5, 0);
 
   // Clock gable with rounded top and the iron bell cage.
-  const gz = front - 0.3, gw = 5.2, gh = 3.4;
+  const gz = front - 0.3,
+    gw = 5.2,
+    gh = 3.4;
   P.add(boxGeo(gw, gh, 1.2, 2), mats.stone, 0, topY + gh / 2, gz);
   const cap = new THREE.CylinderGeometry(gw / 2, gw / 2, 1.2, 20, 1, false, -Math.PI / 2, Math.PI);
   cap.rotateX(-Math.PI / 2);
@@ -147,7 +175,12 @@ function buildAyuntamiento(ctx: BuildContext): void {
   P.group.add(clock);
   P.add(Unit.cyl16, mats.stoneTrim, 0, topY + gh * 0.55, gz + 0.58, 0, 2.7, 0.1, 2.7, Math.PI / 2);
   const cageBase = topY + gh + gw / 2;
-  for (const [lx, lz] of [[-0.8, -0.4], [0.8, -0.4], [0.8, 0.4], [-0.8, 0.4]]) {
+  for (const [lx, lz] of [
+    [-0.8, -0.4],
+    [0.8, -0.4],
+    [0.8, 0.4],
+    [-0.8, 0.4],
+  ]) {
     P.lb.addMatrix(Unit.cyl, mats.iron, beamMatrix(lx, cageBase - 0.1, gz + lz, 0, cageBase + 2.3, gz, 0.07));
   }
   P.add(Unit.cone, mats.bronze, 0, cageBase + 1.0, gz, 0, 0.8, 0.9, 0.8);
@@ -156,7 +189,11 @@ function buildAyuntamiento(ctx: BuildContext): void {
 
   // Balcony flags: Spain, Castilla y León, Europe.
   const fy = BASE + upperY + 0.6;
-  for (const [kind, ox] of [['es', 0], ['cyl', -2.2], ['eu', 2.2]] as const) {
+  for (const [kind, ox] of [
+    ['es', 0],
+    ['cyl', -2.2],
+    ['eu', 2.2],
+  ] as const) {
     const [fx, fz] = P.lb.point(ox, front + 0.7);
     flag(ctx, kind, fx, fy, fz, 2.8, rot, 0.45);
   }
@@ -170,17 +207,30 @@ function buildTorre(ctx: BuildContext): void {
   const h = (fp.lv ?? 4) * 4.6;
   const P = new Placer(ctx, obb.cx, obb.cz, obb.angle);
   const { mats } = ctx;
-  const sw = obb.w, sd = obb.d;
+  const sw = obb.w,
+    sd = obb.d;
   P.add(boxGeo(sw + 0.5, 1.2, sd + 0.5, 2), mats.plinth, 0, 0.6, 0);
   P.add(boxGeo(sw, h, sd, 2), mats.stone, 0, h / 2, 0);
   P.add(boxGeo(sw + 0.7, 0.7, sd + 0.7, 2), mats.stone, 0, h + 0.35, 0);
   const top = h + 0.7;
-  const hx = (sw + 0.7) / 2 - 0.3, hz = (sd + 0.7) / 2 - 0.3;
+  const hx = (sw + 0.7) / 2 - 0.3,
+    hz = (sd + 0.7) / 2 - 0.3;
   for (let i = 0; i < 6; i++) {
-    const tx = -hx + (i * 2 * hx) / 5, tz = -hz + (i * 2 * hz) / 5;
-    for (const [mx, mz] of [[tx, -hz], [tx, hz], [-hx, tz], [hx, tz]]) P.add(Unit.box, mats.stone, mx, top + 0.55, mz, 0, 0.75, 1.1, 0.75);
+    const tx = -hx + (i * 2 * hx) / 5,
+      tz = -hz + (i * 2 * hz) / 5;
+    for (const [mx, mz] of [
+      [tx, -hz],
+      [tx, hz],
+      [-hx, tz],
+      [hx, tz],
+    ])
+      P.add(Unit.box, mats.stone, mx, top + 0.55, mz, 0, 0.75, 1.1, 0.75);
   }
-  for (const [wy, ww, wh] of [[h * 0.4, 0.35, 1.4], [h * 0.62, 1.0, 1.8], [h * 0.84, 0.35, 1.4]] as const) {
+  for (const [wy, ww, wh] of [
+    [h * 0.4, 0.35, 1.4],
+    [h * 0.62, 1.0, 1.8],
+    [h * 0.84, 0.35, 1.4],
+  ] as const) {
     P.add(Unit.box, mats.glass, 0, wy, sd / 2 + 0.05, 0, ww, wh, 0.1);
     P.add(Unit.box, mats.glass, 0, wy, -sd / 2 - 0.05, 0, ww, wh, 0.1);
     P.add(Unit.box, mats.glass, sw / 2 + 0.05, wy, 0, 0, 0.1, wh, ww);
@@ -210,13 +260,15 @@ function buildTemplete(ctx: BuildContext): void {
   const colR = 3.95 * k;
   for (let i = 0; i < 8; i++) {
     const a = Math.PI / 8 + (i * Math.PI) / 4;
-    const px = Math.sin(a) * colR, pz = Math.cos(a) * colR;
+    const px = Math.sin(a) * colR,
+      pz = Math.cos(a) * colR;
     P.add(Unit.cyl, mats.darkWood, px, Pl + 1.8, pz, 0, 0.26, 3.6, 0.26);
     P.add(Unit.box, mats.stoneTrim, px, Pl + 0.45, pz, a, 0.38, 0.9, 0.38);
     P.add(Unit.sphere, mats.stoneTrim, px, Pl + 1.05, pz, 0, 0.36, 0.36, 0.36);
     P.circle(px, pz, 0.2, { bottom: Pl, top: Pl + 3.6, mask: Layer.Bodies });
     if (i % 2 === 0) {
-      const lx = px + Math.sin(a) * 0.55, lz = pz + Math.cos(a) * 0.55;
+      const lx = px + Math.sin(a) * 0.55,
+        lz = pz + Math.cos(a) * 0.55;
       P.lb.addMatrix(Unit.cyl, mats.ironGreen, beamMatrix(px, Pl + 2.6, pz, lx, Pl + 2.9, lz, 0.06));
       P.add(Unit.box, mats.lampGlass, lx, Pl + 2.65, lz, a, 0.26, 0.4, 0.26);
       P.add(Unit.cone, mats.ironGreen, lx, Pl + 3.0, lz, 0, 0.45, 0.3, 0.45);
@@ -226,7 +278,8 @@ function buildTemplete(ctx: BuildContext): void {
   const panelW = 2 * colR * Math.sin(Math.PI / 8) - 0.35;
   for (let i = 1; i < 8; i++) {
     const a = (i * Math.PI) / 4;
-    const px = Math.sin(a) * apothem, pz = Math.cos(a) * apothem;
+    const px = Math.sin(a) * apothem,
+      pz = Math.cos(a) * apothem;
     P.add(boxGeo(panelW, 0.9, 0.04, panelW, 0.9), mats.ironwork, px, Pl + 0.5, pz, a);
     P.add(Unit.box, mats.ironGreen, px, Pl + 0.97, pz, a, panelW, 0.06, 0.08);
     P.box(px, pz, panelW + 0.4, 0.2, { rot: a, bottom: Pl, top: Pl + 1.0, mask: Layer.Player });
@@ -257,7 +310,10 @@ function buildFountain(ctx: BuildContext): void {
   P.add(new THREE.CylinderGeometry(r, r + 0.15, 0.7, 24, 1, true), mats.stone, 0, 0.35, 0);
   P.add(new THREE.CylinderGeometry(r - 0.35, r - 0.35, 0.7, 24, 1, true), mats.stone, 0, 0.35, 0);
   P.add(new THREE.RingGeometry(r - 0.35, r, 24).rotateX(-Math.PI / 2), mats.stoneTrim, 0, 0.71, 0);
-  const water = new THREE.Mesh(new THREE.CircleGeometry(r - 0.35, 24).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#4a9ab0' }));
+  const water = new THREE.Mesh(
+    new THREE.CircleGeometry(r - 0.35, 24).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: '#4a9ab0' }),
+  );
   water.position.y = 0.55;
   P.group.add(water);
   P.add(Unit.cyl, mats.stone, 0, h * 0.4, 0, 0, 0.6, h * 0.8, 0.6);
@@ -294,7 +350,12 @@ function buildBellTowers(ctx: BuildContext): void {
     const h = t.ht || 20;
     const P = new Placer(ctx, t.x, t.z, 0);
     P.add(boxGeo(4.2, h, 4.2, 2), mats.stone, 0, h / 2, 0);
-    for (const [ox, oz, ry] of [[0, 2.12, 0], [0, -2.12, 0], [2.12, 0, Math.PI / 2], [-2.12, 0, Math.PI / 2]] as const) {
+    for (const [ox, oz, ry] of [
+      [0, 2.12, 0],
+      [0, -2.12, 0],
+      [2.12, 0, Math.PI / 2],
+      [-2.12, 0, Math.PI / 2],
+    ] as const) {
       P.add(Unit.box, mats.glass, ox, h - 2.2, oz, ry, 1.4, 2.2, 0.1);
     }
     P.add(new THREE.ConeGeometry(3.2, 2.6, 4).rotateY(Math.PI / 4), mats.roof, 0, h + 1.3, 0);
@@ -338,7 +399,16 @@ function buildMikado(ctx: BuildContext): void {
   }
   P.add(Unit.box, mats.lampGlass, 0, y0 + 2.9, 5.35, 0, 0.35, 0.35, 0.2);
   P.box(0, -1.4, 3, 16, { top: 4.5 });
-  signBoard(ctx, signTexture('LOCOMOTORA MIKADO', '#20304a', '#f2ecdc', 640, 96), ...P.lb.point(3.2, 2), 0, rot + Math.PI / 2, 3.6, 0.6, 0.9);
+  signBoard(
+    ctx,
+    signTexture('LOCOMOTORA MIKADO', '#20304a', '#f2ecdc', 640, 96),
+    ...P.lb.point(3.2, 2),
+    0,
+    rot + Math.PI / 2,
+    3.6,
+    0.6,
+    0.9,
+  );
 }
 
 /** Name board of the old Horna-Villarcayo station, facing the Vía Verde. */
@@ -348,7 +418,8 @@ function buildStationSign(ctx: BuildContext): void {
   const [cx, cz] = centroid(toPts(st.o));
   const hit = ctx.roads.nearest(cx, cz, 80, (r) => r.k === 'viaverde');
   if (!hit) return;
-  const mx = cx + (hit.x - cx) * 0.6, mz = cz + (hit.z - cz) * 0.6;
+  const mx = cx + (hit.x - cx) * 0.6,
+    mz = cz + (hit.z - cz) * 0.6;
   const rot = facing(mx, mz, hit.x, hit.z);
   signBoard(ctx, signTexture('VILLARCAYO', '#f2ecdc', '#20304a'), mx, mz, 0, rot, 4.2, 0.8, 1.8);
 }
@@ -363,4 +434,3 @@ export function buildLandmarks(ctx: BuildContext): void {
   buildMikado(ctx);
   buildStationSign(ctx);
 }
-

@@ -43,7 +43,21 @@ export interface MapShop {
   a: number;
   /** Front width (m). */
   w: number;
-  c: 'bar' | 'food' | 'cafe' | 'bank' | 'pharmacy' | 'police' | 'health' | 'civic' | 'grocery' | 'beauty' | 'garage' | 'shop' | 'office' | 'hotel';
+  c:
+    | 'bar'
+    | 'food'
+    | 'cafe'
+    | 'bank'
+    | 'pharmacy'
+    | 'police'
+    | 'health'
+    | 'civic'
+    | 'grocery'
+    | 'beauty'
+    | 'garage'
+    | 'shop'
+    | 'office'
+    | 'hotel';
   /** Sign text (real name, or the trade in Spanish). */
   n: string;
 }

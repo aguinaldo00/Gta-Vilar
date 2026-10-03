@@ -15,8 +15,13 @@ export class SkidMarks {
   constructor(scene: THREE.Scene) {
     const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
     const mat = new THREE.MeshBasicMaterial({
-      color: '#151515', transparent: true, opacity: 0.55, depthWrite: false,
-      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+      color: '#151515',
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
     });
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

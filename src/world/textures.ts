@@ -236,11 +236,15 @@ export function flagTexture(kind: 'es' | 'cyl' | 'eu'): THREE.CanvasTexture {
       g.fillRect(0, h / 4, w, h / 2);
     } else if (kind === 'cyl') {
       // Castilla y León: quartered castle (red) and lion (white) fields.
-      const q = [['#b5121b', '#f4f1ea'], ['#f4f1ea', '#b5121b']];
-      for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
-        g.fillStyle = q[i][j];
-        g.fillRect(j * w / 2, i * h / 2, w / 2, h / 2);
-      }
+      const q = [
+        ['#b5121b', '#f4f1ea'],
+        ['#f4f1ea', '#b5121b'],
+      ];
+      for (let i = 0; i < 2; i++)
+        for (let j = 0; j < 2; j++) {
+          g.fillStyle = q[i][j];
+          g.fillRect((j * w) / 2, (i * h) / 2, w / 2, h / 2);
+        }
       g.fillStyle = '#f2c230';
       g.fillRect(16, 10, 16, 14);
       g.fillRect(64, 42, 16, 14);
@@ -371,7 +375,8 @@ export function signTexture(text: string, bg: string, fg: string, w = 512, h = 9
  */
 export function normalMapFrom(tex: THREE.CanvasTexture, strength = 2): THREE.CanvasTexture {
   const src = tex.image as HTMLCanvasElement;
-  const w = src.width, h = src.height;
+  const w = src.width,
+    h = src.height;
   const data = src.getContext('2d')!.getImageData(0, 0, w, h).data;
   const lum = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) lum[i] = (data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114) / 255;
@@ -387,9 +392,9 @@ export function normalMapFrom(tex: THREE.CanvasTexture, strength = 2): THREE.Can
       const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
       const len = Math.hypot(dx, dy, 1);
       const i = (y * w + x) * 4;
-      out.data[i] = (-dx / len * 0.5 + 0.5) * 255;
-      out.data[i + 1] = (dy / len * 0.5 + 0.5) * 255;
-      out.data[i + 2] = (1 / len * 0.5 + 0.5) * 255;
+      out.data[i] = ((-dx / len) * 0.5 + 0.5) * 255;
+      out.data[i + 1] = ((dy / len) * 0.5 + 0.5) * 255;
+      out.data[i + 2] = ((1 / len) * 0.5 + 0.5) * 255;
       out.data[i + 3] = 255;
     }
   }
@@ -436,7 +441,10 @@ export function facadeAtlasTexture(): THREE.CanvasTexture {
 
     // ---- Upper storey.
     plaster(0);
-    const wx = 78, wy = 40, ww = 100, wh = 150;
+    const wx = 78,
+      wy = 40,
+      ww = 100,
+      wh = 150;
     stoneFrame(wx, wy, ww, wh, 10);
     // Shutters (contraventanas), opened against the wall.
     const shutter = rng.pick(['#5a3b22', '#3f5a3a', '#6b4a2b']);
@@ -480,7 +488,10 @@ export function facadeAtlasTexture(): THREE.CanvasTexture {
       for (let xx = C + ((yy / 21) % 2) * 20; xx < C * 2; xx += 40) g.strokeRect(xx, yy, 40, 21);
     }
     // Doorway / shop front with a stone frame.
-    const dx = C + 70, dy = 30, dw = 116, dh = C - 30;
+    const dx = C + 70,
+      dy = 30,
+      dw = 116,
+      dh = C - 30;
     stoneFrame(dx, dy, dw, dh, 12);
     const door = rng.pick(['#4a2f1c', '#5b3a22', '#2f3d2f']);
     g.fillStyle = door;
@@ -505,7 +516,10 @@ export function facadeAtlasTexture(): THREE.CanvasTexture {
     for (let yy = C - 64; yy < C; yy += 21) {
       for (let xx = X + ((yy / 21) % 2) * 20; xx < X + C; xx += 40) g.strokeRect(xx, yy, 40, 21);
     }
-    const bx = X + 84, by = 56, bw = 88, bh = 110;
+    const bx = X + 84,
+      by = 56,
+      bw = 88,
+      bh = 110;
     stoneFrame(bx, by, bw, bh, 10);
     const gl = g.createLinearGradient(bx, by, bx + bw, by + bh);
     gl.addColorStop(0, '#7f96a8');
@@ -563,7 +577,8 @@ export function grassDetailTexture(): THREE.CanvasTexture {
     }
     g.lineCap = 'round';
     for (let i = 0; i < 14000; i++) {
-      const x = rng.range(0, w), y = rng.range(0, h);
+      const x = rng.range(0, w),
+        y = rng.range(0, h);
       const l = rng.range(3, 9);
       const a = rng.range(-0.6, 0.6) - Math.PI / 2;
       g.strokeStyle = rng.pick(['#e8e8e8', '#b8b8b8', '#f4f4f4', '#a0a0a0', '#cccccc']);
@@ -594,7 +609,8 @@ export function treeAtlasTexture(): THREE.CanvasTexture {
     for (let i = 0; i < 1500; i++) {
       const r = Math.sqrt(rng.next()) * (cw * 0.47);
       const a = rng.range(0, Math.PI * 2);
-      const x = cw / 2 + Math.cos(a) * r, y = h / 2 + Math.sin(a) * r * 0.95;
+      const x = cw / 2 + Math.cos(a) * r,
+        y = h / 2 + Math.sin(a) * r * 0.95;
       const k = rng.range(0.55, 1.2) * (1.05 - (r / cw) * 0.5);
       g.fillStyle = `rgb(${Math.round(112 * k)},${Math.round(150 * k)},${Math.round(62 * k)})`;
       g.beginPath();

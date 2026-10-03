@@ -88,8 +88,30 @@ export class Game {
     this.touch = isTouch ? new TouchControls(this.input) : null;
     // Draw distance is the main performance knob: phones see less far.
     const quality: Quality = isTouch
-      ? { groundTexture: 2048, fogDensity: 0.0033, drawDistance: 380, shadowMapSize: 1024, treeShadows: false, grassRadius: 24, grassSpacing: 0.9, treeBudget: 1800, postFX: false, detail: 0 }
-      : { groundTexture: 4096, fogDensity: 0.0019, drawDistance: 620, shadowMapSize: 4096, treeShadows: true, grassRadius: 40, grassSpacing: 0.5, treeBudget: 4200, postFX: true, detail: 1 };
+      ? {
+          groundTexture: 2048,
+          fogDensity: 0.0033,
+          drawDistance: 380,
+          shadowMapSize: 1024,
+          treeShadows: false,
+          grassRadius: 24,
+          grassSpacing: 0.9,
+          treeBudget: 1800,
+          postFX: false,
+          detail: 0,
+        }
+      : {
+          groundTexture: 4096,
+          fogDensity: 0.0019,
+          drawDistance: 620,
+          shadowMapSize: 4096,
+          treeShadows: true,
+          grassRadius: 40,
+          grassSpacing: 0.5,
+          treeBudget: 4200,
+          postFX: true,
+          detail: 1,
+        };
     quality.groundTexture = Math.min(quality.groundTexture, this.renderer.capabilities.maxTextureSize);
     this.quality = quality;
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.25, quality.drawDistance);
@@ -126,10 +148,13 @@ export class Game {
     if (this.touch) {
       // Phones: go fullscreen and landscape where the browser allows it.
       try {
-        document.documentElement.requestFullscreen?.().then(() => {
-          const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
-          return o.lock?.('landscape');
-        }).catch(() => undefined);
+        document.documentElement
+          .requestFullscreen?.()
+          .then(() => {
+            const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+            return o.lock?.('landscape');
+          })
+          .catch(() => undefined);
       } catch {
         /* fullscreen not available (e.g. iPhone Safari) */
       }
@@ -179,14 +204,21 @@ export class Game {
     }
 
     const mouse = this.running ? this.input.consumeMouse() : { dx: 0, dy: 0 };
-    this.followCam.update(dt, mouse, now - this.input.lastLookTime, {
-      position: this.player.pos,
-      heading: v ? v.heading : this.player.facing,
-      speed: v ? v.speed : 0,
-      inVehicle: !!v,
-      distance: v ? v.spec.camDistance : 5.2,
-      height: v ? v.spec.camHeight : 1.55,
-    }, this.collision, this.world);
+    this.followCam.update(
+      dt,
+      mouse,
+      now - this.input.lastLookTime,
+      {
+        position: this.player.pos,
+        heading: v ? v.heading : this.player.facing,
+        speed: v ? v.speed : 0,
+        inVehicle: !!v,
+        distance: v ? v.spec.camDistance : 5.2,
+        height: v ? v.spec.camHeight : 1.55,
+      },
+      this.collision,
+      this.world,
+    );
 
     this.world.update(dt, this.time, this.player.pos, this.camera);
     this.audio.update(v);
@@ -235,7 +267,8 @@ export class Game {
       return;
     }
     // Camera-relative movement.
-    let mx = 0, mz = 0;
+    let mx = 0,
+      mz = 0;
     if (active) {
       const f = this.forwardAxis();
       const s = this.sideAxis();
@@ -249,7 +282,13 @@ export class Game {
         mz /= len;
       }
     }
-    this.player.update(dt, { moveX: mx, moveZ: mz, run: active && (i.isDown(...KEYS.run) || Math.hypot(i.stickX, i.stickY) > 0.92), jump: this.jumpQueued }, this.world, this.collision, this.vehicles);
+    this.player.update(
+      dt,
+      { moveX: mx, moveZ: mz, run: active && (i.isDown(...KEYS.run) || Math.hypot(i.stickX, i.stickY) > 0.92), jump: this.jumpQueued },
+      this.world,
+      this.collision,
+      this.vehicles,
+    );
     this.jumpQueued = false;
   }
 

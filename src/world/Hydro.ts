@@ -33,11 +33,14 @@ class WaterMesh {
 
 /** Mitred offsets of a polyline (left/right of each vertex at distance `hw`). */
 function offsets(pts: Pt[], hw: number): { left: Pt[]; right: Pt[] } {
-  const left: Pt[] = [], right: Pt[] = [];
+  const left: Pt[] = [],
+    right: Pt[] = [];
   for (let i = 0; i < pts.length; i++) {
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const a = pts[Math.max(0, i - 1)],
+      b = pts[Math.min(pts.length - 1, i + 1)];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-    const nx = -(b[1] - a[1]) / len, nz = (b[0] - a[0]) / len;
+    const nx = -(b[1] - a[1]) / len,
+      nz = (b[0] - a[0]) / len;
     let k = hw;
     if (i > 0 && i < pts.length - 1) {
       const d = [pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]];
@@ -51,22 +54,35 @@ function offsets(pts: Pt[], hw: number): { left: Pt[]; right: Pt[] } {
 }
 
 /** River surface subdivided across its width so depth (and transparency) varies bank to bank. */
-function riverSurface(m: WaterMesh, pts: Pt[], hw: number, cols: number, keep: (x: number, z: number) => boolean, depthAt: (x: number, z: number) => number): void {
+function riverSurface(
+  m: WaterMesh,
+  pts: Pt[],
+  hw: number,
+  cols: number,
+  keep: (x: number, z: number) => boolean,
+  depthAt: (x: number, z: number) => number,
+): void {
   const { left, right } = offsets(pts, hw);
   const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   for (let i = 1; i < pts.length; i++) {
-    const mx = (pts[i][0] + pts[i - 1][0]) / 2, mz = (pts[i][1] + pts[i - 1][1]) / 2;
+    const mx = (pts[i][0] + pts[i - 1][0]) / 2,
+      mz = (pts[i][1] + pts[i - 1][1]) / 2;
     if (!keep(mx, mz)) continue;
     // Long segments are split along their length too.
     const len = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
     const rows = Math.max(1, Math.ceil(len / 6));
     for (let r = 0; r < rows; r++) {
-      const t0 = r / rows, t1 = (r + 1) / rows;
-      const L0 = lerp(left[i - 1], left[i], t0), L1 = lerp(left[i - 1], left[i], t1);
-      const R0 = lerp(right[i - 1], right[i], t0), R1 = lerp(right[i - 1], right[i], t1);
+      const t0 = r / rows,
+        t1 = (r + 1) / rows;
+      const L0 = lerp(left[i - 1], left[i], t0),
+        L1 = lerp(left[i - 1], left[i], t1);
+      const R0 = lerp(right[i - 1], right[i], t0),
+        R1 = lerp(right[i - 1], right[i], t1);
       for (let c = 0; c < cols; c++) {
-        const a = lerp(L0, R0, c / cols), b = lerp(L0, R0, (c + 1) / cols);
-        const d = lerp(L1, R1, c / cols), e = lerp(L1, R1, (c + 1) / cols);
+        const a = lerp(L0, R0, c / cols),
+          b = lerp(L0, R0, (c + 1) / cols);
+        const d = lerp(L1, R1, c / cols),
+          e = lerp(L1, R1, (c + 1) / cols);
         m.tri(a, b, e, WATER_LEVEL, depthAt);
         m.tri(a, e, d, WATER_LEVEL, depthAt);
       }
@@ -80,7 +96,12 @@ function gridSurface(m: WaterMesh, ring: Pt[], y: number, depthAt: (x: number, z
   const s = 2;
   for (let x = b.minX - s; x < b.maxX + s; x += s) {
     for (let z = b.minZ - s; z < b.maxZ + s; z += s) {
-      const corners: Pt[] = [[x, z], [x + s, z], [x + s, z + s], [x, z + s]];
+      const corners: Pt[] = [
+        [x, z],
+        [x + s, z],
+        [x + s, z + s],
+        [x, z + s],
+      ];
       if (!corners.some(([cx, cz]) => pointInRing(cx, cz, ring)) && !pointInRing(x + s / 2, z + s / 2, ring)) continue;
       m.tri(corners[0], corners[1], corners[2], y, depthAt);
       m.tri(corners[0], corners[2], corners[3], y, depthAt);
@@ -93,26 +114,36 @@ function riverRocks(ctx: BuildContext, terrain: TerrainModel): void {
   const geo = new THREE.IcosahedronGeometry(1, 0);
   const pos = geo.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const x = pos.getX(i),
+      y = pos.getY(i),
+      z = pos.getZ(i);
     const k = 0.75 + 0.35 * hash01(x * 3.1 + z, y * 5.3);
     pos.setXYZ(i, x * k * 1.3, y * k * 0.65, z * k);
   }
   geo.computeVertexNormals();
   // Grouped in 256 m cells so only the stones near the camera are drawn.
   const cells = new Map<string, THREE.Matrix4[]>();
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const m = new THREE.Matrix4(),
+    q = new THREE.Quaternion(),
+    s = new THREE.Vector3(),
+    p = new THREE.Vector3(),
+    up = new THREE.Vector3(0, 1, 0);
   for (const r of MAP.rivers) {
     const pts = toPts(r.p);
     for (let i = 1; i < pts.length; i++) {
-      const [ax, az] = pts[i - 1], [bx, bz] = pts[i];
+      const [ax, az] = pts[i - 1],
+        [bx, bz] = pts[i];
       const len = Math.hypot(bx - ax, bz - az);
-      const nx = -(bz - az) / len, nz = (bx - ax) / len;
+      const nx = -(bz - az) / len,
+        nz = (bx - ax) / len;
       for (let t = 0; t < len; t += 3.5) {
-        const h1 = hash01(ax + t, az), h2 = hash01(az + t, ax);
+        const h1 = hash01(ax + t, az),
+          h2 = hash01(az + t, ax);
         if (h1 < 0.35) continue;
         const side = h2 < 0.5 ? -1 : 1;
         const off = r.w / 2 - 2.5 + h1 * 5;
-        const x = ax + ((bx - ax) * t) / len + nx * side * off, z = az + ((bz - az) * t) / len + nz * side * off;
+        const x = ax + ((bx - ax) * t) / len + nx * side * off,
+          z = az + ((bz - az) * t) / len + nz * side * off;
         const size = 0.25 + h2 * h2 * 1.4;
         q.setFromAxisAngle(up, h1 * 6.28);
         const key = `${Math.floor(x / 256)},${Math.floor(z / 256)}`;
@@ -162,7 +193,15 @@ export function buildHydro(ctx: BuildContext): void {
   add(poolMesh.geometry(), pools);
 
   const streamMesh = new WaterMesh();
-  for (const s of MAP.streams) riverSurface(streamMesh, toPts(s.p), s.w / 2, 1, () => true, () => 0.25);
+  for (const s of MAP.streams)
+    riverSurface(
+      streamMesh,
+      toPts(s.p),
+      s.w / 2,
+      1,
+      () => true,
+      () => 0.25,
+    );
   // Streams are not carved: lift them just above the ground.
   const sg = streamMesh.geometry();
   if (sg) {
@@ -180,15 +219,19 @@ export function buildHydro(ctx: BuildContext): void {
   // Weirs (presas: Churruca / Las Francesas, Danvila, El Soto): a stone wall
   // across the river with the water spilling over it in a band of foam.
   const foam = foamMaterial();
-  ctx.animators.push((t) => { foam.map!.offset.y = -t * 0.9; });
+  ctx.animators.push((t) => {
+    foam.map!.offset.y = -t * 0.9;
+  });
   for (const w of MAP.weirs) {
     const pts = toPts(w.p);
     for (let i = 1; i < pts.length; i++) {
-      const [ax, az] = pts[i - 1], [bx, bz] = pts[i];
+      const [ax, az] = pts[i - 1],
+        [bx, bz] = pts[i];
       const len = Math.hypot(bx - ax, bz - az);
       if (len < 0.1) continue;
       const rot = Math.atan2(bx - ax, bz - az);
-      const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+      const mx = (ax + bx) / 2,
+        mz = (az + bz) / 2;
       ctx.batch.add(new THREE.BoxGeometry(1.4, 2.6, len + 1), ctx.mats.stone, mx, -1.6, mz, rot);
       ctx.batch.add(Unit.box, ctx.mats.concrete, mx, WATER_LEVEL + 0.12, mz, rot, 1.5, 0.2, len + 1);
       ctx.collision.addBox(mx, mz, 1.4, len + 1, { rot, bottom: -3, top: -0.3, mask: Layer.Player });
@@ -197,7 +240,18 @@ export function buildHydro(ctx: BuildContext): void {
         const g = new THREE.PlaneGeometry(len + 1, 1.6, 1, 1);
         const uv = g.attributes.uv as THREE.BufferAttribute;
         for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * (len + 1) * 0.5, uv.getY(k));
-        ctx.batch.add(g, foam, mx + Math.cos(rot) * side * 1.3, WATER_LEVEL + 0.02, mz - Math.sin(rot) * side * 1.3, rot + Math.PI / 2, 1, 1, 1, -Math.PI / 2 + side * 0.25);
+        ctx.batch.add(
+          g,
+          foam,
+          mx + Math.cos(rot) * side * 1.3,
+          WATER_LEVEL + 0.02,
+          mz - Math.sin(rot) * side * 1.3,
+          rot + Math.PI / 2,
+          1,
+          1,
+          1,
+          -Math.PI / 2 + side * 0.25,
+        );
       }
     }
   }
@@ -226,7 +280,14 @@ function foamMaterial(): THREE.MeshStandardMaterial {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.MeshStandardMaterial({ map: t, transparent: true, depthWrite: false, roughness: 0.35, color: '#f4f8f6', side: THREE.DoubleSide });
+  const m = new THREE.MeshStandardMaterial({
+    map: t,
+    transparent: true,
+    depthWrite: false,
+    roughness: 0.35,
+    color: '#f4f8f6',
+    side: THREE.DoubleSide,
+  });
   m.name = 'weirFoam';
   m.userData.castShadow = false;
   return m;

@@ -24,42 +24,121 @@ const SERIF = 'Georgia, "Times New Roman", serif';
 
 /** Banks and chains carry their brand colours. */
 const BRANDS: [RegExp, string, string][] = [
-  [/santander/i, '#ec0000', '#ffffff'], [/caixa/i, '#0d71b9', '#ffffff'], [/rural|cajaviva/i, '#00733e', '#ffffff'],
-  [/ibercaja/i, '#0c3f7e', '#ffffff'], [/bbva/i, '#072146', '#ffffff'], [/sabadell/i, '#006dff', '#ffffff'],
-  [/unicaja|caja de burgos|cajacírculo|cajacirculo/i, '#2b7b3c', '#ffffff'], [/eroski/i, '#ffffff', '#e2001a'],
-  [/\bdia\b/i, '#e30613', '#ffffff'], [/lupa/i, '#ffffff', '#e4032e'], [/carrefour/i, '#ffffff', '#1e5bc6'],
-  [/correos/i, '#ffcd00', '#002e6d'], [/loter/i, '#ffffff', '#00539f'], [/estanco|tabac/i, '#7a1a1a', '#f4d03f'],
+  [/santander/i, '#ec0000', '#ffffff'],
+  [/caixa/i, '#0d71b9', '#ffffff'],
+  [/rural|cajaviva/i, '#00733e', '#ffffff'],
+  [/ibercaja/i, '#0c3f7e', '#ffffff'],
+  [/bbva/i, '#072146', '#ffffff'],
+  [/sabadell/i, '#006dff', '#ffffff'],
+  [/unicaja|caja de burgos|cajacírculo|cajacirculo/i, '#2b7b3c', '#ffffff'],
+  [/eroski/i, '#ffffff', '#e2001a'],
+  [/\bdia\b/i, '#e30613', '#ffffff'],
+  [/lupa/i, '#ffffff', '#e4032e'],
+  [/carrefour/i, '#ffffff', '#1e5bc6'],
+  [/correos/i, '#ffcd00', '#002e6d'],
+  [/loter/i, '#ffffff', '#00539f'],
+  [/estanco|tabac/i, '#7a1a1a', '#f4d03f'],
 ];
 
 const SHOP_PALETTE: [string, string][] = [
-  ['#24324a', '#f1e9d2'], ['#6b2d3c', '#f6e7c8'], ['#2f4f4f', '#f0ead8'], ['#f1ece0', '#2c2c2c'], ['#3d2f24', '#e9c98a'], ['#1d1d1d', '#ffffff'],
+  ['#24324a', '#f1e9d2'],
+  ['#6b2d3c', '#f6e7c8'],
+  ['#2f4f4f', '#f0ead8'],
+  ['#f1ece0', '#2c2c2c'],
+  ['#3d2f24', '#e9c98a'],
+  ['#1d1d1d', '#ffffff'],
 ];
 
 function styleOf(s: MapShop, h: number): Style {
   const brand = BRANDS.find(([re]) => re.test(s.n));
-  const pick = <T,>(a: T[]) => a[Math.floor(h * a.length) % a.length];
+  const pick = <T>(a: T[]) => a[Math.floor(h * a.length) % a.length];
   let st: Style;
   switch (s.c) {
-    case 'bar': st = { bg: pick(['#5a1e1e', '#22382a', '#2b2018', '#1c2a3a']), fg: '#f3e3b5', font: SERIF, frame: '#3b2a1e', awning: pick(['#7a2a22', '#2d5a3c', null, '#8a6a2a']), front: 'glass' }; break;
-    case 'food': st = { bg: pick(['#2f3b2a', '#4a1c1c', '#1d2b3a']), fg: '#f0e6c8', font: SERIF, frame: '#3b2a1e', awning: pick(['#2d5a3c', '#7a2a22', '#5a3a22']), front: 'glass' }; break;
-    case 'cafe': st = { bg: '#3e2a1f', fg: '#f2d9a6', font: `italic ${SERIF}`, frame: '#4a3020', awning: pick(['#c9a46a', '#6b4a2f']), front: 'glass' }; break;
-    case 'bank': st = { bg: '#1d4e89', fg: '#ffffff', font: SANS, frame: '#9aa0a6', awning: null, front: 'glass' }; break;
-    case 'pharmacy': st = { bg: '#0d7a3a', fg: '#ffffff', font: SANS, frame: '#cfd3d6', awning: null, front: 'glass' }; break;
-    case 'police': st = { bg: '#f2efe6', fg: '#1f4a32', font: SERIF, frame: '#1f4a32', awning: null, front: 'door' }; break;
-    case 'health': st = { bg: '#ffffff', fg: '#1f6fa8', font: SANS, frame: '#d8dde0', awning: null, front: 'glass' }; break;
-    case 'civic': st = { bg: '#e9dfc8', fg: '#3a2e22', font: SERIF, frame: '#5a4636', awning: null, front: 'door' }; break;
-    case 'grocery': st = { bg: pick(['#f6f1e4', '#8a1c1c', '#2d5a3c']), fg: '#000', font: `bold ${SERIF}`, frame: '#5a3a24', awning: pick(['#2d6a4f', '#b8332a', '#d08a1f']), front: 'glass' }; break;
-    case 'beauty': st = { bg: pick(['#1a1a1a', '#f3e6ea']), fg: '#000', font: `italic ${SERIF}`, frame: '#2a2a2a', awning: null, front: 'glass' }; break;
-    case 'garage': st = { bg: '#1d4e89', fg: '#ffffff', font: SANS, frame: '#6b6f72', awning: null, front: 'shutter' }; break;
-    case 'office': st = { bg: '#c9a45a', fg: '#2a2014', font: SERIF, frame: '#4a3020', awning: null, front: 'door' }; break;
-    case 'hotel': st = { bg: '#14213d', fg: '#e8c66a', font: SERIF, frame: '#2a2a2a', awning: '#14213d', front: 'glass' }; break;
+    case 'bar':
+      st = {
+        bg: pick(['#5a1e1e', '#22382a', '#2b2018', '#1c2a3a']),
+        fg: '#f3e3b5',
+        font: SERIF,
+        frame: '#3b2a1e',
+        awning: pick(['#7a2a22', '#2d5a3c', null, '#8a6a2a']),
+        front: 'glass',
+      };
+      break;
+    case 'food':
+      st = {
+        bg: pick(['#2f3b2a', '#4a1c1c', '#1d2b3a']),
+        fg: '#f0e6c8',
+        font: SERIF,
+        frame: '#3b2a1e',
+        awning: pick(['#2d5a3c', '#7a2a22', '#5a3a22']),
+        front: 'glass',
+      };
+      break;
+    case 'cafe':
+      st = {
+        bg: '#3e2a1f',
+        fg: '#f2d9a6',
+        font: `italic ${SERIF}`,
+        frame: '#4a3020',
+        awning: pick(['#c9a46a', '#6b4a2f']),
+        front: 'glass',
+      };
+      break;
+    case 'bank':
+      st = { bg: '#1d4e89', fg: '#ffffff', font: SANS, frame: '#9aa0a6', awning: null, front: 'glass' };
+      break;
+    case 'pharmacy':
+      st = { bg: '#0d7a3a', fg: '#ffffff', font: SANS, frame: '#cfd3d6', awning: null, front: 'glass' };
+      break;
+    case 'police':
+      st = { bg: '#f2efe6', fg: '#1f4a32', font: SERIF, frame: '#1f4a32', awning: null, front: 'door' };
+      break;
+    case 'health':
+      st = { bg: '#ffffff', fg: '#1f6fa8', font: SANS, frame: '#d8dde0', awning: null, front: 'glass' };
+      break;
+    case 'civic':
+      st = { bg: '#e9dfc8', fg: '#3a2e22', font: SERIF, frame: '#5a4636', awning: null, front: 'door' };
+      break;
+    case 'grocery':
+      st = {
+        bg: pick(['#f6f1e4', '#8a1c1c', '#2d5a3c']),
+        fg: '#000',
+        font: `bold ${SERIF}`,
+        frame: '#5a3a24',
+        awning: pick(['#2d6a4f', '#b8332a', '#d08a1f']),
+        front: 'glass',
+      };
+      break;
+    case 'beauty':
+      st = { bg: pick(['#1a1a1a', '#f3e6ea']), fg: '#000', font: `italic ${SERIF}`, frame: '#2a2a2a', awning: null, front: 'glass' };
+      break;
+    case 'garage':
+      st = { bg: '#1d4e89', fg: '#ffffff', font: SANS, frame: '#6b6f72', awning: null, front: 'shutter' };
+      break;
+    case 'office':
+      st = { bg: '#c9a45a', fg: '#2a2014', font: SERIF, frame: '#4a3020', awning: null, front: 'door' };
+      break;
+    case 'hotel':
+      st = { bg: '#14213d', fg: '#e8c66a', font: SERIF, frame: '#2a2a2a', awning: '#14213d', front: 'glass' };
+      break;
     default: {
       const [bg, fg] = pick(SHOP_PALETTE);
-      st = { bg, fg, font: pick([SANS, SERIF, `bold ${SERIF}`]), frame: pick(['#2a2a2a', '#5a3a24', '#8a8f93', '#2f4f4f']), awning: h > 0.55 ? pick(['#b8332a', '#2d6a4f', '#1d4e89', '#d08a1f', '#555']) : null, front: 'glass' };
+      st = {
+        bg,
+        fg,
+        font: pick([SANS, SERIF, `bold ${SERIF}`]),
+        frame: pick(['#2a2a2a', '#5a3a24', '#8a8f93', '#2f4f4f']),
+        awning: h > 0.55 ? pick(['#b8332a', '#2d6a4f', '#1d4e89', '#d08a1f', '#555']) : null,
+        front: 'glass',
+      };
     }
   }
   if (st.fg === '#000') st.fg = st.bg === '#f6f1e4' || st.bg === '#f3e6ea' ? '#8a1c1c' : '#f6efe0';
-  if (brand) { st.bg = brand[1]; st.fg = brand[2]; st.font = `bold ${SANS}`; }
+  if (brand) {
+    st.bg = brand[1];
+    st.fg = brand[2];
+    st.font = `bold ${SANS}`;
+  }
   return st;
 }
 
@@ -99,7 +178,8 @@ class SignAtlas {
     if (hit) return hit;
     const i = this.next++ % (this.cols * this.rows);
     const { g, cw, ch } = this;
-    const x = (i % this.cols) * cw, y = Math.floor(i / this.cols) * ch;
+    const x = (i % this.cols) * cw,
+      y = Math.floor(i / this.cols) * ch;
     g.save();
     g.translate(x, y);
     g.fillStyle = st.bg;
@@ -130,7 +210,8 @@ class SignAtlas {
       g.fillText(label, cw / 2, ch * 0.54, maxW);
     }
     g.restore();
-    const H = this.rows * ch, W = this.cols * cw;
+    const H = this.rows * ch,
+      W = this.cols * cw;
     const uv: [number, number, number, number] = [(x + 1) / W, 1 - (y + ch - 1) / H, (x + cw - 1) / W, 1 - (y + 1) / H];
     this.cache.set(key, uv);
     return uv;
@@ -162,7 +243,13 @@ export function buildCommerce(ctx: BuildContext): Signs {
   signMat.name = 'signs';
   signMat.userData.castShadow = false;
   // Shop windows: dark reflective glass with a warm interior glow.
-  const glass = new THREE.MeshStandardMaterial({ color: '#141a1f', roughness: 0.05, metalness: 0.9, emissive: '#6b5236', emissiveIntensity: 0.35 });
+  const glass = new THREE.MeshStandardMaterial({
+    color: '#141a1f',
+    roughness: 0.05,
+    metalness: 0.9,
+    emissive: '#6b5236',
+    emissiveIntensity: 0.35,
+  });
   glass.name = 'shopGlass';
   glass.userData.castShadow = false;
   const B = Unit.box;
@@ -227,7 +314,8 @@ export function buildCommerce(ctx: BuildContext): Signs {
       lb.add(B, mats.tint('#1b1b1b'), ax, 1.1, 0.23, 0, 0.5, 0.18, 0.05);
     } else if (s.c === 'police') {
       // Casa cuartel: the flag over the door and a lamp on each side.
-      const c = Math.cos(s.a), sn = Math.sin(s.a);
+      const c = Math.cos(s.a),
+        sn = Math.sin(s.a);
       flag(ctx, 'es', s.x + sn * 0.15, sy + 0.5, s.z + c * 0.15, 2.4, s.a, 0.8);
       for (const x of [-1.6, 1.6]) {
         lb.add(B, mats.iron, x, 2.6, 0.18, 0, 0.05, 0.05, 0.35);
@@ -242,7 +330,8 @@ export function buildCommerce(ctx: BuildContext): Signs {
     // Bar and café terraces where the pavement or the square has room.
     if ((s.c === 'bar' || s.c === 'cafe') && h < 0.7) {
       const out = 2.6;
-      const px = s.x + Math.sin(s.a) * out, pz = s.z + Math.cos(s.a) * out;
+      const px = s.x + Math.sin(s.a) * out,
+        pz = s.z + Math.cos(s.a) * out;
       const road = ctx.roads.nearest(px, pz, 6, (r) => VEHICLE_ROADS.has(r.k));
       if (!road || road.d > 1.4) {
         const n = W > 5 ? 2 : 1;
@@ -253,7 +342,10 @@ export function buildCommerce(ctx: BuildContext): Signs {
       }
     }
   }
-  return { sign: (text, bg, fg) => signPlane(atlas.cell(text, { bg, fg, font: `bold ${SANS}`, frame: bg, awning: null, front: 'door' })), mat: signMat };
+  return {
+    sign: (text, bg, fg) => signPlane(atlas.cell(text, { bg, fg, font: `bold ${SANS}`, frame: bg, awning: null, front: 'door' })),
+    mat: signMat,
+  };
 }
 
 function terraceTable(ctx: BuildContext, lb: LocalBatch, x: number, z: number, parasol: string): void {
@@ -261,7 +353,10 @@ function terraceTable(ctx: BuildContext, lb: LocalBatch, x: number, z: number, p
   const metal = mats.tint('#8d9296');
   lb.add(Unit.cyl, metal, x, 0.37, z, 0, 0.06, 0.74, 0.06);
   lb.add(Unit.cyl, metal, x, 0.75, z, 0, 0.7, 0.03, 0.7);
-  for (const [cx, cz, r] of [[-0.62, 0, Math.PI / 2], [0.62, 0, -Math.PI / 2]] as const) {
+  for (const [cx, cz, r] of [
+    [-0.62, 0, Math.PI / 2],
+    [0.62, 0, -Math.PI / 2],
+  ] as const) {
     lb.add(Unit.box, metal, x + cx, 0.45, z + cz, r, 0.42, 0.04, 0.42);
     lb.add(Unit.box, metal, x + cx * 1.3, 0.7, z + cz, r, 0.42, 0.5, 0.03);
     lb.add(Unit.box, metal, x + cx, 0.22, z + cz, r, 0.4, 0.45, 0.025);

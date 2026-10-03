@@ -54,7 +54,9 @@ export class FollowCamera {
     const want = t.distance + (t.inVehicle ? Math.min(Math.abs(t.speed) * 0.08, 3.5) : 0);
     this.dist = damp(this.dist, want, 2.5, dt);
 
-    const px = t.position.x, py = t.position.y + t.height, pz = t.position.z;
+    const px = t.position.x,
+      py = t.position.y + t.height,
+      pz = t.position.z;
     if (!this.initialized) {
       this.pivot.set(px, py, pz);
       this.initialized = true;
@@ -68,7 +70,16 @@ export class FollowCamera {
     const cp = Math.cos(this.pitch);
     this.offset.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
     let d = this.dist;
-    const hit = collision.raycast(this.pivot.x, this.pivot.y, this.pivot.z, this.offset.x, this.offset.y, this.offset.z, d + 0.4, Layer.Camera);
+    const hit = collision.raycast(
+      this.pivot.x,
+      this.pivot.y,
+      this.pivot.z,
+      this.offset.x,
+      this.offset.y,
+      this.offset.z,
+      d + 0.4,
+      Layer.Camera,
+    );
     if (hit < d + 0.4) d = Math.max(0.8, hit - 0.4);
 
     const cam = this.camera;
