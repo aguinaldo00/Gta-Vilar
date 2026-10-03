@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Villarcayo Sandbox</title>
+    <style>
+      :root {
+        --gta-yellow: #f2c230;
+        --ink: #0b0b0b;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #bcd6f2; font-family: 'Arial Narrow', Arial, sans-serif; }
+      #app canvas { display: block; }
+      #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; }
+      .outlined { text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 3px 6px rgba(0,0,0,.6); }
+
+      #minimap { position: absolute; left: 24px; bottom: 24px; width: 200px; height: 200px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+      #zone {
+        position: absolute; right: 36px; bottom: 120px; font: italic 900 46px Georgia, 'Times New Roman', serif;
+        letter-spacing: 1px; color: #e9e2c7; opacity: 0; transform: translateY(10px); transition: opacity .6s, transform .6s;
+      }
+      #zone.show { opacity: 1; transform: none; }
+      #prompt {
+        position: absolute; left: 50%; top: 22px; transform: translateX(-50%); padding: 10px 18px; background: rgba(0,0,0,.72);
+        border-left: 4px solid var(--gta-yellow); font-size: 18px; opacity: 0; transition: opacity .2s;
+      }
+      #prompt.show { opacity: 1; }
+      #prompt b { color: var(--gta-yellow); }
+      #toast {
+        position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font: italic 900 34px Georgia, serif;
+        color: var(--gta-yellow); opacity: 0; transition: opacity .25s;
+      }
+      #toast.show { opacity: 1; }
+      #topright { position: absolute; right: 28px; top: 20px; text-align: right; }
+      #clock { font: 900 40px 'Arial Narrow', Arial, sans-serif; color: #fff; }
+      #vehicle-panel { margin-top: 6px; opacity: 0; transition: opacity .3s; }
+      #vehicle-panel.show { opacity: 1; }
+      #veh-name { font: italic 900 26px Georgia, serif; color: #8fd0ff; }
+      #speed { font: 900 52px 'Arial Narrow', Arial, sans-serif; color: var(--gta-yellow); }
+      #speed small { font-size: 18px; margin-left: 6px; color: #fff; }
+      #status { position: absolute; left: 240px; bottom: 28px; font-size: 15px; opacity: .85; }
+      #help {
+        position: absolute; left: 24px; top: 20px; padding: 12px 16px; background: rgba(0,0,0,.65); font-size: 14px; line-height: 1.55;
+        border-left: 4px solid var(--gta-yellow); display: none;
+      }
+      #help.show { display: block; }
+      #help b { color: var(--gta-yellow); display: inline-block; min-width: 92px; }
+      #help-tip { position: absolute; left: 24px; top: 20px; font-size: 13px; opacity: .8; }
+      #help.show + #help-tip { display: none; }
+      #lock-hint {
+        position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); font-size: 14px; padding: 6px 12px;
+        background: rgba(0,0,0,.55); display: none;
+      }
+      #lock-hint.show { display: block; }
+
+      #start {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+        background: radial-gradient(ellipse at center, rgba(10,14,30,.55), rgba(5,5,10,.9)); color: #fff; z-index: 10;
+        transition: opacity .5s;
+      }
+      #start.hidden { opacity: 0; pointer-events: none; }
+      #start h1 {
+        margin: 0; font: italic 900 clamp(48px, 9vw, 112px) Georgia, 'Times New Roman', serif; color: var(--gta-yellow);
+        line-height: .9; text-align: center;
+      }
+      #start h1 span { display: block; font-size: .32em; color: #fff; letter-spacing: 6px; font-style: normal; }
+      #start p { margin: 0; max-width: 620px; text-align: center; opacity: .85; line-height: 1.5; padding: 0 16px; }
+      #start .keys { display: grid; grid-template-columns: auto auto; gap: 4px 18px; font-size: 14px; opacity: .9; }
+      #start .keys b { color: var(--gta-yellow); text-align: right; }
+      #play {
+        pointer-events: auto; font: italic 900 30px Georgia, serif; padding: 12px 46px; background: var(--gta-yellow); color: #111;
+        border: 3px solid #111; cursor: pointer; box-shadow: 0 6px 0 #111;
+      }
+      #play:disabled { opacity: .6; cursor: wait; }
+      #play:not(:disabled):hover { transform: translateY(-2px); }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud">
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div id="zone" class="outlined"></div>
+      <div id="prompt"></div>
+      <div id="toast" class="outlined"></div>
+      <div id="topright" class="outlined">
+        <div id="clock">00:00</div>
+        <div id="vehicle-panel">
+          <div id="veh-name"></div>
+          <div id="speed"><span id="speed-val">0</span><small>km/h</small></div>
+        </div>
+      </div>
+      <div id="status" class="outlined"></div>
+      <div id="help">
+        <div><b>WASD / ←↑→↓</b> Andar / conducir</div>
+        <div><b>Shift</b> Correr</div>
+        <div><b>Espacio</b> Saltar / freno de mano (derrapar)</div>
+        <div><b>F / E</b> Robar / salir del vehículo</div>
+        <div><b>Ratón</b> Girar la cámara</div>
+        <div><b>R</b> Volver a la Plaza Mayor</div>
+        <div><b>M</b> Sonido · <b>H</b> Ayuda</div>
+      </div>
+      <div id="help-tip" class="outlined">H — controles</div>
+      <div id="lock-hint">Haz clic para controlar la cámara con el ratón</div>
+    </div>
+
+    <div id="start">
+      <h1><span>LAS MERINDADES</span>VILLARCAYO</h1>
+      <p>
+        Plaza Mayor, el Ayuntamiento y la Torre del Corregimiento, el Camino Real, el Parque El Soto con el Río Nela y sus
+        piscinas naturales, y la vieja vía del Santander-Mediterráneo.
+      </p>
+      <div class="keys">
+        <b>WASD</b><span>andar · conducir</span>
+        <b>Shift</b><span>correr</span>
+        <b>Espacio</b><span>saltar · freno de mano</span>
+        <b>F / E</b><span>robar / salir del vehículo</span>
+        <b>Ratón</b><span>cámara</span>
+      </div>
+      <button id="play" disabled>CARGANDO…</button>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
