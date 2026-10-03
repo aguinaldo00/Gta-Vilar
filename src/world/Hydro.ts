@@ -4,6 +4,7 @@ import type { BuildContext } from './context';
 import { type Pt, hash01, pointInRing, ringBounds, toPts, triangulate } from './geo';
 import { MAP } from './mapData';
 import { type TerrainModel, WATER_LEVEL } from './Terrain';
+import { Unit } from './props';
 import { createWaterMaterial } from './Water';
 
 /** Water surface with an `aDepth` attribute (metres of water below each vertex). */
@@ -176,7 +177,10 @@ export function buildHydro(ctx: BuildContext): void {
   }
   add(swimMesh.geometry(), swim, 2);
 
-  // Weirs (azudes): low stone walls across the river.
+  // Weirs (presas: Churruca / Las Francesas, Danvila, El Soto): a stone wall
+  // across the river with the water spilling over it in a band of foam.
+  const foam = foamMaterial();
+  ctx.animators.push((t) => { foam.map!.offset.y = -t * 0.9; });
   for (const w of MAP.weirs) {
     const pts = toPts(w.p);
     for (let i = 1; i < pts.length; i++) {
@@ -186,9 +190,44 @@ export function buildHydro(ctx: BuildContext): void {
       const rot = Math.atan2(bx - ax, bz - az);
       const mx = (ax + bx) / 2, mz = (az + bz) / 2;
       ctx.batch.add(new THREE.BoxGeometry(1.4, 2.6, len + 1), ctx.mats.stone, mx, -1.6, mz, rot);
+      ctx.batch.add(Unit.box, ctx.mats.concrete, mx, WATER_LEVEL + 0.12, mz, rot, 1.5, 0.2, len + 1);
       ctx.collision.addBox(mx, mz, 1.4, len + 1, { rot, bottom: -3, top: -0.3, mask: Layer.Player });
+      // Spill on both faces: a steep sheet of white water and a foam apron.
+      for (const side of [-1, 1]) {
+        const g = new THREE.PlaneGeometry(len + 1, 1.6, 1, 1);
+        const uv = g.attributes.uv as THREE.BufferAttribute;
+        for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * (len + 1) * 0.5, uv.getY(k));
+        ctx.batch.add(g, foam, mx + Math.cos(rot) * side * 1.3, WATER_LEVEL + 0.02, mz - Math.sin(rot) * side * 1.3, rot + Math.PI / 2, 1, 1, 1, -Math.PI / 2 + side * 0.25);
+      }
     }
   }
 
   riverRocks(ctx, terrain);
+}
+
+/** Scrolling white-water texture for the weirs. */
+function foamMaterial(): THREE.MeshStandardMaterial {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  g.fillRect(0, 0, 128, 256);
+  for (let i = 0; i < 700; i++) {
+    g.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.6})`;
+    g.beginPath();
+    g.ellipse(Math.random() * 128, Math.random() * 256, 2 + Math.random() * 6, 6 + Math.random() * 18, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (let i = 0; i < 200; i++) {
+    g.fillStyle = 'rgba(160,190,190,0.35)';
+    g.fillRect(Math.random() * 128, Math.random() * 256, 3, 12);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.MeshStandardMaterial({ map: t, transparent: true, depthWrite: false, roughness: 0.35, color: '#f4f8f6', side: THREE.DoubleSide });
+  m.name = 'weirFoam';
+  m.userData.castShadow = false;
+  return m;
 }

@@ -144,6 +144,21 @@ export function groundTexture(size: number): THREE.CanvasTexture {
     g.fill();
   }
 
+  // Patchwork of plots (fincas) wherever OSM has no land use: the valley around
+  // town is a mosaic of hay meadows, pasture and cereal strips.
+  const plotColours = ['rgba(122,150,70,0.45)', 'rgba(140,160,80,0.45)', 'rgba(170,165,95,0.4)', 'rgba(100,130,60,0.45)', 'rgba(185,170,105,0.35)'];
+  for (let x = B.minX; x < B.maxX; x += 140) {
+    for (let z = B.minZ; z < B.maxZ; z += 110) {
+      const w = 60 + Math.random() * 90, h = 40 + Math.random() * 70;
+      g.save();
+      g.translate(x + Math.random() * 60, z + Math.random() * 50);
+      g.rotate(0.35 + (Math.random() - 0.5) * 0.25);
+      g.fillStyle = plotColours[Math.floor(Math.random() * plotColours.length)];
+      g.fillRect(-w / 2, -h / 2, w, h);
+      g.restore();
+    }
+  }
+
   const path = (coords: number[]) => {
     g.moveTo(coords[0], coords[1]);
     for (let i = 2; i < coords.length; i += 2) g.lineTo(coords[i], coords[i + 1]);
@@ -228,7 +243,7 @@ export function groundMaterial(size: number, detail: THREE.Texture): THREE.MeshS
  * Ground mesh in 50 m tiles: flat quads where the ground is flat, a 2.5 m
  * heightfield where the river channel or the pools carve it.
  */
-export function buildGround(terrain: TerrainModel, batch: Batcher, mat: THREE.Material): void {
+export function buildGround(terrain: TerrainModel, batch: Batcher, mat: THREE.Material, fine = true): void {
   const B = MAP.meta.bounds;
   const TILE = 50;
   const W = B.maxX - B.minX, H = B.maxZ - B.minZ;
@@ -238,7 +253,7 @@ export function buildGround(terrain: TerrainModel, batch: Batcher, mat: THREE.Ma
       const x0 = B.minX + i * TILE, z0 = B.minZ + j * TILE;
       const x1 = Math.min(B.maxX, x0 + TILE), z1 = Math.min(B.maxZ, z0 + TILE);
       const detailed = terrain.affects((x0 + x1) / 2, (z0 + z1) / 2, TILE / 2);
-      const seg = detailed ? 20 : 1;
+      const seg = detailed ? (fine ? 20 : 12) : 1;
       batch.addWorld(tile(terrain, x0, z0, x1, z1, seg, detailed, B, W, H), mat);
     }
   }

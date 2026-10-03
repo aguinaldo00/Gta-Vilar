@@ -73,6 +73,9 @@ export class Materials {
   readonly detail: THREE.Texture;
   /** Asphalt, sidewalk, paving, dirt, gravel and paint in one material (one draw call per chunk). */
   readonly roadAtlas: Lambert;
+  /** Unlit vertex-coloured material for lit signs and neon (blooms on desktop). */
+  readonly glowVC = new THREE.MeshBasicMaterial({ vertexColors: true });
+  private readonly tints = new Map<string, THREE.Material>();
 
   constructor() {
     const facade = T.facadeTexture();
@@ -165,6 +168,32 @@ export class Materials {
     ]) fold(m, this.propsVC);
     this.detail = this.terrain.map!;
     this.roadAtlas = roadAtlasMaterial([this.asphalt.map!, this.sidewalk.map!, this.paving.map!, this.dirt.map!, this.gravel.map!, null]);
+    this.glowVC.name = 'glowVC';
+    this.glowVC.userData.castShadow = false;
+  }
+
+  /** Plain colour, batched into the shared vertex-coloured props material. */
+  tint(color: THREE.ColorRepresentation): THREE.Material {
+    const key = `t${new THREE.Color(color).getHexString()}`;
+    let m = this.tints.get(key);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ color });
+      m.userData.redirect = { mat: this.propsVC, color: new THREE.Color(color) };
+      this.tints.set(key, m);
+    }
+    return m;
+  }
+
+  /** Self-lit colour (neon, lit signs, screens), batched into `glowVC`. */
+  glow(color: THREE.ColorRepresentation): THREE.Material {
+    const key = `g${new THREE.Color(color).getHexString()}`;
+    let m = this.tints.get(key);
+    if (!m) {
+      m = new THREE.MeshBasicMaterial({ color });
+      m.userData.redirect = { mat: this.glowVC, color: new THREE.Color(color) };
+      this.tints.set(key, m);
+    }
+    return m;
   }
 }
 

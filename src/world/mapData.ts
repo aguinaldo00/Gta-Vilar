@@ -26,6 +26,26 @@ export interface MapArea {
   o: Coords;
   h?: Coords[];
   n?: string;
+  /** Pitches: sport (soccer, tennis, pelota, skittles…); parkings: bay orientation. */
+  s?: string;
+  /** Pitches: covered. */
+  c?: 1;
+  /** Woods: needle-leaved (n) or broad-leaved (b). */
+  l?: 'n' | 'b';
+}
+
+/** Shop, bar or public service, on the street-facing wall of its building. */
+export interface MapShop {
+  /** Point on the wall. */
+  x: number;
+  z: number;
+  /** Heading of the wall's outward normal (rotation.y mapping +Z onto it). */
+  a: number;
+  /** Front width (m). */
+  w: number;
+  c: 'bar' | 'food' | 'cafe' | 'bank' | 'pharmacy' | 'police' | 'health' | 'civic' | 'grocery' | 'beauty' | 'garage' | 'shop' | 'office' | 'hotel';
+  /** Sign text (real name, or the trade in Spanish). */
+  n: string;
 }
 
 export interface MapRoad {
@@ -42,7 +62,7 @@ export interface MapRoad {
 }
 
 export interface MapPoi {
-  k: 'townhall' | 'locomotive' | 'belltower' | 'statue' | 'bandstand' | 'fountain' | 'drinking_water';
+  k: 'townhall' | 'locomotive' | 'belltower' | 'statue' | 'bandstand' | 'fountain' | 'drinking_water' | 'fuel' | 'bus_stop';
   n?: string;
   x: number;
   z: number;
@@ -65,11 +85,18 @@ export interface MapData {
   weirs: { p: Coords; n?: string }[];
   /** Flat [x, z, ...]. */
   trees: number[];
+  /** Conifers (leaf_type=needleleaved), flat [x, z, ...]. */
+  pines: number[];
   lamps: number[];
   benches: number[];
   /** Flat [x, z, angle, ...]. */
   crossings: number[];
   pois: MapPoi[];
+  shops: MapShop[];
+  /** Flat [x, z, angle, stone(0|1), ...]. */
+  tables: number[];
+  /** Flat [x, z, ...]. */
+  playgrounds: number[];
 }
 
 /** Villarcayo, generated from OpenStreetMap by scripts/osm-to-map.ts. */

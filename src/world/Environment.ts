@@ -47,6 +47,10 @@ export class Environment {
       .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * skyGain, 1.0 );');
     this.bgScene.add(this.sky);
     this.bgScene.add(buildMountains(rng));
+    // Valley floor out to the mountains, so the land never ends at the edge of the town.
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(14000, 48).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#6f8a45' }));
+    floor.position.y = -0.6;
+    this.bgScene.add(floor);
     this.bgScene.fog = new THREE.Fog(HAZE, 600, 11000);
     this.bgScene.add(new THREE.HemisphereLight('#cfe0f0', '#6d6450', 1.2));
     const farSun = new THREE.DirectionalLight('#ffe2b8', 2.2);

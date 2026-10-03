@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Layer } from '../physics/CollisionWorld';
+import { CUSTOM_CHURCHES } from './Churches';
 import type { BuildContext } from './context';
+import { CUSTOM_FACILITIES } from './Facilities';
 import { type Pt, centroid, hash01, signedArea, toPts, triangulate } from './geo';
 import { FLOOR_H } from './Materials';
 import { MAP, type MapBuilding } from './mapData';
@@ -212,7 +214,7 @@ export function buildBuildings(ctx: BuildContext): void {
   for (const b of MAP.buildings) {
     idx++;
     // Landmarks get their own models; outlines described by parts are drawn through their parts.
-    if (CUSTOM.has(b.t) || b.hp) continue;
+    if (CUSTOM.has(b.t) || b.hp || (b.n && (CUSTOM_CHURCHES.test(b.n) || CUSTOM_FACILITIES.test(b.n)))) continue;
     const raw = toPts(b.o);
     const reversed = signedArea(raw) <= 0;
     const outer = oriented(raw, false);

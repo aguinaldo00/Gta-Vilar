@@ -287,7 +287,10 @@ function buildStatue(ctx: BuildContext): void {
 
 function buildBellTowers(ctx: BuildContext): void {
   const { mats } = ctx;
+  const marina = MAP.buildings.filter((b) => b.n === 'Iglesia de Santa Marina').map((b) => centroid(toPts(b.o)));
   for (const t of MAP.pois.filter((p) => p.k === 'belltower')) {
+    // Santa Marina's concrete campanile is modelled with the church (Churches.ts).
+    if (marina.some(([x, z]) => Math.hypot(x - t.x, z - t.z) < 45)) continue;
     const h = t.ht || 20;
     const P = new Placer(ctx, t.x, t.z, 0);
     P.add(boxGeo(4.2, h, 4.2, 2), mats.stone, 0, h / 2, 0);

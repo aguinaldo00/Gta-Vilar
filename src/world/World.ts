@@ -3,8 +3,11 @@ import { Rng } from '../core/math';
 import { type CollisionWorld, Layer } from '../physics/CollisionWorld';
 import { Batcher } from './Batcher';
 import { buildBuildings } from './Buildings';
+import { buildChurches } from './Churches';
+import { buildCommerce } from './Commerce';
 import type { Animator, BuildContext } from './context';
 import { Environment } from './Environment';
+import { buildFacilities } from './Facilities';
 import { type Bounds2, type Pt, orientedBox, pointInRing, ringBounds, toPts } from './geo';
 import { buildHydro } from './Hydro';
 import { buildLandmarks } from './Landmarks';
@@ -12,6 +15,7 @@ import { BOUNDS, MAP } from './mapData';
 import { Materials } from './Materials';
 import { RoadNetwork, VEHICLE_ROADS, buildRoads } from './Roads';
 import { TerrainModel, buildGround, groundMaterial } from './Terrain';
+import { buildSports } from './Sports';
 import { buildVegetation } from './Vegetation';
 import { Grass } from './Grass';
 import { waterTime } from './Water';
@@ -33,6 +37,8 @@ export interface Quality {
   treeBudget: number;
   /** Multisampled HDR composer with bloom and colour grading. */
   postFX: boolean;
+  /** 0 = phones (lighter trees, fewer parked cars and props), 1 = desktop. */
+  detail: 0 | 1;
 }
 
 interface NamedArea {
@@ -53,7 +59,7 @@ export class World {
   readonly terrain = new TerrainModel(MAP);
   readonly roads = new RoadNetwork();
   readonly bounds = BOUNDS;
-  readonly stats = { meshes: 0, triangles: 0 };
+  readonly stats: { meshes: number; triangles: number; byStage?: Record<string, number> } = { meshes: 0, triangles: 0 };
   private readonly animators: Animator[] = [];
   private readonly named: NamedArea[] = [];
   private readonly landmarkZones: { name: string; x: number; z: number; r: number }[] = [];
@@ -66,14 +72,28 @@ export class World {
       scene, batch, mats, collision, animators: this.animators, rng, terrain: this.terrain, roads: this.roads, quality,
     };
     this.env = new Environment(scene, renderer, rng, quality);
-    buildGround(this.terrain, batch, groundMaterial(quality.groundTexture, mats.detail));
+    buildGround(this.terrain, batch, groundMaterial(quality.groundTexture, mats.detail), quality.detail === 1);
+    batch.stage = 'roads';
     buildRoads(ctx);
+    batch.stage = 'buildings';
     buildBuildings(ctx);
+    batch.stage = 'churches';
+    buildChurches(ctx);
+    batch.stage = 'commerce';
+    const signs = buildCommerce(ctx);
+    batch.stage = 'facilities';
+    buildFacilities(ctx, signs.sign, signs.mat);
+    batch.stage = 'sports';
+    buildSports(ctx);
+    batch.stage = 'hydro';
     buildHydro(ctx);
+    batch.stage = 'vegetation';
     buildVegetation(ctx);
+    batch.stage = 'landmarks';
     buildLandmarks(ctx);
     this.grass = new Grass(scene, quality.grassRadius, quality.grassSpacing, quality.groundTexture >= 4096 ? 4096 : 2048);
     this.stats.triangles = Math.round(batch.triangles);
+    this.stats.byStage = Object.fromEntries(Object.entries(batch.byStage).map(([k, v]) => [k, Math.round(v)]));
     this.stats.meshes = batch.build(scene);
     this.buildBounds(collision);
     this.indexPlaces();
@@ -98,6 +118,11 @@ export class World {
     }
     this.named.sort((a, b) => a.area - b.area);
     const add = (name: string, x: number, z: number, r: number) => this.landmarkZones.push({ name, x, z, r });
+    for (const w of MAP.weirs) {
+      if (!w.n) continue;
+      const mid = Math.floor(w.p.length / 4) * 2;
+      add(w.n, w.p[mid], w.p[mid + 1], 30);
+    }
     for (const b of MAP.buildings) {
       if (b.t === 'townhall') {
         const o = orientedBox(toPts(b.o));

@@ -21,6 +21,9 @@ export class Batcher {
   private readonly groups = new Map<string, Group>();
   private readonly o = new THREE.Object3D();
   triangles = 0;
+  /** Triangles per build stage (set `stage` before adding), for profiling. */
+  readonly byStage: Record<string, number> = {};
+  stage = 'misc';
 
   add(
     geo: THREE.BufferGeometry, mat: THREE.Material,
@@ -79,6 +82,7 @@ export class Batcher {
     if (!grp) this.groups.set(key, (grp = { mat, geos: [] }));
     grp.geos.push(g);
     this.triangles += n / 3;
+    this.byStage[this.stage] = (this.byStage[this.stage] ?? 0) + n / 3;
   }
 
   build(parent: THREE.Object3D): number {

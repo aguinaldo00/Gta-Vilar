@@ -88,8 +88,8 @@ export class Game {
     this.touch = isTouch ? new TouchControls(this.input) : null;
     // Draw distance is the main performance knob: phones see less far.
     const quality: Quality = isTouch
-      ? { groundTexture: 2048, fogDensity: 0.003, drawDistance: 420, shadowMapSize: 1024, treeShadows: false, grassRadius: 24, grassSpacing: 0.8, treeBudget: 1800, postFX: false }
-      : { groundTexture: 4096, fogDensity: 0.0019, drawDistance: 620, shadowMapSize: 4096, treeShadows: true, grassRadius: 40, grassSpacing: 0.5, treeBudget: 4200, postFX: true };
+      ? { groundTexture: 2048, fogDensity: 0.0033, drawDistance: 380, shadowMapSize: 1024, treeShadows: false, grassRadius: 24, grassSpacing: 0.9, treeBudget: 1800, postFX: false, detail: 0 }
+      : { groundTexture: 4096, fogDensity: 0.0019, drawDistance: 620, shadowMapSize: 4096, treeShadows: true, grassRadius: 40, grassSpacing: 0.5, treeBudget: 4200, postFX: true, detail: 1 };
     quality.groundTexture = Math.min(quality.groundTexture, this.renderer.capabilities.maxTextureSize);
     this.quality = quality;
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.25, quality.drawDistance);

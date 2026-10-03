@@ -50,6 +50,11 @@ The data pipeline runs in two steps. The browser never parses OSM.
 | Torre del Corregimiento | Footprint and 4 storeys | Battlements, windows, door |
 | Templete, fountain, statue | Position and size (`leisure=bandstand`, `amenity=fountain`, `memorial=bench` "Al músico") | 3D design (octagonal kiosk from the photo) |
 | Old railway | Route of the Vía Verde Santander–Mediterráneo, station building "Antigua Estación de Horna-Villarcayo", Mikado locomotive | The locomotive model and the short stretch of track under it |
+| Shops, bars and services | **224 establishments** (`shop`, `amenity` bar/pub/restaurant/café/bank/pharmacy/post office/police…, `office`, `craft`, `healthcare`, hotels, including closed ones such as Bar Capitol) with their real name, snapped to the street-facing wall of their building | Shop front by trade (shop window, door or roller shutter, awning, terrace), sign colours (brand colours for banks and chains, otherwise by trade) |
+| Churches | Footprints and positions of Santa Marina, its campanile (`tower:type=bell_tower`), the Ermita de San Roque and the Ermita de San Vicente | Santa Marina as the 1967 "tent" with the stained-glass gables and the concrete campanile with three crosses (from published descriptions); stone hermitages with espadaña |
+| Sports | 29 pitches with their sport: football (Campo El Soto, Campo Genín), futsal, basketball, tennis, pádel, frontones, Bolera Nela, petanque, table tennis; Polideportivo; sports-ground fences | Court markings, goals, hoops, nets, frontón walls, the nine bolos; the polideportivo's vaulted roof |
+| Parkings, fuel, buses | 37 car parks (with `orientation`), Estación de Servicio Rivera, Estación de Autobuses, bus stops | Bay layout and parked cars; canopy, pumps and totem; bus shelters |
+| Picnic, playgrounds, pines | 7 picnic tables + picnic sites (riverside tables in El Soto), 13 playgrounds, conifers (`leaf_type=needleleaved`) | Extra tables around each picnic site; swings and slide; hedges on field boundaries; field patchwork where OSM has no land use |
 | Terrain | — | **Flat.** The OSM export carries no elevation, so only the river channel is carved |
 
 ## Graphics and quality levels
@@ -68,9 +73,10 @@ The look is inspired by modern open-world games (warm low sun, hazy distance, wi
 | --- | --- | --- |
 | Post-processing | MSAA ×4, bloom, colour grade | No (direct render with tone mapping) |
 | Shadow map | 4096 px, trees cast shadows | 1024 px, no tree shadows |
-| Grass | 40 m radius, 0.5 m spacing | 24 m radius, 0.8 m spacing |
-| Infill trees | 4,200 | 1,800 |
-| Haze / draw distance | 620 m | 420 m |
+| Grass | 40 m radius, 0.5 m spacing | 24 m radius, 0.9 m spacing |
+| Infill trees | 4,200 | 1,800 (lighter crowns) |
+| Parked cars | about 2 of 3 bays taken | about 1 of 2 bays taken |
+| Haze / draw distance | 620 m | 380 m |
 | Pixel ratio | up to 1.5 | up to 1.25 |
 
 ## Performance
@@ -79,12 +85,12 @@ Measured with `renderer.info` (Chromium, 1280×720 desktop; Pixel 7 emulation), 
 
 | View | Desktop: draw calls (total) | Desktop: triangles (main / shadows) | Mobile: draw calls (total) | Mobile: triangles (main / shadows) |
 | --- | --- | --- | --- | --- |
-| Plaza Mayor | 164 | 410k / 112k | 133 | 243k / 69k |
-| Densest street in the centre | 169 | 404k / 71k | 134 | 239k / 54k |
-| El Soto (river and pools) | 112 | 318k / 67k | 91 | 223k / 11k |
-| Old station | 106 | 229k / 16k | 83 | 84k / 9k |
+| Plaza Mayor | 196 | 522k / 192k | 158 | 295k / 145k |
+| Densest street in the centre | 195 | 507k / 132k | 157 | 299k / 111k |
+| El Soto (river and pools) | 130 | 377k / 107k | 107 | 226k / 45k |
+| Old station | 128 | 257k / 25k | 93 | 98k / 17k |
 
-On phones, every view stays within the budget of fewer than 150 draw calls and fewer than 300k visible triangles. The desktop "high" level spends more on grass, trees and shadows and is meant for a desktop GPU. The figures were measured in a software renderer; frame rates have to be checked on real hardware.
+On phones the main (visible) pass stays within the budget of fewer than 150 draw calls and fewer than 300k triangles in every view; counting the shadow pass, the two densest views reach 157–158 calls. The desktop "high" level spends more on grass, trees and shadows and is meant for a desktop GPU. The figures were measured in a software renderer; frame rates have to be checked on real hardware.
 
 How the budget is met:
 
@@ -110,6 +116,14 @@ The Plaza Mayor, framed like the reference photos:
 | --- | --- |
 | ![Ayuntamiento](docs/plaza-ayuntamiento.jpg) | ![Templete](docs/plaza-templete.jpg) |
 
+| Santa Marina | Calle San Roque (shops, Correos, Carrefour, Pub Ghost, Rivera petrol station) |
+| --- | --- |
+| ![Santa Marina](docs/santa-marina.jpg) | ![Calle San Roque](docs/calle-san-roque.jpg) |
+
+| Sports grounds | Car park |
+| --- | --- |
+| ![Pitches](docs/pistas-deportivas.jpg) | ![Parking](docs/parking.jpg) |
+
 ## Architecture
 
 ```
@@ -132,6 +146,10 @@ src/
 │   ├── Vegetation.ts        Leaf-card trees (instanced, wind), street lamps and benches at their OSM positions
 │   ├── Grass.ts             Wind-blown grass around the camera with an OSM-derived density mask
 │   ├── Landmarks.ts         Ayuntamiento, Torre, templete, fountain, "Al músico", bell towers, Mikado
+│   ├── Churches.ts          Santa Marina (tent church + campanile), Ermitas de San Roque and San Vicente
+│   ├── Commerce.ts          Shop fronts and signs with the real names (one sign atlas), terraces
+│   ├── Facilities.ts        Polideportivo, petrol station, bus station, car parks with parked cars, fences
+│   ├── Sports.ts            Courts and pitches by sport, picnic tables, playgrounds
 │   ├── Batcher.ts           Merging per material and chunk
 │   └── Environment (sky, IBL, sun, mountains) / Materials (PBR) / textures / geo / geometry / props / Water
 ├── render/Pipeline.ts       Background (sky + mountains) and town passes; HDR composer with bloom and grade
