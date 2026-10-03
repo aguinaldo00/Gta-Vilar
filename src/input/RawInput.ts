@@ -6,7 +6,7 @@ const PREVENT_DEFAULT = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', '
  * layout (QWERTY/AZERTY) does not matter. Mouse deltas are accumulated while
  * the pointer is locked (or while dragging, as a fallback).
  */
-export class Input {
+export class RawInput {
   private readonly down = new Set<string>();
   private readonly pressed = new Set<string>();
   private mdx = 0;

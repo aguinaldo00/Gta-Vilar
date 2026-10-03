@@ -1,4 +1,4 @@
-import type { Input } from '../core/Input';
+import type { RawInput } from '../input/RawInput';
 
 const STICK_RADIUS = 60;
 const LOOK_SENS = 1.8;
@@ -6,7 +6,8 @@ const LOOK_SENS = 1.8;
 /**
  * On-screen controls for phones and tablets: a floating joystick on the left
  * half of the screen, drag-to-look on the right half, and action buttons.
- * Everything is fed into `Input` so the game logic is shared with keyboard play.
+ * Everything is fed into `RawInput` as virtual keys (`Touch.*`, bound in config/input.json),
+ * so gameplay only ever reads actions.
  */
 export class TouchControls {
   static supported(): boolean {
@@ -26,7 +27,7 @@ export class TouchControls {
   private ly = 0;
   private driving = false;
 
-  constructor(private readonly input: Input) {
+  constructor(private readonly input: RawInput) {
     document.body.classList.add('touch');
     this.layer = document.createElement('div');
     this.layer.id = 'touch';
@@ -36,8 +37,8 @@ export class TouchControls {
     this.knob.className = 'stick-knob';
     this.base.appendChild(this.knob);
     this.layer.appendChild(this.base);
-    this.jumpBtn = this.button('btn-jump', 'SALTAR', 'Space');
-    this.useBtn = this.button('btn-use', 'ROBAR', 'KeyF');
+    this.jumpBtn = this.button('btn-jump', 'SALTAR', 'Touch.jump');
+    this.useBtn = this.button('btn-use', 'ROBAR', 'Touch.use');
     document.body.appendChild(this.layer);
 
     this.layer.addEventListener('pointerdown', (e) => this.onDown(e));

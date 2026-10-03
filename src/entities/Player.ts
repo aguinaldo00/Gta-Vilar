@@ -148,7 +148,7 @@ export class Player {
     return Math.max(world.heightAt(this.pos.x, this.pos.z), support);
   }
 
-  update(dt: number, input: PlayerInput, world: World, collision: CollisionWorld, vehicles: Vehicle[]): void {
+  update(dt: number, input: PlayerInput, world: World, collision: CollisionWorld, vehicles: readonly Vehicle[]): void {
     if (this.vehicle) return;
     const knocked = this.knockTimer > 0;
     if (knocked) this.knockTimer -= dt;

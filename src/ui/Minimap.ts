@@ -129,7 +129,7 @@ export class Minimap {
       g.save();
       g.translate(v.x, v.z);
       g.rotate(-v.heading);
-      g.fillStyle = v.spec.kind === 'tractor' ? '#7bd148' : '#4fa3ff';
+      g.fillStyle = v.spec.mapColor;
       g.fillRect(-v.spec.width / 2 - 0.6, -v.spec.length / 2 - 0.6, v.spec.width + 1.2, v.spec.length + 1.2);
       g.restore();
     }

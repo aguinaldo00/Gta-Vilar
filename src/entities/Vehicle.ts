@@ -1,10 +1,10 @@
 import * as THREE from 'three';
+import type { VehicleSpec } from '@/config/Config';
 import { approach, clamp, damp, lerp, wrapAngle } from '../core/math';
 import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
 import type { World } from '../world/World';
 import type { SkidMarks } from './SkidMarks';
 import { buildVehicleModel, updateWheelInstances, type VehicleRig } from './VehicleModels';
-import { SPECS, type VehicleKind, type VehicleSpec } from './vehicleSpecs';
 
 export interface DriveControls {
   /** -1 (reverse/brake) .. 1 (accelerate). */
@@ -57,9 +57,9 @@ export class Vehicle {
   private readonly contacts: Contact[] = [];
   private readonly lastSkid: ({ x: number; z: number } | null)[] = [null, null];
 
-  constructor(kind: VehicleKind, color: string, x: number, z: number, heading: number) {
-    this.spec = SPECS[kind];
-    this.rig = buildVehicleModel(kind, color);
+  constructor(spec: VehicleSpec, color: string, x: number, z: number, heading: number) {
+    this.spec = spec;
+    this.rig = buildVehicleModel(spec.model, color);
     this.x = x;
     this.z = z;
     this.heading = heading;
@@ -283,7 +283,7 @@ export class Vehicle {
     const s = this.spec;
     this.skidding =
       (Math.abs(this.slip) > 2.5 || (c.handbrake && Math.abs(this.speed) > 4) || (this.braking && Math.abs(this.speed) > 14)) &&
-      s.kind !== 'tractor';
+      s.skidMarks;
     const fx = Math.sin(this.heading),
       fz = Math.cos(this.heading);
     const rear = this.rig.wheels.filter((w) => !w.front);

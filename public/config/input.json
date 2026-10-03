@@ -1,0 +1,46 @@
+{
+  "bindings": {
+    "moveForward": [
+      "KeyW",
+      "ArrowUp"
+    ],
+    "moveBack": [
+      "KeyS",
+      "ArrowDown"
+    ],
+    "moveLeft": [
+      "KeyA",
+      "ArrowLeft"
+    ],
+    "moveRight": [
+      "KeyD",
+      "ArrowRight"
+    ],
+    "sprint": [
+      "ShiftLeft",
+      "ShiftRight"
+    ],
+    "jump": [
+      "Space",
+      "Touch.jump"
+    ],
+    "handbrake": [
+      "Space",
+      "Touch.jump"
+    ],
+    "use": [
+      "KeyF",
+      "KeyE",
+      "Touch.use"
+    ],
+    "help": [
+      "KeyH"
+    ],
+    "mute": [
+      "KeyM"
+    ],
+    "respawn": [
+      "KeyR"
+    ]
+  }
+}

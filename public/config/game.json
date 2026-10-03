@@ -1,0 +1,76 @@
+{
+  "simulation": {
+    "fixedStep": 0.016666666666666666,
+    "maxSubSteps": 5
+  },
+  "player": {
+    "spawn": {
+      "x": 4,
+      "z": 14,
+      "facing": 3.14159265
+    },
+    "enterReach": 1.6
+  },
+  "camera": {
+    "fov": 62,
+    "near": 0.25,
+    "walkDistance": 5.2,
+    "walkHeight": 1.55
+  },
+  "vehicles": [
+    {
+      "type": "sedan",
+      "color": "#b3261e",
+      "near": {
+        "x": 30,
+        "z": 10
+      },
+      "mainRoad": true
+    },
+    {
+      "type": "tractor",
+      "color": "#2e7d32",
+      "near": {
+        "x": -25,
+        "z": 30
+      },
+      "mainRoad": true
+    },
+    {
+      "type": "van",
+      "color": "#ecebe6",
+      "near": {
+        "x": -60,
+        "z": -40
+      },
+      "mainRoad": true
+    },
+    {
+      "type": "sedan",
+      "color": "#1f4e9a",
+      "near": {
+        "x": 80,
+        "z": 60
+      },
+      "mainRoad": true
+    },
+    {
+      "type": "sedan",
+      "color": "#e0b020",
+      "near": {
+        "x": -200,
+        "z": -250
+      },
+      "mainRoad": true
+    },
+    {
+      "type": "tractor",
+      "color": "#c0392b",
+      "near": {
+        "x": -640,
+        "z": 1150
+      },
+      "mainRoad": false
+    }
+  ]
+}

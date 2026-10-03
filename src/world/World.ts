@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { Quality } from '@/config/Config';
 import { Rng } from '../core/math';
 import { type CollisionWorld, Layer } from '../physics/CollisionWorld';
 import { Batcher } from './Batcher';
@@ -20,26 +21,7 @@ import { buildGround, groundMaterial, TerrainModel } from './Terrain';
 import { buildVegetation } from './Vegetation';
 import { waterTime } from './Water';
 
-/** Per-device rendering budget (draw distance is the main knob). */
-export interface Quality {
-  /** Land-use texture resolution (px). */
-  groundTexture: number;
-  /** Exponential fog density (haze); also sets the town draw distance. */
-  fogDensity: number;
-  /** Camera far plane for the town (the sky and mountains are drawn separately). */
-  drawDistance: number;
-  shadowMapSize: number;
-  treeShadows: boolean;
-  /** Grass blades around the camera: radius (m) and spacing (m). */
-  grassRadius: number;
-  grassSpacing: number;
-  /** Infill trees in woods, parks and orchards (mapped trees are always drawn). */
-  treeBudget: number;
-  /** Multisampled HDR composer with bloom and colour grading. */
-  postFX: boolean;
-  /** 0 = phones (lighter trees, fewer parked cars and props), 1 = desktop. */
-  detail: 0 | 1;
-}
+export type { Quality } from '@/config/Config';
 
 interface NamedArea {
   name: string;

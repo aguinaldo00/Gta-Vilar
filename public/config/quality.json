@@ -1,0 +1,28 @@
+{
+  "desktop": {
+    "pixelRatio": 1.5,
+    "groundTexture": 4096,
+    "fogDensity": 0.0019,
+    "drawDistance": 620,
+    "shadowMapSize": 4096,
+    "treeShadows": true,
+    "grassRadius": 40,
+    "grassSpacing": 0.5,
+    "treeBudget": 4200,
+    "postFX": true,
+    "detail": 1
+  },
+  "touch": {
+    "pixelRatio": 1.25,
+    "groundTexture": 2048,
+    "fogDensity": 0.0033,
+    "drawDistance": 380,
+    "shadowMapSize": 1024,
+    "treeShadows": false,
+    "grassRadius": 24,
+    "grassSpacing": 0.9,
+    "treeBudget": 1800,
+    "postFX": false,
+    "detail": 0
+  }
+}

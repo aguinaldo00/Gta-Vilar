@@ -69,11 +69,11 @@ export class GameAudio {
     }
     const s = v.spec;
     const ratio = Math.min(1, Math.abs(v.speed) / s.maxSpeed);
-    // Fake gearbox: rpm climbs within each of 5 gears.
-    const gears = s.kind === 'tractor' ? 3 : 5;
+    // Fake gearbox: rpm climbs within each gear.
+    const gears = s.gears;
     const g = Math.min(gears - 1, Math.floor(ratio * gears));
     const inGear = ratio * gears - g;
-    const base = s.kind === 'tractor' ? 32 : s.kind === 'van' ? 42 : 50;
+    const base = s.engineHz;
     const freq = base + inGear * base * 1.4 + g * 6 + Math.abs(v.throttle) * 8;
     this.engine.frequency.setTargetAtTime(freq, t, 0.05);
     this.engineSub.frequency.setTargetAtTime(freq / 2, t, 0.05);

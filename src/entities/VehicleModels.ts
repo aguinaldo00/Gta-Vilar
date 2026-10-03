@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { VEHICLE_MODELS } from '@/config/schema';
 import { mergeColoured } from '../core/mergeColored';
-import type { VehicleKind } from './vehicleSpecs';
+
+type VehicleModel = (typeof VEHICLE_MODELS)[number];
 
 export interface WheelRig {
   /** Steering pivot (rotates around Y for front wheels). */
@@ -226,7 +228,7 @@ function buildTractor(color: string): VehicleRig {
   return { root, body, wheels, brakeMat: bm, driver, wheelMesh: null as unknown as THREE.InstancedMesh };
 }
 
-export function buildVehicleModel(kind: VehicleKind, color: string): VehicleRig {
+export function buildVehicleModel(kind: VehicleModel, color: string): VehicleRig {
   const rig = kind === 'sedan' ? buildSedan(color) : kind === 'van' ? buildVan(color) : buildTractor(color);
   // Merge the boxes of each rigid part into one mesh (brake lights stay separate: they light up).
   mergeColoured(rig.body, (m) => m.material === rig.brakeMat);
