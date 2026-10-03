@@ -10,8 +10,7 @@ import { SkidMarks } from './entities/SkidMarks';
 import { PARKED, Vehicle } from './entities/Vehicle';
 import { InputActions } from './input/InputActions';
 import { RawInput } from './input/RawInput';
-import { CollisionWorld } from './physics/CollisionWorld';
-import { ColliderFanout, Layer } from './physics/PhysicsWorld';
+import { Layer } from './physics/PhysicsWorld';
 import { RapierPhysics } from './physics/RapierPhysics';
 import { Pipeline } from './render/Pipeline';
 import { Locomotion } from './systems/Locomotion';
@@ -40,8 +39,6 @@ export class Game {
   readonly events = new EventBus<GameEvents>();
   readonly input: RawInput;
   readonly actions: InputActions;
-  /** Legacy collision used by the arcade vehicles until they move to Rapier. */
-  readonly collision = new CollisionWorld();
   readonly physics = new RapierPhysics();
   readonly world: World;
   readonly player = new Player();
@@ -50,8 +47,8 @@ export class Game {
   readonly pipeline: Pipeline;
   readonly quality: Config['quality']['desktop'];
   private readonly loop: FixedStepLoop;
-  private readonly locomotion: Locomotion;
-  private readonly interaction: VehicleInteraction;
+  readonly locomotion: Locomotion;
+  readonly interaction: VehicleInteraction;
   private readonly skids: SkidMarks;
   private readonly hud = new HUD();
   private readonly minimap: Minimap;
@@ -85,7 +82,7 @@ export class Game {
 
     const cam = config.game.camera;
     this.camera = new THREE.PerspectiveCamera(cam.fov, 1, cam.near, quality.drawDistance);
-    this.world = new World(map, this.scene, this.renderer, new ColliderFanout([this.collision, this.physics]), quality);
+    this.world = new World(map, this.scene, this.renderer, this.physics, quality);
     this.physics.setTerrain(this.world.heightGrid(2));
     this.pipeline = new Pipeline(this.renderer, this.scene, this.camera, this.world.env, quality.postFX);
     this.skids = new SkidMarks(this.scene);
@@ -106,16 +103,7 @@ export class Game {
     );
     this.respawn(false);
 
-    this.locomotion = new Locomotion(
-      this.player,
-      this.vehicles,
-      this.world,
-      this.collision,
-      this.physics,
-      this.skids,
-      this.actions,
-      this.followCam,
-    );
+    this.locomotion = new Locomotion(this.player, this.vehicles, this.world, this.physics, this.skids, this.actions, this.followCam);
     this.interaction = new VehicleInteraction(
       this.player,
       this.vehicles,
@@ -168,7 +156,16 @@ export class Game {
       v.y = this.world.heightAt(p.x, p.z);
       this.vehicles.push(v);
       this.scene.add(v.rig.root);
-      v.update(0.001, PARKED, this.world, this.collision, this.skids);
+      v.attachBody(
+        this.physics.createVehicle({
+          length: v.spec.length,
+          width: v.spec.width,
+          height: v.spec.height,
+          clearance: 0.3,
+          mask: Layer.Vehicle,
+        }),
+      );
+      v.update(0.001, PARKED, this.world, this.skids);
     }
   }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Layer } from '../physics/CollisionWorld';
+import { Layer } from '../physics/PhysicsWorld';
 import type { BuildContext } from './context';
 import { beamMatrix, boxGeo } from './geometry';
 import { flagTexture } from './textures';

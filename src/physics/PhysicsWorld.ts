@@ -58,6 +58,33 @@ export interface CharacterBody {
   setEnabled(on: boolean): void;
 }
 
+/** Contact of a vehicle body with the level: horizontal normal and point (world). */
+export interface VehicleContact {
+  nx: number;
+  nz: number;
+  px: number;
+  pz: number;
+}
+
+/**
+ * Kinematic box for an arcade vehicle: gameplay integrates the handling
+ * model and asks the body to sweep; it slides along walls and reports the
+ * contacts so the handling model can bounce and spin.
+ */
+export interface VehicleBody {
+  /** Sweeps from (x, z) by (dx, dz) with the given heading and ride height; returns the reached position and contacts. */
+  move(x: number, z: number, dx: number, dz: number, heading: number, y: number): { x: number; z: number; contacts: VehicleContact[] };
+}
+
+export interface VehicleOptions {
+  length: number;
+  width: number;
+  height: number;
+  /** Obstacles lower than this (kerbs, low walls) pass under the body. */
+  clearance: number;
+  mask: number;
+}
+
 export interface CharacterOptions {
   radius: number;
   height: number;
@@ -69,23 +96,11 @@ export interface CharacterOptions {
 export interface PhysicsWorld extends StaticColliders {
   setTerrain(grid: HeightGrid): void;
   createCharacter(o: CharacterOptions): CharacterBody;
+  createVehicle(o: VehicleOptions): VehicleBody;
   /** Distance to the first hit along a unit direction, or `maxT`. */
   raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, mask: number): number;
   /** Whether a standing capsule (feet at y, kerbs under knee height ignored) would overlap anything that blocks `mask`. */
   capsuleBlocked(x: number, y: number, z: number, radius: number, height: number, mask: number): boolean;
   /** Finalises queued changes; call once per fixed step. */
   step(dt: number): void;
-}
-
-/** Sends static colliders to several backends (used while systems migrate). */
-export class ColliderFanout implements StaticColliders {
-  constructor(private readonly sinks: StaticColliders[]) {}
-
-  addBox(x: number, z: number, w: number, d: number, o: ColliderOptions): void {
-    for (const s of this.sinks) s.addBox(x, z, w, d, o);
-  }
-
-  addCircle(x: number, z: number, r: number, o: ColliderOptions): void {
-    for (const s of this.sinks) s.addCircle(x, z, r, o);
-  }
 }

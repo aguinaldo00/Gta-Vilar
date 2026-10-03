@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Layer } from '../physics/CollisionWorld';
+import { Layer } from '../physics/PhysicsWorld';
 import { CUSTOM_CHURCHES } from './Churches';
 import type { BuildContext } from './context';
 import { CUSTOM_FACILITIES } from './Facilities';

@@ -1,14 +1,21 @@
 import { expect, type Page, test } from '@playwright/test';
 
-/** Steps the game `s` seconds while `keys` are held. */
+/**
+ * Steps the game `s` seconds while `keys` are held. Keys go through the same
+ * virtual-key path as the touch buttons (real keyboard input is covered by
+ * the smoke test), which keeps this long test fast and stable.
+ */
 async function run(page: Page, s: number, keys: string[] = []): Promise<void> {
-  for (const k of keys) await page.keyboard.down(k);
-  await page.evaluate((s) => {
-    // biome-ignore lint/suspicious/noExplicitAny: test hook
-    const g = (window as any).__game;
-    for (let i = 0; i < Math.round(s * 60); i++) g.update(1 / 60);
-  }, s);
-  for (const k of keys) await page.keyboard.up(k);
+  await page.evaluate(
+    ([s, keys]) => {
+      // biome-ignore lint/suspicious/noExplicitAny: test hook
+      const g = (window as any).__game;
+      for (const k of keys as string[]) g.input.pressVirtual(k);
+      for (let i = 0; i < Math.round((s as number) * 60); i++) g.update(1 / 60);
+      for (const k of keys as string[]) g.input.releaseVirtual(k);
+    },
+    [s, keys] as const,
+  );
 }
 
 /** Puts the player at (x, z) with the camera (and so "forward") looking along (dx, dz). */
@@ -62,7 +69,7 @@ test('player physics: walls, jumping, swimming', async ({ page }) => {
   ]) {
     await place(page, 4, 14, dx, dz);
     await run(page, 0.2);
-    await run(page, 6, ['ShiftLeft', 'w']);
+    await run(page, 6, ['ShiftLeft', 'KeyW']);
     const s = await state(page);
     expect(s.inside, `walking ${dx},${dz} ended inside a building at ${s.x.toFixed(1)},${s.z.toFixed(1)}`).toBe(false);
   }
@@ -71,8 +78,7 @@ test('player physics: walls, jumping, swimming', async ({ page }) => {
   await place(page, 4, 14, 1, 0);
   await run(page, 0.3);
   const y0 = (await state(page)).y;
-  await page.keyboard.press('Space');
-  await run(page, 0.25);
+  await run(page, 0.25, ['Space']);
   expect((await state(page)).y).toBeGreaterThan(y0 + 0.5);
   await run(page, 1.5);
   expect((await state(page)).y).toBeCloseTo(y0, 0);

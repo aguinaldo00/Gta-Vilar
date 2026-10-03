@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Layer } from '../physics/CollisionWorld';
+import { Layer } from '../physics/PhysicsWorld';
 import type { BuildContext } from './context';
 import { hash01, type Pt, pointInRing, ringBounds, toPts, triangulate } from './geo';
 import { Unit } from './props';

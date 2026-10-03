@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { Layer } from '../physics/CollisionWorld';
+import { Layer } from '../physics/PhysicsWorld';
 import type { BuildContext } from './context';
 import { hash01, type Pt, pointInRing, ringBounds, ringDist, SpatialGrid, toPts } from './geo';
 import { bench, planeTree, Unit } from './props';

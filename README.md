@@ -1,11 +1,13 @@
 # Villarcayo Sandbox
 
-A browser-based 3D open-world sandbox in the spirit of the early 3D-era *Grand Theft Auto* games, set in **Villarcayo de Merindad de Castilla la Vieja (Burgos, Spain)**. The town is built **from real OpenStreetMap data**: the actual streets, the footprint and height of each of its 1,592 buildings, the course of the Río Nela, parks, trees, street lamps and pedestrian crossings. Built with **TypeScript + Three.js** and bundled with Vite.
+A browser-based 3D open-world sandbox in the spirit of the early 3D-era *Grand Theft Auto* games, set in **Villarcayo de Merindad de Castilla la Vieja (Burgos, Spain)**. The town is built **from real OpenStreetMap data**: the actual streets, the footprint and height of each of its 1,592 buildings, the course of the Río Nela, parks, trees, street lamps and pedestrian crossings. Built with **TypeScript + Three.js + Rapier** and bundled with Vite.
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + production bundle in dist/
+npm run check      # typecheck + Biome lint/format check + unit tests (Vitest)
+npm run test:e2e   # real-browser tests (Playwright, after npm run build)
 npm run map        # regenerate public/maps/villarcayo.json from data/villarcayo.osm
 ```
 
@@ -102,7 +104,7 @@ How the budget is met:
 - **Hidden walls:** walls shared between building parts are not built.
 - **Background pass:** the sky and mountains live in a separate pass with their own far plane.
 
-**Collision** follows the building footprints. Each wall is a thin box collider in a spatial hash; the visual geometry is never used for collision.
+**Collision** follows the building footprints. Each wall is a thin box collider in Rapier; the visual geometry is never used for collision. The ground is a Rapier heightfield.
 
 ## Verification
 
@@ -126,19 +128,30 @@ The Plaza Mayor, framed like the reference photos:
 
 ## Architecture
 
+The game is split so that gameplay never depends on a concrete engine or on hard-coded data:
+
+- **Data, not code:** tuning lives in `public/config/*.json`, validated at boot. A typo or an out-of-range value fails with its exact path. The map lives in `public/maps/` and is loaded at runtime.
+- **Physics behind an interface:** gameplay talks to `PhysicsWorld`, and the Rapier backend implements it. Swapping the backend, or porting to Godot or Unity physics, does not touch gameplay.
+- **Systems, not a god object:** `Game` is only the composition root. Gameplay rules live in `systems/` and communicate through a typed `EventBus`.
+- **Input as actions:** gameplay reads named actions (`use`, `jump`…). Keys and touch buttons are bindings in `input.json`.
+
 ```
-scripts/osm-to-map.ts        OSM XML → projected, simplified JSON
-data/villarcayo.osm          OpenStreetMap export (source)
+public/
+├── config/                  game.json · vehicles.json · quality.json · input.json (runtime data)
+└── maps/villarcayo.json     Map generated from OSM (scripts/osm-to-map.ts), fetched at boot
 src/
-├── main.ts / Game.ts        Renderer, fixed-step (60 Hz) loop on requestAnimationFrame, per-device quality
-├── core/                    Input (keyboard, pointer lock, virtual joystick), maths, mergeColoured
-├── physics/CollisionWorld   2.5D colliders (rotated boxes and circles with a height range), spatial hash, raycasts
-├── entities/                Player, Vehicle (arcade physics with drifting), vehicle models, skid marks
+├── main.ts                  Boot: loads config + map + Rapier, then builds the Game
+├── Game.ts                  Composition root: renderer, world, entities, systems, frame loop
+├── config/                  Config schema (validated) and loader
+├── core/                    FixedStepLoop, EventBus + GameEvents, validation helpers, maths
+├── input/                   RawInput (keyboard, pointer lock, virtual keys) → InputActions
+├── physics/                 PhysicsWorld interface (layers, characters, vehicles, queries) + RapierPhysics
+├── systems/                 Locomotion (fixed-step movement), VehicleInteraction (steal / get out)
+├── entities/                Player, Vehicle (arcade handling with drifting), vehicle models, skid marks
 ├── camera/FollowCamera      Third-person orbit camera, pulls back and widens the FOV when driving
 ├── world/
 │   ├── mapData.ts           Map types, validation and runtime loading
-│   ├── mapData.ts           Types and loading of the JSON
-│   ├── World.ts             Builds everything; heightAt / waterAt / zoneAt (real street names) / roadSpawn
+│   ├── World.ts             Builds everything; heightAt / heightGrid / waterAt / zoneAt / roadSpawn
 │   ├── Terrain.ts           Heights (river channel, pools, bridge decks), ground mesh and land-use texture
 │   ├── Roads.ts             Streets, sidewalks, markings, zebra crossings, bridges; road network index
 │   ├── Buildings.ts         Footprint extrusion, roofs, galerías, wall colliders
@@ -153,11 +166,14 @@ src/
 │   ├── Batcher.ts           Merging per material and chunk
 │   └── Environment (sky, IBL, sun, mountains) / Materials (PBR) / textures / geo / geometry / props / Water
 ├── render/Pipeline.ts       Background (sky + mountains) and town passes; HDR composer with bloom and grade
-├── ui/                      HUD, minimap (vector OSM data), touch controls
+├── ui/                      HUD, minimap (vector map data), touch controls
 └── audio/GameAudio.ts       Synthesised engine and tyre screech
+tests/
+├── unit/                    Vitest: geometry, maths, config validation, map file, loop/events, Rapier backend
+└── e2e/                     Playwright: boot + drive, player physics (walls, jump, swim), vehicle crashes
 ```
 
-`window.__game` exposes the running `Game`, and `game.update(dt)` advances the simulation deterministically (useful for tests).
+`window.__game` exposes the running `Game`, and `game.update(dt)` advances the simulation deterministically (used by the e2e tests).
 
 ## Licence and attribution
 

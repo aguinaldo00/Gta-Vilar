@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Layer } from '../physics/CollisionWorld';
+import { Layer } from '../physics/PhysicsWorld';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
 import { centroid, hash01, orientedBox, type Pt, pointInRing, toPts } from './geo';

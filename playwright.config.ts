@@ -3,7 +3,9 @@ import { defineConfig } from '@playwright/test';
 /** End-to-end smoke tests against the production build (`npm run build` first). */
 export default defineConfig({
   testDir: 'tests/e2e',
-  timeout: 300_000,
+  timeout: 600_000,
+  // Software WebGL is heavy: one browser at a time.
+  workers: 1,
   expect: { timeout: 30_000 },
   use: {
     baseURL: 'http://localhost:4173',

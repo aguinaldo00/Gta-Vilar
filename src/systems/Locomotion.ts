@@ -3,7 +3,6 @@ import type { Player } from '@/entities/Player';
 import type { SkidMarks } from '@/entities/SkidMarks';
 import { type DriveControls, PARKED, Vehicle } from '@/entities/Vehicle';
 import type { InputActions } from '@/input/InputActions';
-import type { CollisionWorld } from '@/physics/CollisionWorld';
 import type { PhysicsWorld } from '@/physics/PhysicsWorld';
 import type { World } from '@/world/World';
 
@@ -12,8 +11,7 @@ const COASTING: DriveControls = { throttle: 0, steer: 0, handbrake: false };
 /**
  * Fixed-step movement: turns input actions into drive controls for the
  * player's vehicle (others stay parked) and camera-relative walking for the
- * player on foot, then steps vehicles (legacy collision) and the player
- * (physics character controller).
+ * player on foot, then steps vehicles and the player through the physics world.
  */
 export class Locomotion {
   enabled = false;
@@ -23,7 +21,6 @@ export class Locomotion {
     private readonly player: Player,
     private readonly vehicles: readonly Vehicle[],
     private readonly world: World,
-    private readonly collision: CollisionWorld,
     private readonly physics: PhysicsWorld,
     private readonly skids: SkidMarks,
     private readonly actions: InputActions,
@@ -42,7 +39,7 @@ export class Locomotion {
     for (const v of this.vehicles) {
       let c = PARKED;
       if (v === drive) c = this.enabled ? { throttle: a.moveY, steer: a.moveX, handbrake: a.held('handbrake') } : COASTING;
-      v.update(dt, c, this.world, this.collision, this.skids);
+      v.update(dt, c, this.world, this.skids);
     }
     for (let i = 0; i < this.vehicles.length; i++) {
       for (let j = i + 1; j < this.vehicles.length; j++) Vehicle.collidePair(this.vehicles[i], this.vehicles[j]);

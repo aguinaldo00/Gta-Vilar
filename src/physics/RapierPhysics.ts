@@ -1,5 +1,16 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { CharacterBody, CharacterMove, CharacterOptions, ColliderOptions, HeightGrid, PhysicsWorld } from './PhysicsWorld';
+import {
+  type CharacterBody,
+  type CharacterMove,
+  type CharacterOptions,
+  type ColliderOptions,
+  type HeightGrid,
+  Layer,
+  type PhysicsWorld,
+  type VehicleBody,
+  type VehicleContact,
+  type VehicleOptions,
+} from './PhysicsWorld';
 
 const ALL = 0xffff;
 /** Static colliders: member of the layers they block, interact with every query. */
@@ -88,6 +99,58 @@ class RapierCharacter implements CharacterBody {
   }
 }
 
+class RapierVehicle implements VehicleBody {
+  private readonly controller: RAPIER.KinematicCharacterController;
+  private readonly body: RAPIER.RigidBody;
+  private readonly collider: RAPIER.Collider;
+  private readonly groups: number;
+  private readonly lift: number;
+  private readonly delta = { x: 0, y: 0, z: 0 };
+  private readonly result = { x: 0, z: 0, contacts: [] as VehicleContact[] };
+
+  constructor(world: RAPIER.World, o: VehicleOptions) {
+    const h = Math.max(0.2, o.height - o.clearance);
+    this.lift = o.clearance + h / 2;
+    this.groups = queryGroups(o.mask);
+    this.controller = world.createCharacterController(0.03);
+    this.controller.setUp({ x: 0, y: 1, z: 0 });
+    this.controller.setSlideEnabled(true);
+    this.controller.setApplyImpulsesToDynamicBodies(false);
+    this.body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
+    this.collider = world.createCollider(RAPIER.ColliderDesc.cuboid(o.width / 2, h / 2, o.length / 2).setCollisionGroups(0), this.body);
+  }
+
+  private place(x: number, z: number, heading: number, y: number): void {
+    const t = { x, y: y + this.lift, z };
+    const q = { x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) };
+    this.body.setTranslation(t, true);
+    this.body.setRotation(q, true);
+    this.collider.setTranslation(t);
+    this.collider.setRotation(q);
+  }
+
+  move(x: number, z: number, dx: number, dz: number, heading: number, y: number): { x: number; z: number; contacts: VehicleContact[] } {
+    this.place(x, z, heading, y);
+    this.delta.x = dx;
+    this.delta.z = dz;
+    this.controller.computeColliderMovement(this.collider, this.delta, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, this.groups);
+    const m = this.controller.computedMovement();
+    const r = this.result;
+    r.x = x + m.x;
+    r.z = z + m.z;
+    this.place(r.x, r.z, heading, y);
+    r.contacts.length = 0;
+    for (let i = 0; i < this.controller.numComputedCollisions(); i++) {
+      const c = this.controller.computedCollision(i);
+      if (!c) continue;
+      const h = Math.hypot(c.normal1.x, c.normal1.z);
+      if (h < 0.5) continue;
+      r.contacts.push({ nx: c.normal1.x / h, nz: c.normal1.z / h, px: c.witness1.x, pz: c.witness1.z });
+    }
+    return r;
+  }
+}
+
 /** PhysicsWorld backed by Rapier (static level geometry, terrain heightfield, kinematic characters, queries). */
 export class RapierPhysics implements PhysicsWorld {
   readonly world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -128,13 +191,17 @@ export class RapierPhysics implements PhysicsWorld {
       sz = nrows * g.cellSize;
     const desc = RAPIER.ColliderDesc.heightfield(nrows, ncols, heights, { x: sx, y: 1, z: sz })
       .setTranslation(g.minX + sx / 2, 0, g.minZ + sz / 2)
-      .setCollisionGroups(staticGroups(7));
+      // Vehicles follow the terrain analytically (ride height and tilt), so the ground never blocks them.
+      .setCollisionGroups(staticGroups(Layer.Player | Layer.Camera));
     this.terrain = this.world.createCollider(desc);
     this.dirty = true;
   }
 
+  createVehicle(o: VehicleOptions): VehicleBody {
+    return new RapierVehicle(this.world, o);
+  }
+
   createCharacter(o: CharacterOptions): CharacterBody {
-    this.dirty = true;
     return new RapierCharacter(this.world, o);
   }
 
@@ -161,14 +228,16 @@ export class RapierPhysics implements PhysicsWorld {
   }
 
   step(_dt: number): void {
-    // Only kinematic and static bodies so far: stepping just refreshes the
-    // broad phase that the queries and the character controller read.
-    this.world.step();
-    this.dirty = false;
+    // No dynamic bodies yet: characters and vehicles are kinematic and query
+    // the level directly (their own colliders belong to no layer), so the
+    // world only needs a step to rebuild the broad phase after level edits.
+    this.sync();
   }
 
-  /** Makes queries see colliders added since the last step. */
+  /** Makes queries see colliders added since the last broad-phase update. */
   private sync(): void {
-    if (this.dirty) this.step(0);
+    if (!this.dirty) return;
+    this.world.step();
+    this.dirty = false;
   }
 }

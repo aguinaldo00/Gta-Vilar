@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Layer } from '../physics/CollisionWorld';
+import { Layer } from '../physics/PhysicsWorld';
 import { CHUNK } from './Batcher';
 import type { BuildContext } from './context';
 import { type Pt, type Segment, SpatialGrid, segBounds, segDist, segmentsOf, toPts, triangulate } from './geo';

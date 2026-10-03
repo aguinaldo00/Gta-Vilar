@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { VehicleSpec } from '@/config/Config';
 import { approach, clamp, damp, lerp, wrapAngle } from '../core/math';
-import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
+import type { VehicleBody } from '../physics/PhysicsWorld';
 import type { World } from '../world/World';
 import type { SkidMarks } from './SkidMarks';
 import { buildVehicleModel, updateWheelInstances, type VehicleRig } from './VehicleModels';
@@ -54,7 +54,7 @@ export class Vehicle {
   private accelLong = 0;
   private pitch = 0;
   private roll = 0;
-  private readonly contacts: Contact[] = [];
+  private body: VehicleBody | null = null;
   private readonly lastSkid: ({ x: number; z: number } | null)[] = [null, null];
 
   constructor(spec: VehicleSpec, color: string, x: number, z: number, heading: number) {
@@ -87,7 +87,12 @@ export class Vehicle {
     this.rig.driver.visible = driven;
   }
 
-  update(dt: number, c: DriveControls, world: World, collision: CollisionWorld, skids: SkidMarks): void {
+  /** Connects the physics body that sweeps this vehicle through the level. */
+  attachBody(body: VehicleBody): void {
+    this.body = body;
+  }
+
+  update(dt: number, c: DriveControls, world: World, skids: SkidMarks): void {
     const s = this.spec;
     const fx = Math.sin(this.heading);
     const fz = Math.cos(this.heading);
@@ -144,36 +149,32 @@ export class Vehicle {
       pz = this.z,
       ph = this.heading;
     this.heading = wrapAngle(this.heading + this.yawRate * dt);
-    this.x += this.vx * dt;
-    this.z += this.vz * dt;
-    this.resolveStatic(collision);
+    this.sweep(dt);
     this.resolveTerrain(world, px, pz, ph);
     this.updatePose(world, dt);
     this.updateSkids(skids, c);
   }
 
-  /** Pushes every body circle out of static colliders and applies a bounce impulse. */
-  private resolveStatic(collision: CollisionWorld): void {
-    for (let it = 0; it < 2; it++) {
-      let hit = false;
-      const fx = Math.sin(this.heading);
-      const fz = Math.cos(this.heading);
-      for (const o of this.offsets) {
-        const cx = this.x + fx * o;
-        const cz = this.z + fz * o;
-        this.contacts.length = 0;
-        const r = collision.resolveCircle(cx, cz, this.radius, Layer.Vehicle, this.y, this.spec.height, 0.3, this.contacts);
-        if (this.contacts.length === 0) continue;
-        this.x += r.x - cx;
-        this.z += r.z - cz;
-        for (const ct of this.contacts) this.applyImpulse(ct.nx, ct.nz, o, RESTITUTION, Infinity);
-        hit = true;
-      }
-      if (!hit) break;
+  /** Moves through the level with the physics body; walls bounce and spin the car. */
+  private sweep(dt: number): void {
+    if (!this.body) {
+      this.x += this.vx * dt;
+      this.z += this.vz * dt;
+      return;
+    }
+    const r = this.body.move(this.x, this.z, this.vx * dt, this.vz * dt, this.heading, this.y);
+    this.x = r.x;
+    this.z = r.z;
+    const fx = Math.sin(this.heading),
+      fz = Math.cos(this.heading);
+    for (const ct of r.contacts) {
+      // Where along the car the hit happened decides how much it spins.
+      const offset = clamp((ct.px - this.x) * fx + (ct.pz - this.z) * fz, -this.spec.length / 2, this.spec.length / 2);
+      this.applyImpulse(ct.nx, ct.nz, offset, RESTITUTION, Infinity);
     }
   }
 
-  /** Impulse at a body circle `offset` metres along the vehicle axis. */
+  /** Impulse at a point `offset` metres along the vehicle axis. */
   applyImpulse(nx: number, nz: number, offset: number, e: number, otherMass: number): number {
     const fx = Math.sin(this.heading);
     const fz = Math.cos(this.heading);
