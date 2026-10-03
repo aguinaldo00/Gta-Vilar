@@ -2,7 +2,7 @@ import type { EventBus } from '@/core/EventBus';
 import type { GameEvents } from '@/core/events';
 import type { Player } from '@/entities/Player';
 import type { Vehicle } from '@/entities/Vehicle';
-import { type CollisionWorld, type Contact, Layer } from '@/physics/CollisionWorld';
+import { Layer, type PhysicsWorld } from '@/physics/PhysicsWorld';
 import type { World } from '@/world/World';
 
 /** Speed (m/s) above which getting out of a car means rolling on the tarmac. */
@@ -14,13 +14,11 @@ const BAIL_OUT_SPEED = 8;
  * the change on the event bus.
  */
 export class VehicleInteraction {
-  private readonly contacts: Contact[] = [];
-
   constructor(
     private readonly player: Player,
     private readonly vehicles: readonly Vehicle[],
     private readonly world: World,
-    private readonly collision: CollisionWorld,
+    private readonly physics: PhysicsWorld,
     private readonly events: EventBus<GameEvents>,
     private readonly reach: number,
   ) {}
@@ -55,9 +53,7 @@ export class VehicleInteraction {
     for (const [x, z, facing] of this.exitPoints(v)) {
       const y = this.world.heightAt(x, z);
       if (Math.abs(y - v.y) > 1.2) continue;
-      this.contacts.length = 0;
-      this.collision.resolveCircle(x, z, this.player.radius, Layer.Player, y, this.player.height, 0.45, this.contacts);
-      if (this.contacts.length > 0) continue;
+      if (this.physics.capsuleBlocked(x, y, z, this.player.radius, this.player.height, Layer.Player)) continue;
       const bailedOut = Math.abs(v.speed) > BAIL_OUT_SPEED;
       this.player.exitVehicle(x, z, y, facing);
       if (bailedOut) this.player.knock(v.vx * 0.5 + Math.sin(facing) * 2, v.vz * 0.5 + Math.cos(facing) * 2, 3);

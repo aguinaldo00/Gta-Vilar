@@ -11,6 +11,8 @@ import { PARKED, Vehicle } from './entities/Vehicle';
 import { InputActions } from './input/InputActions';
 import { RawInput } from './input/RawInput';
 import { CollisionWorld } from './physics/CollisionWorld';
+import { ColliderFanout, Layer } from './physics/PhysicsWorld';
+import { RapierPhysics } from './physics/RapierPhysics';
 import { Pipeline } from './render/Pipeline';
 import { Locomotion } from './systems/Locomotion';
 import { VehicleInteraction } from './systems/VehicleInteraction';
@@ -38,7 +40,9 @@ export class Game {
   readonly events = new EventBus<GameEvents>();
   readonly input: RawInput;
   readonly actions: InputActions;
+  /** Legacy collision used by the arcade vehicles until they move to Rapier. */
   readonly collision = new CollisionWorld();
+  readonly physics = new RapierPhysics();
   readonly world: World;
   readonly player = new Player();
   readonly vehicles: Vehicle[] = [];
@@ -81,7 +85,8 @@ export class Game {
 
     const cam = config.game.camera;
     this.camera = new THREE.PerspectiveCamera(cam.fov, 1, cam.near, quality.drawDistance);
-    this.world = new World(map, this.scene, this.renderer, this.collision, quality);
+    this.world = new World(map, this.scene, this.renderer, new ColliderFanout([this.collision, this.physics]), quality);
+    this.physics.setTerrain(this.world.heightGrid(2));
     this.pipeline = new Pipeline(this.renderer, this.scene, this.camera, this.world.env, quality.postFX);
     this.skids = new SkidMarks(this.scene);
     this.followCam = new FollowCamera(this.camera);
@@ -90,14 +95,32 @@ export class Game {
 
     this.spawnVehicles();
     this.scene.add(this.player.root);
+    this.player.attachBody(
+      this.physics.createCharacter({
+        radius: this.player.radius,
+        height: this.player.height,
+        maxStep: this.player.stepHeight,
+        maxSlopeDeg: 50,
+        mask: Layer.Player,
+      }),
+    );
     this.respawn(false);
 
-    this.locomotion = new Locomotion(this.player, this.vehicles, this.world, this.collision, this.skids, this.actions, this.followCam);
-    this.interaction = new VehicleInteraction(
+    this.locomotion = new Locomotion(
       this.player,
       this.vehicles,
       this.world,
       this.collision,
+      this.physics,
+      this.skids,
+      this.actions,
+      this.followCam,
+    );
+    this.interaction = new VehicleInteraction(
+      this.player,
+      this.vehicles,
+      this.world,
+      this.physics,
       this.events,
       config.game.player.enterReach,
     );
@@ -194,7 +217,7 @@ export class Game {
         distance: v ? v.spec.camDistance : cam.walkDistance,
         height: v ? v.spec.camHeight : cam.walkHeight,
       },
-      this.collision,
+      this.physics,
       this.world,
     );
 

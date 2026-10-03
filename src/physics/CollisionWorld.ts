@@ -1,15 +1,9 @@
 import { clamp } from '../core/math';
 
-/** Bit masks deciding who collides with what. */
-export const Layer = {
-  Player: 1,
-  Vehicle: 2,
-  Camera: 4,
-  /** Blocks everything. */
-  Solid: 7,
-  /** Blocks bodies but lets the camera pass (thin props, invisible walls). */
-  Bodies: 3,
-} as const;
+import { type ColliderOptions, Layer, type StaticColliders } from './PhysicsWorld';
+
+export type { ColliderOptions };
+export { Layer };
 
 /**
  * A static obstacle on the XZ plane with a vertical extent [bottom, top].
@@ -40,22 +34,17 @@ export interface Contact {
   depth: number;
 }
 
-export interface ColliderOptions {
-  rot?: number;
-  bottom?: number;
-  top: number;
-  mask?: number;
-}
-
 const CELL = 16;
 
 /**
- * 2.5D collision world: static colliders live in a uniform spatial hash and
+ * Legacy 2.5D collision world, kept only for the arcade vehicles until they
+ * move to Rapier (the player, camera and queries already use PhysicsWorld).
+ * Static colliders live in a uniform spatial hash and
  * dynamic bodies (player, vehicles) are approximated by circles that are
  * pushed out of overlapping colliders. Cheap, robust and good enough for an
  * arcade sandbox.
  */
-export class CollisionWorld {
+export class CollisionWorld implements StaticColliders {
   readonly colliders: Collider[] = [];
   private readonly grid = new Map<number, Collider[]>();
   private stamp = 0;

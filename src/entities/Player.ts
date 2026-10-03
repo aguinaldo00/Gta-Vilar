@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/math';
 import { mergeColoured } from '../core/mergeColored';
-import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
+import type { CharacterBody } from '../physics/PhysicsWorld';
 import type { World } from '../world/World';
 import type { Vehicle } from './Vehicle';
 
@@ -25,9 +25,10 @@ const SWIM_DEPTH = 1.25;
 const KNOCK_SPEED = 6;
 
 /**
- * Blocky low-poly avatar. Movement is a kinematic capsule (circle + height)
- * resolved against the static collision world; animation is a cheap
- * procedural limb swing driven by ground speed.
+ * Blocky low-poly avatar (to be replaced by the rigged GLB character).
+ * Movement drives a kinematic capsule (`CharacterBody`, Rapier's character
+ * controller: steps, slopes, wall sliding); swimming and getting knocked
+ * over are handled here. Animation is a procedural limb swing.
  */
 export class Player {
   readonly root = new THREE.Group();
@@ -35,6 +36,8 @@ export class Player {
   readonly vel = new THREE.Vector3();
   readonly radius = 0.38;
   readonly height = 1.8;
+  /** Highest kerb or step climbed without jumping. */
+  readonly stepHeight = STEP_HEIGHT;
   facing = 0;
   state: PlayerState = 'idle';
   grounded = true;
@@ -48,7 +51,7 @@ export class Player {
   private phase = 0;
   private knockTimer = 0;
   private tumble = 0;
-  private readonly contacts: Contact[] = [];
+  private capsule: CharacterBody | null = null;
 
   constructor() {
     const mat = (c: string) => new THREE.MeshStandardMaterial({ color: c });
@@ -98,8 +101,15 @@ export class Player {
     for (const g of [this.body, this.armL, this.armR, this.legL, this.legR]) mergeColoured(g);
   }
 
+  /** Connects the physics capsule that moves this player. */
+  attachBody(body: CharacterBody): void {
+    this.capsule = body;
+    body.teleport(this.pos.x, this.pos.y, this.pos.z);
+  }
+
   spawn(x: number, z: number, y: number, facing: number): void {
     this.pos.set(x, y, z);
+    this.capsule?.teleport(x, y, z);
     this.vel.set(0, 0, 0);
     this.facing = facing;
     this.sync();
@@ -142,18 +152,14 @@ export class Player {
     this.facing = v.heading;
   }
 
-  private groundHeight(world: World, collision: CollisionWorld, step: number): number {
-    const support = collision.supportHeight(this.pos.x, this.pos.z, 0.2, Layer.Player, this.pos.y, step);
-    return Math.max(world.heightAt(this.pos.x, this.pos.z), support);
-  }
-
-  update(dt: number, input: PlayerInput, world: World, collision: CollisionWorld, vehicles: readonly Vehicle[]): void {
-    if (this.vehicle) return;
+  update(dt: number, input: PlayerInput, world: World, vehicles: readonly Vehicle[]): void {
+    const body = this.capsule;
+    if (this.vehicle || !body) return;
     const knocked = this.knockTimer > 0;
     if (knocked) this.knockTimer -= dt;
 
     const waterY = world.waterAt(this.pos.x, this.pos.z);
-    let ground = this.groundHeight(world, collision, STEP_HEIGHT);
+    const ground = world.heightAt(this.pos.x, this.pos.z);
     const depth = waterY === null ? 0 : waterY - ground;
     const swimming = depth > SWIM_DEPTH && this.pos.y <= waterY! - SWIM_DEPTH + 0.3;
     const wading = !swimming && depth > 0.3;
@@ -169,9 +175,11 @@ export class Player {
     this.vel.z = damp(this.vel.z, mz * speed, accel, dt);
 
     // Vertical.
+    let dy: number;
     if (swimming) {
       this.vel.y = 0;
-      this.pos.y = damp(this.pos.y, waterY! - SWIM_DEPTH - 0.05 + Math.sin(performance.now() / 400) * 0.04, 6, dt);
+      const target = waterY! - SWIM_DEPTH - 0.05 + Math.sin(performance.now() / 400) * 0.04;
+      dy = damp(this.pos.y, target, 6, dt) - this.pos.y;
       this.grounded = false;
     } else {
       if (input.jump && this.grounded && !knocked) {
@@ -179,31 +187,27 @@ export class Player {
         this.grounded = false;
       }
       this.vel.y -= GRAVITY * dt;
+      dy = this.vel.y * dt;
     }
 
-    // Move + collide horizontally.
-    const step = swimming ? waterY! + 0.6 - this.pos.y : this.grounded ? STEP_HEIGHT : 0.2;
-    this.contacts.length = 0;
-    const r = collision.resolveCircle(
-      this.pos.x + this.vel.x * dt,
-      this.pos.z + this.vel.z * dt,
-      this.radius,
-      Layer.Player,
-      this.pos.y,
-      this.height,
-      step,
-      this.contacts,
-    );
-    for (const c of this.contacts) {
+    // Move the capsule: the controller slides along walls, steps up kerbs and snaps down slopes.
+    const move = body.move(this.vel.x * dt, dy, this.vel.z * dt);
+    for (const c of move.contacts) {
       const vn = this.vel.x * c.nx + this.vel.z * c.nz;
       if (vn < 0) {
         this.vel.x -= vn * c.nx;
         this.vel.z -= vn * c.nz;
       }
     }
-    const p = { x: r.x, z: r.z };
+    if (!swimming) {
+      this.grounded = move.grounded && this.vel.y <= 0.5;
+      if (this.grounded) this.vel.y = 0;
+    }
+
+    // Cars push pedestrians aside, or knock them over when fast enough.
+    const p = { x: body.x, z: body.z };
     for (const v of vehicles) {
-      const hit = v.pushPedestrian(p, this.radius, this.pos.y);
+      const hit = v.pushPedestrian(p, this.radius, body.y);
       if (!hit.hit) continue;
       if (hit.speed > KNOCK_SPEED && !knocked) {
         this.knock(v.vx * 0.7 + hit.nx * 3, v.vz * 0.7 + hit.nz * 3, 4 + hit.speed * 0.25);
@@ -216,22 +220,10 @@ export class Player {
         }
       }
     }
-    this.pos.x = clamp(p.x, world.bounds.minX + 1, world.bounds.maxX - 1);
-    this.pos.z = clamp(p.z, world.bounds.minZ + 1, world.bounds.maxZ - 1);
-
-    // Ground snapping / landing.
-    if (!swimming) {
-      ground = this.groundHeight(world, collision, this.grounded ? STEP_HEIGHT : 0.05);
-      this.pos.y += this.vel.y * dt;
-      if (this.pos.y <= ground) {
-        this.pos.y = ground;
-        this.vel.y = 0;
-        this.grounded = true;
-      } else if (this.grounded && this.pos.y - ground < 0.4 && this.vel.y <= 0) {
-        this.pos.y = ground; // stick to slopes and step down curbs
-        this.vel.y = 0;
-      } else this.grounded = false;
-    }
+    const cx = clamp(p.x, world.bounds.minX + 1, world.bounds.maxX - 1);
+    const cz = clamp(p.z, world.bounds.minZ + 1, world.bounds.maxZ - 1);
+    if (cx !== body.x || cz !== body.z) body.teleport(cx, body.y, cz);
+    this.pos.set(body.x, body.y, body.z);
 
     // Face the direction of travel.
     const hs = Math.hypot(this.vel.x, this.vel.z);

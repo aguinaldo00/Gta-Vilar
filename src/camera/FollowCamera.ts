@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/math';
-import { type CollisionWorld, Layer } from '../physics/CollisionWorld';
+import { Layer, type PhysicsWorld } from '../physics/PhysicsWorld';
 import type { World } from '../world/World';
 
 export interface CameraTarget {
@@ -19,7 +19,7 @@ const AUTO_CENTER_DELAY = 1.2;
 /**
  * Third-person orbit camera. The mouse orbits (yaw/pitch) around a smoothed
  * pivot; in vehicles it pulls back, widens the FOV with speed and swings
- * behind the car when the mouse is idle. A ray against the collision world
+ * behind the car when the mouse is idle. A ray against the physics world
  * keeps it from clipping into buildings.
  */
 export class FollowCamera {
@@ -42,7 +42,14 @@ export class FollowCamera {
     return { x: -Math.sin(this.yaw), z: -Math.cos(this.yaw) };
   }
 
-  update(dt: number, mouse: { dx: number; dy: number }, sinceLook: number, t: CameraTarget, collision: CollisionWorld, world: World): void {
+  update(
+    dt: number,
+    mouse: { dx: number; dy: number },
+    sinceLook: number,
+    t: CameraTarget,
+    collision: Pick<PhysicsWorld, 'raycast'>,
+    world: World,
+  ): void {
     this.yaw -= mouse.dx * MOUSE_SENS;
     this.pitch = clamp(this.pitch + mouse.dy * MOUSE_SENS * 0.85, -0.3, 1.25);
 

@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { Rng } from '../core/math';
-import type { CollisionWorld } from '../physics/CollisionWorld';
+import type { StaticColliders } from '../physics/PhysicsWorld';
 import type { Batcher } from './Batcher';
 import type { Materials } from './Materials';
 import type { MapData } from './mapData';
@@ -17,7 +17,7 @@ export interface BuildContext {
   scene: THREE.Scene;
   batch: Batcher;
   mats: Materials;
-  collision: CollisionWorld;
+  collision: StaticColliders;
   animators: Animator[];
   rng: Rng;
   terrain: TerrainModel;

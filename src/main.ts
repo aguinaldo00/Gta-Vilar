@@ -1,5 +1,6 @@
 import { fetchFromPublic, loadConfig } from './config/Config';
 import { Game } from './Game';
+import { initRapier } from './physics/RapierPhysics';
 import { loadMap } from './world/mapData';
 
 const app = document.getElementById('app')!;
@@ -7,7 +8,7 @@ const start = document.getElementById('start')!;
 const play = document.getElementById('play') as HTMLButtonElement;
 
 async function boot(): Promise<void> {
-  const [config, map] = await Promise.all([loadConfig(fetchFromPublic()), loadMap('maps/villarcayo.json')]);
+  const [config, map] = await Promise.all([loadConfig(fetchFromPublic()), loadMap('maps/villarcayo.json'), initRapier()]);
   const game = new Game(app, config, map);
   game.start();
   play.disabled = false;

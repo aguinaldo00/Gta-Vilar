@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Quality } from '@/config/Config';
 import { Rng } from '../core/math';
-import { type CollisionWorld, Layer } from '../physics/CollisionWorld';
+import { type HeightGrid, Layer, type StaticColliders } from '../physics/PhysicsWorld';
 import { Batcher } from './Batcher';
 import { buildBuildings } from './Buildings';
 import { buildChurches } from './Churches';
@@ -50,7 +50,7 @@ export class World {
     readonly map: MapData,
     scene: THREE.Scene,
     renderer: THREE.WebGLRenderer,
-    collision: CollisionWorld,
+    collision: StaticColliders,
     quality: Quality,
   ) {
     this.terrain = new TerrainModel(map);
@@ -99,7 +99,19 @@ export class World {
     this.indexPlaces();
   }
 
-  private buildBounds(collision: CollisionWorld): void {
+  /** Ground heights on a regular grid (for the physics heightfield). */
+  heightGrid(cellSize: number): HeightGrid {
+    const B = this.bounds;
+    const cols = Math.ceil((B.maxX - B.minX) / cellSize) + 1;
+    const rows = Math.ceil((B.maxZ - B.minZ) / cellSize) + 1;
+    const heights = new Float32Array(cols * rows);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) heights[r * cols + c] = this.heightAt(B.minX + c * cellSize, B.minZ + r * cellSize);
+    }
+    return { minX: B.minX, minZ: B.minZ, cellSize, cols, rows, heights };
+  }
+
+  private buildBounds(collision: StaticColliders): void {
     const B = this.bounds;
     const W = B.maxX - B.minX,
       H = B.maxZ - B.minZ;
