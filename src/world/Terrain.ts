@@ -14,7 +14,7 @@ import {
   segmentsOf,
   toPts,
 } from './geo';
-import { MAP, type MapData } from './mapData';
+import type { MapData } from './mapData';
 
 export const WATER_LEVEL = -0.45;
 const RIVER_BED = -1.4;
@@ -178,8 +178,8 @@ const AREA_ORDER = [
  * Rasterises land use into one ground texture (also hides the river bed in
  * sandy tones). Roads and buildings are real geometry on top of it.
  */
-export function groundTexture(size: number): THREE.CanvasTexture {
-  const B = MAP.meta.bounds;
+export function groundTexture(map: MapData, size: number): THREE.CanvasTexture {
+  const B = map.meta.bounds;
   const W = B.maxX - B.minX,
     H = B.maxZ - B.minZ;
   const c = document.createElement('canvas');
@@ -226,7 +226,7 @@ export function groundTexture(size: number): THREE.CanvasTexture {
     for (let i = 2; i < coords.length; i += 2) g.lineTo(coords[i], coords[i + 1]);
     g.closePath();
   };
-  const sorted = [...MAP.areas].sort((a, b) => AREA_ORDER.indexOf(a.k) - AREA_ORDER.indexOf(b.k));
+  const sorted = [...map.areas].sort((a, b) => AREA_ORDER.indexOf(a.k) - AREA_ORDER.indexOf(b.k));
   sorted.forEach((a, i) => {
     let col = AREA_COLORS[a.k];
     if (!col) return;
@@ -267,7 +267,7 @@ export function groundTexture(size: number): THREE.CanvasTexture {
 
   // River bed and banks.
   g.lineCap = g.lineJoin = 'round';
-  for (const r of MAP.rivers) {
+  for (const r of map.rivers) {
     for (const [w, col] of [
       [r.w + 6, '#6f7a45'],
       [r.w + 2, '#8a7a58'],
@@ -288,9 +288,9 @@ export function groundTexture(size: number): THREE.CanvasTexture {
 }
 
 /** Ground material: land-use colour map × a tiling detail texture (world scale). */
-export function groundMaterial(size: number, detail: THREE.Texture): THREE.MeshStandardMaterial {
-  const B = MAP.meta.bounds;
-  const mat = new THREE.MeshStandardMaterial({ map: groundTexture(size), roughness: 1, metalness: 0 });
+export function groundMaterial(map: MapData, size: number, detail: THREE.Texture): THREE.MeshStandardMaterial {
+  const B = map.meta.bounds;
+  const mat = new THREE.MeshStandardMaterial({ map: groundTexture(map, size), roughness: 1, metalness: 0 });
   mat.name = 'ground';
   mat.userData.castShadow = false;
   const repeat = new THREE.Vector2((B.maxX - B.minX) / 5, (B.maxZ - B.minZ) / 5);
@@ -311,8 +311,8 @@ export function groundMaterial(size: number, detail: THREE.Texture): THREE.MeshS
  * Ground mesh in 50 m tiles: flat quads where the ground is flat, a 2.5 m
  * heightfield where the river channel or the pools carve it.
  */
-export function buildGround(terrain: TerrainModel, batch: Batcher, mat: THREE.Material, fine = true): void {
-  const B = MAP.meta.bounds;
+export function buildGround(map: MapData, terrain: TerrainModel, batch: Batcher, mat: THREE.Material, fine = true): void {
+  const B = map.meta.bounds;
   const TILE = 50;
   const W = B.maxX - B.minX,
     H = B.maxZ - B.minZ;

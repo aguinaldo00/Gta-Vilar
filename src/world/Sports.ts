@@ -4,7 +4,7 @@ import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
 import { hash01, orientedBox, type Pt, toPts, triangulate } from './geo';
 import { beamMatrix } from './geometry';
-import { MAP, type MapArea } from './mapData';
+import type { MapArea } from './mapData';
 import { Unit } from './props';
 
 /** Court atlas cells (4 x 2). */
@@ -509,9 +509,9 @@ export function buildSports(ctx: BuildContext): void {
   court.polygonOffsetUnits = -2;
   const fence = fenceMaterial();
   const net = fence;
-  for (const a of MAP.areas) if (a.k === 'pitch') buildPitch(ctx, a, { court, fence, net });
-  const T = MAP.tables;
+  for (const a of ctx.map.areas) if (a.k === 'pitch') buildPitch(ctx, a, { court, fence, net });
+  const T = ctx.map.tables;
   for (let i = 0; i < T.length; i += 4) picnicTable(ctx, T[i], T[i + 1], T[i + 2], T[i + 3] === 1);
-  const P = MAP.playgrounds;
+  const P = ctx.map.playgrounds;
   for (let i = 0; i < P.length; i += 2) playground(ctx, P[i], P[i + 1], i / 2);
 }

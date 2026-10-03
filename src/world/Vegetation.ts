@@ -3,7 +3,6 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Layer } from '../physics/CollisionWorld';
 import type { BuildContext } from './context';
 import { hash01, type Pt, pointInRing, ringBounds, ringDist, SpatialGrid, toPts } from './geo';
-import { MAP } from './mapData';
 import { bench, planeTree, Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
 
@@ -197,9 +196,9 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
       if (!pointInRing(x, z, ring)) continue;
       const near = roads.nearest(x, z, 6, (rd) => VEHICLE_ROADS.has(rd.k));
       if (near && near.d < 2) continue;
-      if (MAP.pois.some((p) => Math.hypot(p.x - x, p.z - z) < (p.k === 'bandstand' ? 9 : 6))) continue;
+      if (ctx.map.pois.some((p) => Math.hypot(p.x - x, p.z - z) < (p.k === 'bandstand' ? 9 : 6))) continue;
       let tree = false;
-      for (let t = 0; t < MAP.trees.length; t += 2) if (Math.hypot(MAP.trees[t] - x, MAP.trees[t + 1] - z) < 2.5) tree = true;
+      for (let t = 0; t < ctx.map.trees.length; t += 2) if (Math.hypot(ctx.map.trees[t] - x, ctx.map.trees[t + 1] - z) < 2.5) tree = true;
       if (tree) continue;
       if (k % 3 === 0) {
         batch.add(Unit.cyl, mats.tint('#2f4a3a'), x, 0.45, z, 0, 0.45, 0.9, 0.45);
@@ -249,7 +248,7 @@ export function buildVegetation(ctx: BuildContext): void {
 
   // Footprints of buildings, to keep infill trees out of houses.
   const footprints = new SpatialGrid<Pt[]>(40);
-  for (const b of MAP.buildings) {
+  for (const b of ctx.map.buildings) {
     const r = toPts(b.o);
     footprints.insert(r, ringBounds(r));
   }
@@ -269,16 +268,16 @@ export function buildVegetation(ctx: BuildContext): void {
   };
 
   // Plaza Mayor: pollarded plane trees, like in the photos.
-  const plazas = MAP.areas.filter((a) => a.k === 'pedestrian' && a.n === 'Plaza Mayor').map((a) => toPts(a.o));
+  const plazas = ctx.map.areas.filter((a) => a.k === 'pedestrian' && a.n === 'Plaza Mayor').map((a) => toPts(a.o));
   const inPlaza = (x: number, z: number) => plazas.some((r) => pointInRing(x, z, r));
 
   // Mapped trees never grow through a building (or through the eaves of the churches).
-  const churches = MAP.buildings.filter((b) => b.t === 'church').map((b) => toPts(b.o));
+  const churches = ctx.map.buildings.filter((b) => b.t === 'church').map((b) => toPts(b.o));
   const insideBuilding = (x: number, z: number) =>
     footprints.query(x - 2, z - 2, x + 2, z + 2, tmp).some((r) => pointInRing(x, z, r)) || churches.some((r) => ringDist(x, z, r) < 4);
-  for (let i = 0; i < MAP.trees.length; i += 2) {
-    const x = MAP.trees[i],
-      z = MAP.trees[i + 1];
+  for (let i = 0; i < ctx.map.trees.length; i += 2) {
+    const x = ctx.map.trees[i],
+      z = ctx.map.trees[i + 1];
     if (insideBuilding(x, z)) continue;
     if (inPlaza(x, z)) {
       planeTree(ctx, x, z, 0.03);
@@ -287,11 +286,12 @@ export function buildVegetation(ctx: BuildContext): void {
     const nearRiver = terrain.riverDistance(x, z).d < 40;
     place(nearRiver && hash01(x, z) < 0.7 ? 'poplar' : 'round', x, z, 0.8 + hash01(z, x) * 0.5);
   }
-  for (let i = 0; i < MAP.pines.length; i += 2) place('pine', MAP.pines[i], MAP.pines[i + 1], 0.8 + hash01(MAP.pines[i + 1], 3) * 0.5);
+  for (let i = 0; i < ctx.map.pines.length; i += 2)
+    place('pine', ctx.map.pines[i], ctx.map.pines[i + 1], 0.8 + hash01(ctx.map.pines[i + 1], 3) * 0.5);
 
   // Infill for wooded areas, parks, orchards and scrub.
   let budget = ctx.quality.treeBudget;
-  for (const a of MAP.areas) {
+  for (const a of ctx.map.areas) {
     const d = DENSITY[a.k];
     if (!d || budget <= 0) continue;
     const ring = toPts(a.o);
@@ -318,18 +318,18 @@ export function buildVegetation(ctx: BuildContext): void {
   // Street lamps at their mapped positions.
   const lamp = LAMP();
   const ornate = ORNATE_LAMP();
-  for (let i = 0; i < MAP.lamps.length; i += 2) {
-    const x = MAP.lamps[i],
-      z = MAP.lamps[i + 1];
+  for (let i = 0; i < ctx.map.lamps.length; i += 2) {
+    const x = ctx.map.lamps[i],
+      z = ctx.map.lamps[i + 1];
     // Cast-iron fernandino lamps in the Plaza Mayor, plain poles elsewhere.
     ctx.batch.addMatrix(inPlaza(x, z) ? ornate : lamp, ctx.mats.propsVC, m.makeTranslation(x, terrain.heightAt(x, z), z));
     collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Bodies });
   }
 
   // Benches face the nearest street or path.
-  for (let i = 0; i < MAP.benches.length; i += 2) {
-    const x = MAP.benches[i],
-      z = MAP.benches[i + 1];
+  for (let i = 0; i < ctx.map.benches.length; i += 2) {
+    const x = ctx.map.benches[i],
+      z = ctx.map.benches[i + 1];
     const hit = roads.nearest(x, z, 25);
     const rot = hit ? Math.atan2(hit.x - x, hit.z - z) : 0;
     bench(ctx, x, z, terrain.heightAt(x, z), rot);
@@ -363,7 +363,7 @@ function hedgerows(ctx: BuildContext, blocked: (x: number, z: number, clearance:
   const hedge = ctx.mats.hedge,
     wall = ctx.mats.stone;
   const done = new Set<string>();
-  for (const a of MAP.areas) {
+  for (const a of ctx.map.areas) {
     if (a.k !== 'farmland' && a.k !== 'meadow') continue;
     const ring = toPts(a.o);
     for (let i = 0; i < ring.length; i++) {

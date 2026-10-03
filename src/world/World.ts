@@ -14,7 +14,7 @@ import { type Bounds2, orientedBox, type Pt, pointInRing, ringBounds, toPts } fr
 import { buildHydro } from './Hydro';
 import { buildLandmarks } from './Landmarks';
 import { Materials } from './Materials';
-import { BOUNDS, MAP } from './mapData';
+import type { MapData } from './mapData';
 import { buildRoads, RoadNetwork, VEHICLE_ROADS } from './Roads';
 import { buildSports } from './Sports';
 import { buildGround, groundMaterial, TerrainModel } from './Terrain';
@@ -31,26 +31,36 @@ interface NamedArea {
 }
 
 /**
- * Villarcayo built from OpenStreetMap data (src/world/data/villarcayo.json):
+ * Villarcayo built from the map data file (public/maps/villarcayo.json):
  * terrain, roads, buildings, water, vegetation and landmarks, plus spatial
  * queries used by gameplay (ground height, water, place names, spawns).
  */
 export class World {
   readonly env: Environment;
   readonly grass: Grass;
-  readonly terrain = new TerrainModel(MAP);
-  readonly roads = new RoadNetwork();
-  readonly bounds = BOUNDS;
+  readonly terrain: TerrainModel;
+  readonly roads: RoadNetwork;
+  readonly bounds: MapData['meta']['bounds'];
   readonly stats: { meshes: number; triangles: number; byStage?: Record<string, number> } = { meshes: 0, triangles: 0 };
   private readonly animators: Animator[] = [];
   private readonly named: NamedArea[] = [];
   private readonly landmarkZones: { name: string; x: number; z: number; r: number }[] = [];
 
-  constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer, collision: CollisionWorld, quality: Quality) {
+  constructor(
+    readonly map: MapData,
+    scene: THREE.Scene,
+    renderer: THREE.WebGLRenderer,
+    collision: CollisionWorld,
+    quality: Quality,
+  ) {
+    this.terrain = new TerrainModel(map);
+    this.roads = new RoadNetwork(map);
+    this.bounds = map.meta.bounds;
     const rng = new Rng(1971);
     const mats = new Materials();
     const batch = new Batcher();
     const ctx: BuildContext = {
+      map,
       scene,
       batch,
       mats,
@@ -62,7 +72,7 @@ export class World {
       quality,
     };
     this.env = new Environment(scene, renderer, rng, quality);
-    buildGround(this.terrain, batch, groundMaterial(quality.groundTexture, mats.detail), quality.detail === 1);
+    buildGround(map, this.terrain, batch, groundMaterial(map, quality.groundTexture, mats.detail), quality.detail === 1);
     batch.stage = 'roads';
     buildRoads(ctx);
     batch.stage = 'buildings';
@@ -81,7 +91,7 @@ export class World {
     buildVegetation(ctx);
     batch.stage = 'landmarks';
     buildLandmarks(ctx);
-    this.grass = new Grass(scene, quality.grassRadius, quality.grassSpacing, quality.groundTexture >= 4096 ? 4096 : 2048);
+    this.grass = new Grass(map, scene, quality.grassRadius, quality.grassSpacing, quality.groundTexture >= 4096 ? 4096 : 2048);
     this.stats.triangles = Math.round(batch.triangles);
     this.stats.byStage = Object.fromEntries(Object.entries(batch.byStage).map(([k, v]) => [k, Math.round(v)]));
     this.stats.meshes = batch.build(scene);
@@ -101,7 +111,7 @@ export class World {
   }
 
   private indexPlaces(): void {
-    for (const a of MAP.areas) {
+    for (const a of this.map.areas) {
       if (!a.n || a.k === 'parking') continue;
       const ring = toPts(a.o);
       const b = ringBounds(ring);
@@ -109,12 +119,12 @@ export class World {
     }
     this.named.sort((a, b) => a.area - b.area);
     const add = (name: string, x: number, z: number, r: number) => this.landmarkZones.push({ name, x, z, r });
-    for (const w of MAP.weirs) {
+    for (const w of this.map.weirs) {
       if (!w.n) continue;
       const mid = Math.floor(w.p.length / 4) * 2;
       add(w.n, w.p[mid], w.p[mid + 1], 30);
     }
-    for (const b of MAP.buildings) {
+    for (const b of this.map.buildings) {
       if (b.t === 'townhall') {
         const o = orientedBox(toPts(b.o));
         add('Ayuntamiento', o.cx, o.cz, Math.max(o.w, o.d) / 2 + 2);
@@ -126,7 +136,7 @@ export class World {
         add(b.t === 'station' ? 'Antigua Estación de Horna-Villarcayo' : b.n!, o.cx, o.cz, Math.max(o.w, o.d) / 2 + 12);
       }
     }
-    for (const p of MAP.pois) {
+    for (const p of this.map.pois) {
       if (p.k === 'locomotive') add('Locomotora Mikado', p.x, p.z, 14);
       if (p.k === 'bandstand') add('Templete de la Plaza Mayor', p.x, p.z, 7);
     }

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { MAP } from './mapData';
+import type { MapData } from './mapData';
 import { waterTime } from './Water';
 
 /**
  * Density mask over the whole map: R = how much grass grows (0 on roads,
  * buildings, water, paving), G = dryness (fields and meadows turn golden).
  */
-function grassMask(size: number): THREE.CanvasTexture {
-  const B = MAP.meta.bounds;
+function grassMask(map: MapData, size: number): THREE.CanvasTexture {
+  const B = map.meta.bounds;
   const W = B.maxX - B.minX,
     H = B.maxZ - B.minZ;
   const c = document.createElement('canvas');
@@ -75,7 +75,7 @@ function grassMask(size: number): THREE.CanvasTexture {
     'water',
     'pool',
   ];
-  for (const a of [...MAP.areas].sort((x, y) => order.indexOf(x.k) - order.indexOf(y.k))) {
+  for (const a of [...map.areas].sort((x, y) => order.indexOf(x.k) - order.indexOf(y.k))) {
     const f = fills[a.k];
     if (!f) continue;
     g.fillStyle = f;
@@ -85,21 +85,21 @@ function grassMask(size: number): THREE.CanvasTexture {
     g.fill('evenodd');
   }
   g.fillStyle = '#000';
-  for (const b of MAP.buildings) {
+  for (const b of map.buildings) {
     g.beginPath();
     poly(b.o);
     g.fill();
   }
   g.strokeStyle = '#000';
   g.lineCap = g.lineJoin = 'round';
-  for (const r of MAP.roads) {
+  for (const r of map.roads) {
     g.lineWidth = r.w + (r.sw ? 4.4 : 0.6);
     g.beginPath();
     g.moveTo(r.p[0], r.p[1]);
     for (let i = 2; i < r.p.length; i += 2) g.lineTo(r.p[i], r.p[i + 1]);
     g.stroke();
   }
-  for (const r of MAP.rivers) {
+  for (const r of map.rivers) {
     g.lineWidth = r.w + 5;
     g.beginPath();
     g.moveTo(r.p[0], r.p[1]);
@@ -162,7 +162,7 @@ export class Grass {
   readonly mesh: THREE.Mesh;
   private readonly uniforms: { uCam: { value: THREE.Vector3 } };
 
-  constructor(scene: THREE.Scene, radius: number, spacing: number, maskSize: number) {
+  constructor(map: MapData, scene: THREE.Scene, radius: number, spacing: number, maskSize: number) {
     const n = Math.ceil((radius * 2) / spacing);
     const geo = tuft();
     const cells = new Float32Array(n * n * 2);
@@ -170,12 +170,12 @@ export class Grass {
     geo.setAttribute('aCell', new THREE.InstancedBufferAttribute(cells, 2));
     geo.instanceCount = n * n;
 
-    const B = MAP.meta.bounds;
+    const B = map.meta.bounds;
     this.uniforms = { uCam: { value: new THREE.Vector3() } };
     const uniforms = {
       ...this.uniforms,
       uTime: waterTime,
-      uMask: { value: grassMask(maskSize) },
+      uMask: { value: grassMask(map, maskSize) },
       uBounds: { value: new THREE.Vector4(B.minX, B.minZ, B.maxX - B.minX, B.maxZ - B.minZ) },
       uSpacing: { value: spacing },
       uRadius: { value: radius },

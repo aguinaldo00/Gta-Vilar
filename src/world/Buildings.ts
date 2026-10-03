@@ -5,7 +5,7 @@ import type { BuildContext } from './context';
 import { CUSTOM_FACILITIES } from './Facilities';
 import { centroid, hash01, type Pt, signedArea, toPts, triangulate } from './geo';
 import { FLOOR_H } from './Materials';
-import { MAP, type MapBuilding } from './mapData';
+import type { MapBuilding } from './mapData';
 import { VEHICLE_ROADS } from './Roads';
 
 /** Landmarks get dedicated models instead of a generic extrusion. */
@@ -260,7 +260,7 @@ function isConvexQuad(r: Pt[]): boolean {
 export function buildBuildings(ctx: BuildContext): void {
   const { batch, mats, collision, roads } = ctx;
   let idx = 0;
-  for (const b of MAP.buildings) {
+  for (const b of ctx.map.buildings) {
     idx++;
     // Landmarks get their own models; outlines described by parts are drawn through their parts.
     if (CUSTOM.has(b.t) || b.hp || (b.n && (CUSTOM_CHURCHES.test(b.n) || CUSTOM_FACILITIES.test(b.n)))) continue;

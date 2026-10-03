@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
 import { hash01 } from './geo';
-import { MAP, type MapShop } from './mapData';
+import type { MapShop } from './mapData';
 import { flag, Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
 
@@ -238,7 +238,7 @@ export interface Signs {
 
 export function buildCommerce(ctx: BuildContext): Signs {
   const { mats, batch } = ctx;
-  const atlas = new SignAtlas(MAP.shops.length + 16, ctx.quality.groundTexture >= 4096 ? 2048 : 1024);
+  const atlas = new SignAtlas(ctx.map.shops.length + 16, ctx.quality.groundTexture >= 4096 ? 2048 : 1024);
   const signMat = new THREE.MeshStandardMaterial({ map: atlas.texture, roughness: 0.55 });
   signMat.name = 'signs';
   signMat.userData.castShadow = false;
@@ -254,7 +254,7 @@ export function buildCommerce(ctx: BuildContext): Signs {
   glass.userData.castShadow = false;
   const B = Unit.box;
 
-  for (const s of MAP.shops) {
+  for (const s of ctx.map.shops) {
     const h = hash01(s.x * 1.7, s.z * 2.3);
     const st = styleOf(s, h);
     const lb = new LocalBatch(batch, s.x, 0, s.z, s.a);

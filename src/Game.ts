@@ -17,6 +17,7 @@ import { VehicleInteraction } from './systems/VehicleInteraction';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
+import type { MapData } from './world/mapData';
 import { World } from './world/World';
 
 declare global {
@@ -59,6 +60,7 @@ export class Game {
   constructor(
     container: HTMLElement,
     private readonly config: Config,
+    map: MapData,
   ) {
     const isTouch = TouchControls.supported();
     const quality = { ...(isTouch ? config.quality.touch : config.quality.desktop) };
@@ -79,11 +81,11 @@ export class Game {
 
     const cam = config.game.camera;
     this.camera = new THREE.PerspectiveCamera(cam.fov, 1, cam.near, quality.drawDistance);
-    this.world = new World(this.scene, this.renderer, this.collision, quality);
+    this.world = new World(map, this.scene, this.renderer, this.collision, quality);
     this.pipeline = new Pipeline(this.renderer, this.scene, this.camera, this.world.env, quality.postFX);
     this.skids = new SkidMarks(this.scene);
     this.followCam = new FollowCamera(this.camera);
-    this.minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement);
+    this.minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement, map);
     this.loop = new FixedStepLoop(config.game.simulation.fixedStep, config.game.simulation.maxSubSteps);
 
     this.spawnVehicles();

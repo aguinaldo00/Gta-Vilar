@@ -4,7 +4,7 @@ import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
 import { centroid, orientedBox, toPts } from './geo';
 import { beamMatrix, boxGeo, hipRoof, scaleUV } from './geometry';
-import { MAP, type MapPoi } from './mapData';
+import type { MapPoi } from './mapData';
 import { flag, signBoard, Unit } from './props';
 import { signTexture } from './textures';
 
@@ -63,8 +63,8 @@ function facing(x: number, z: number, tx: number, tz: number): number {
   return Math.atan2(tx - x, tz - z);
 }
 
-function poi(k: MapPoi['k']): MapPoi | undefined {
-  return MAP.pois.find((p) => p.k === k);
+function poi(ctx: BuildContext, k: MapPoi['k']): MapPoi | undefined {
+  return ctx.map.pois.find((p) => p.k === k);
 }
 
 /**
@@ -73,11 +73,11 @@ function poi(k: MapPoi['k']): MapPoi | undefined {
  * Plaza Mayor and the templete (see the reference photos).
  */
 function buildAyuntamiento(ctx: BuildContext): void {
-  const fp = MAP.buildings.find((b) => b.t === 'townhall');
+  const fp = ctx.map.buildings.find((b) => b.t === 'townhall');
   if (!fp) return;
   const ring = toPts(fp.o);
   const obb = orientedBox(ring);
-  const target = poi('bandstand') ?? { x: obb.cx, z: obb.cz + 10 };
+  const target = poi(ctx, 'bandstand') ?? { x: obb.cx, z: obb.cz + 10 };
   // Pick the OBB side that looks at the plaza as the front (+Z of the model).
   const options = [0, Math.PI, Math.PI / 2, -Math.PI / 2].map((o) => obb.angle + o);
   const toT = [target.x - obb.cx, target.z - obb.cz];
@@ -201,7 +201,7 @@ function buildAyuntamiento(ctx: BuildContext): void {
 
 /** Torre del Corregimiento on its footprint: square stone tower with battlements. */
 function buildTorre(ctx: BuildContext): void {
-  const fp = MAP.buildings.find((b) => b.t === 'torre');
+  const fp = ctx.map.buildings.find((b) => b.t === 'torre');
   if (!fp) return;
   const obb = orientedBox(toPts(fp.o));
   const h = (fp.lv ?? 4) * 4.6;
@@ -244,11 +244,11 @@ function buildTorre(ctx: BuildContext): void {
 
 /** The templete (octagonal music kiosk) at its mapped position. */
 function buildTemplete(ctx: BuildContext): void {
-  const b = poi('bandstand');
+  const b = poi(ctx, 'bandstand');
   if (!b) return;
   const ring = b.o ? toPts(b.o) : [];
   const radius = ring.length ? ring.reduce((s, [x, z]) => s + Math.hypot(x - b.x, z - b.z), 0) / ring.length : 4.5;
-  const townhall = poi('townhall');
+  const townhall = poi(ctx, 'townhall');
   const rot = townhall ? facing(b.x, b.z, townhall.x, townhall.z) : 0;
   const P = new Placer(ctx, b.x, b.z, rot);
   const { mats } = ctx;
@@ -300,7 +300,7 @@ function buildTemplete(ctx: BuildContext): void {
 
 /** Fuente de la plaza: round basin with a tiered central column. */
 function buildFountain(ctx: BuildContext): void {
-  const f = poi('fountain');
+  const f = poi(ctx, 'fountain');
   if (!f) return;
   const ring = f.o ? toPts(f.o) : [];
   const r = ring.length ? ring.reduce((s, [x, z]) => s + Math.hypot(x - f.x, z - f.z), 0) / ring.length : 4;
@@ -325,9 +325,9 @@ function buildFountain(ctx: BuildContext): void {
 
 /** "Al músico": seated bronze figure on a bench (the statue in the plaza photo). */
 function buildStatue(ctx: BuildContext): void {
-  const s = poi('statue');
+  const s = poi(ctx, 'statue');
   if (!s) return;
-  const b = poi('bandstand');
+  const b = poi(ctx, 'bandstand');
   const P = new Placer(ctx, s.x, s.z, b ? facing(s.x, s.z, b.x, b.z) : 0, BASE);
   const { mats } = ctx;
   P.add(Unit.box, mats.iron, 0, 0.45, 0, 0, 1.9, 0.08, 0.55);
@@ -343,8 +343,8 @@ function buildStatue(ctx: BuildContext): void {
 
 function buildBellTowers(ctx: BuildContext): void {
   const { mats } = ctx;
-  const marina = MAP.buildings.filter((b) => b.n === 'Iglesia de Santa Marina').map((b) => centroid(toPts(b.o)));
-  for (const t of MAP.pois.filter((p) => p.k === 'belltower')) {
+  const marina = ctx.map.buildings.filter((b) => b.n === 'Iglesia de Santa Marina').map((b) => centroid(toPts(b.o)));
+  for (const t of ctx.map.pois.filter((p) => p.k === 'belltower')) {
     // Santa Marina's concrete campanile is modelled with the church (Churches.ts).
     if (marina.some(([x, z]) => Math.hypot(x - t.x, z - t.z) < 45)) continue;
     const h = t.ht || 20;
@@ -366,7 +366,7 @@ function buildBellTowers(ctx: BuildContext): void {
 
 /** Mikado steam locomotive preserved at the old Horna-Villarcayo station, on a short stretch of track. */
 function buildMikado(ctx: BuildContext): void {
-  const l = poi('locomotive');
+  const l = poi(ctx, 'locomotive');
   if (!l) return;
   const hit = ctx.roads.nearest(l.x, l.z, 80, (r) => r.k === 'viaverde');
   const rot = hit ? Math.atan2(hit.dx, hit.dz) : 0;
@@ -413,7 +413,7 @@ function buildMikado(ctx: BuildContext): void {
 
 /** Name board of the old Horna-Villarcayo station, facing the Vía Verde. */
 function buildStationSign(ctx: BuildContext): void {
-  const st = MAP.buildings.find((b) => b.t === 'station');
+  const st = ctx.map.buildings.find((b) => b.t === 'station');
   if (!st) return;
   const [cx, cz] = centroid(toPts(st.o));
   const hit = ctx.roads.nearest(cx, cz, 80, (r) => r.k === 'viaverde');

@@ -1,6 +1,6 @@
 import type { Vehicle } from '../entities/Vehicle';
 import { type Bounds2, ringBounds, SpatialGrid, toPts } from '../world/geo';
-import { MAP } from '../world/mapData';
+import type { MapData } from '../world/mapData';
 
 type Item =
   | { kind: 'fill'; pts: number[]; color: string; layer: number }
@@ -45,6 +45,7 @@ export class Minimap {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
+    map: MapData,
     private readonly viewRadius = 90,
   ) {
     this.g = canvas.getContext('2d')!;
@@ -53,35 +54,35 @@ export class Minimap {
       const b = ringBounds(toPts(pts));
       return { minX: b.minX - pad, minZ: b.minZ - pad, maxX: b.maxX + pad, maxZ: b.maxZ + pad };
     };
-    for (const a of MAP.areas) {
+    for (const a of map.areas) {
       const color = AREA_FILL[a.k];
       if (color) add({ kind: 'fill', pts: a.o, color, layer: a.k === 'water' ? 2 : 0 }, bboxOf(a.o));
     }
-    for (const r of MAP.rivers) add({ kind: 'line', pts: r.p, color: '#3d84b8', width: r.w, layer: 1 }, bboxOf(r.p, r.w));
-    for (const s of MAP.streams) add({ kind: 'line', pts: s.p, color: '#3d84b8', width: 2, layer: 1 }, bboxOf(s.p, 2));
-    for (const r of MAP.roads) {
+    for (const r of map.rivers) add({ kind: 'line', pts: r.p, color: '#3d84b8', width: r.w, layer: 1 }, bboxOf(r.p, r.w));
+    for (const s of map.streams) add({ kind: 'line', pts: s.p, color: '#3d84b8', width: 2, layer: 1 }, bboxOf(s.p, 2));
+    for (const r of map.roads) {
       const big = ['primary', 'secondary', 'tertiary'].includes(r.k);
       add(
         { kind: 'line', pts: r.p, color: ROAD_COLOR[r.k] ?? '#9d9a92', width: Math.max(1.5, r.w + (r.sw ? 2 : 0)), layer: big ? 4 : 3 },
         bboxOf(r.p, r.w),
       );
     }
-    for (const b of MAP.buildings) {
+    for (const b of map.buildings) {
       if (b.part) continue;
       const color =
         b.t === 'townhall' || b.t === 'torre' ? '#e2b65c' : b.t === 'church' ? '#c9a77a' : b.t === 'industrial' ? '#8e8f93' : '#6f6a62';
       add({ kind: 'fill', pts: b.o, color, layer: 5 }, bboxOf(b.o));
     }
-    for (const p of MAP.pois) {
+    for (const p of map.pois) {
       if (p.k === 'townhall') this.blips.push({ x: p.x, z: p.z, label: 'A', color: '#f2c230' });
       if (p.k === 'locomotive') this.blips.push({ x: p.x, z: p.z, label: 'M', color: '#e07a3a' });
       if (p.k === 'bandstand') this.blips.push({ x: p.x, z: p.z, label: 'K', color: '#8fd0ff' });
     }
-    const torre = MAP.buildings.find((b) => b.t === 'torre');
+    const torre = map.buildings.find((b) => b.t === 'torre');
     if (torre) this.blips.push({ x: torre.o[0], z: torre.o[1], label: 'T', color: '#e07a3a' });
-    const pools = MAP.areas.find((a) => a.k === 'water');
+    const pools = map.areas.find((a) => a.k === 'water');
     if (pools) this.blips.push({ x: pools.o[0], z: pools.o[1], label: 'P', color: '#4cc0c4' });
-    const station = MAP.buildings.find((b) => b.t === 'station');
+    const station = map.buildings.find((b) => b.t === 'station');
     if (station) this.blips.push({ x: station.o[0], z: station.o[1], label: 'E', color: '#c0c0c0' });
   }
 

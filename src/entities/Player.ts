@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/math';
 import { mergeColoured } from '../core/mergeColored';
 import { type CollisionWorld, type Contact, Layer } from '../physics/CollisionWorld';
-import { BOUNDS } from '../world/mapData';
 import type { World } from '../world/World';
 import type { Vehicle } from './Vehicle';
 
@@ -217,8 +216,8 @@ export class Player {
         }
       }
     }
-    this.pos.x = clamp(p.x, BOUNDS.minX + 1, BOUNDS.maxX - 1);
-    this.pos.z = clamp(p.z, BOUNDS.minZ + 1, BOUNDS.maxZ - 1);
+    this.pos.x = clamp(p.x, world.bounds.minX + 1, world.bounds.maxX - 1);
+    this.pos.z = clamp(p.z, world.bounds.minZ + 1, world.bounds.maxZ - 1);
 
     // Ground snapping / landing.
     if (!swimming) {

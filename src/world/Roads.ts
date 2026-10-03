@@ -3,7 +3,7 @@ import { Layer } from '../physics/CollisionWorld';
 import { CHUNK } from './Batcher';
 import type { BuildContext } from './context';
 import { type Pt, type Segment, SpatialGrid, segBounds, segDist, segmentsOf, toPts, triangulate } from './geo';
-import { MAP, type MapRoad } from './mapData';
+import type { MapData, MapRoad } from './mapData';
 
 export const VEHICLE_ROADS = new Set([
   'motorway',
@@ -44,8 +44,8 @@ export class RoadNetwork {
   private readonly grid = new SpatialGrid<Segment<MapRoad>>(48);
   private readonly found: Segment<MapRoad>[] = [];
 
-  constructor() {
-    for (const r of MAP.roads) {
+  constructor(map: MapData) {
+    for (const r of map.roads) {
       for (const s of segmentsOf(toPts(r.p), r.w / 2, r)) this.grid.insert(s, segBounds(s, 2));
     }
   }
@@ -167,7 +167,7 @@ export function buildRoads(ctx: BuildContext): void {
   const marks = new FlatMesh(1, 5);
 
   const ground = (y: number) => (x: number, z: number) => Math.max(terrain.base(x, z), 0) + y;
-  const roads = [...MAP.roads].sort((a, b) => (RANK[a.k] ?? 0) - (RANK[b.k] ?? 0));
+  const roads = [...ctx.map.roads].sort((a, b) => (RANK[a.k] ?? 0) - (RANK[b.k] ?? 0));
   for (const r of roads) {
     const pts = toPts(r.p);
     const bridge = !!r.b;
@@ -210,7 +210,7 @@ export function buildRoads(ctx: BuildContext): void {
   }
 
   // Pedestrian areas (Plaza Mayor, Plaza de España...) as paving.
-  for (const a of MAP.areas) {
+  for (const a of ctx.map.areas) {
     if (a.k !== 'pedestrian') continue;
     for (const [p, q, s] of triangulate(toPts(a.o), (a.h ?? []).map(toPts))) {
       paving.tri(p[0], 0.042, p[1], q[0], 0.042, q[1], s[0], 0.042, s[1]);
@@ -219,10 +219,10 @@ export function buildRoads(ctx: BuildContext): void {
 
   // Zebra crossings at the OSM crossing nodes.
   const net = ctx.roads;
-  for (let i = 0; i < MAP.crossings.length; i += 3) {
-    const x = MAP.crossings[i],
-      z = MAP.crossings[i + 1],
-      a = MAP.crossings[i + 2];
+  for (let i = 0; i < ctx.map.crossings.length; i += 3) {
+    const x = ctx.map.crossings[i],
+      z = ctx.map.crossings[i + 1],
+      a = ctx.map.crossings[i + 2];
     const hit = net.nearest(x, z, 3, (r) => VEHICLE_ROADS.has(r.k));
     const w = hit ? hit.road.w : 5;
     const ux = Math.sin(a),

@@ -6,7 +6,7 @@ A browser-based 3D open-world sandbox in the spirit of the early 3D-era *Grand T
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + production bundle in dist/
-npm run map        # regenerate src/world/data/villarcayo.json from data/villarcayo.osm
+npm run map        # regenerate public/maps/villarcayo.json from data/villarcayo.osm
 ```
 
 ![Aerial view of central Villarcayo](docs/vista-aerea.jpg)
@@ -28,7 +28,7 @@ npm run map        # regenerate src/world/data/villarcayo.json from data/villarc
 The data pipeline runs in two steps. The browser never parses OSM.
 
 1. **`data/villarcayo.osm`**: an OpenStreetMap export of the bounding box 42.92577–42.95111 N, 3.59137–3.55109 W (≈ 3.3 × 2.8 km).
-2. **`scripts/osm-to-map.ts`** (Node, no dependencies) reads the XML, projects coordinates and writes **`src/world/data/villarcayo.json`** (≈ 390 KB). Its processing steps:
+2. **`scripts/osm-to-map.ts`** (Node, no dependencies) reads the XML, projects coordinates and writes **`public/maps/villarcayo.json`** (loaded at runtime) (≈ 390 KB). Its processing steps:
    - simplifies geometry (Douglas–Peucker, 0.25–0.5 m)
    - clips everything to the bounds
    - assembles multipolygons (buildings with courtyards, the Plaza Mayor, farmland)
@@ -136,7 +136,7 @@ src/
 ├── entities/                Player, Vehicle (arcade physics with drifting), vehicle models, skid marks
 ├── camera/FollowCamera      Third-person orbit camera, pulls back and widens the FOV when driving
 ├── world/
-│   ├── data/villarcayo.json Map generated from OSM
+│   ├── mapData.ts           Map types, validation and runtime loading
 │   ├── mapData.ts           Types and loading of the JSON
 │   ├── World.ts             Builds everything; heightAt / waterAt / zoneAt (real street names) / roadSpawn
 │   ├── Terrain.ts           Heights (river channel, pools, bridge decks), ground mesh and land-use texture

@@ -3,7 +3,6 @@ import { Layer } from '../physics/CollisionWorld';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
 import { centroid, hash01, orientedBox, type Pt, pointInRing, toPts } from './geo';
-import { MAP } from './mapData';
 import { Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
 import { fenceMaterial } from './Sports';
@@ -56,7 +55,7 @@ function parkedCar(ctx: BuildContext, x: number, z: number, rot: number, seed: n
 function carParks(ctx: BuildContext): void {
   const line = ctx.mats.tint('#ecebe4');
   let seed = 1;
-  for (const a of MAP.areas) {
+  for (const a of ctx.map.areas) {
     if (a.k !== 'parking') continue;
     const ring = toPts(a.o);
     const o = orientedBox(ring);
@@ -154,7 +153,7 @@ function polideportivo(
   sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry,
   signMat: THREE.Material,
 ): void {
-  const b = MAP.buildings.find((x) => x.n === 'Polideportivo de Villarcayo');
+  const b = ctx.map.buildings.find((x) => x.n === 'Polideportivo de Villarcayo');
   if (!b) return;
   const ring = toPts(b.o);
   const { mats, batch } = ctx;
@@ -201,7 +200,7 @@ function polideportivo(
 function sportsFences(ctx: BuildContext): void {
   const fence = fenceMaterial();
   const post = ctx.mats.tint('#2f4a3a');
-  for (const a of MAP.areas) {
+  for (const a of ctx.map.areas) {
     if (a.k !== 'sports' || !a.n || !/Polideportivo|Piscinas/.test(a.n)) continue;
     const ring = toPts(a.o);
     const h = 2.2;
@@ -240,7 +239,7 @@ function gasolinera(
   sign: (text: string, bg: string, fg: string) => THREE.BufferGeometry,
   signMat: THREE.Material,
 ): void {
-  const p = MAP.pois.find((x) => x.k === 'fuel');
+  const p = ctx.map.pois.find((x) => x.k === 'fuel');
   if (!p) return;
   const road = ctx.roads.nearest(p.x, p.z, 60, (r) => VEHICLE_ROADS.has(r.k));
   const rot = road ? Math.atan2(road.dx, road.dz) + Math.PI / 2 : 0; // local +Z towards the road side
@@ -255,7 +254,7 @@ function gasolinera(
       nz = nz0 / d,
       tx = -nz,
       tz = nx;
-    const near = MAP.buildings.filter((b) => Math.hypot(b.o[0] - p.x, b.o[1] - p.z) < 80).map((b) => toPts(b.o));
+    const near = ctx.map.buildings.filter((b) => Math.hypot(b.o[0] - p.x, b.o[1] - p.z) < 80).map((b) => toPts(b.o));
     const free = (x: number, z: number) => {
       const r = ctx.roads.nearest(x, z, 3, (rd) => VEHICLE_ROADS.has(rd.k));
       return (!r || r.d > 0.5) && !near.some((ring) => pointInRing(x, z, ring));
@@ -354,7 +353,7 @@ function busStations(
   signMat: THREE.Material,
 ): void {
   const { mats } = ctx;
-  for (const a of MAP.areas) {
+  for (const a of ctx.map.areas) {
     if (a.k !== 'busstation') continue;
     const ring = toPts(a.o);
     const o = orientedBox(ring);
@@ -385,7 +384,7 @@ function busStations(
     const [wx, wz] = lb.point(0, z0);
     ctx.collision.addBox(wx, wz, cl, 4, { rot, top: 0.2, mask: Layer.Bodies });
   }
-  for (const p of MAP.pois) {
+  for (const p of ctx.map.pois) {
     if (p.k !== 'bus_stop') continue;
     const road = ctx.roads.nearest(p.x, p.z, 30, (r) => VEHICLE_ROADS.has(r.k));
     const face = road ? Math.atan2(road.x - p.x, road.z - p.z) : 0;

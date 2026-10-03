@@ -4,7 +4,7 @@ import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
 import { centroid, orientedBox, type Pt, signedArea, toPts } from './geo';
 import { beamMatrix, boxGeo } from './geometry';
-import { MAP, type MapBuilding } from './mapData';
+import type { MapBuilding } from './mapData';
 import { Unit } from './props';
 
 /** Buildings drawn by this module instead of the generic extruder. */
@@ -120,13 +120,13 @@ function vidrieraTexture(): THREE.CanvasTexture {
  * campanile crowned by three crosses.
  */
 function santaMarina(ctx: BuildContext): void {
-  const parts = MAP.buildings.filter((b) => b.n === 'Iglesia de Santa Marina' && b.part);
+  const parts = ctx.map.buildings.filter((b) => b.n === 'Iglesia de Santa Marina' && b.part);
   if (!parts.length) return;
   const area = (b: MapBuilding) => Math.abs(signedArea(toPts(b.o)));
   parts.sort((a, b) => area(b) - area(a));
   const nave = toPts(parts[0].o);
   const porch = parts[1] ? centroid(toPts(parts[1].o)) : null;
-  const tower = MAP.pois.find((p) => p.k === 'belltower' && Math.hypot(p.x - centroid(nave)[0], p.z - centroid(nave)[1]) < 40);
+  const tower = ctx.map.pois.find((p) => p.k === 'belltower' && Math.hypot(p.x - centroid(nave)[0], p.z - centroid(nave)[1]) < 40);
   const f = frame(ctx, nave, porch ?? (tower ? [tower.x, tower.z] : centroid(nave)));
   const { lb, L, W } = f;
   const { mats } = ctx;
@@ -196,7 +196,7 @@ function campanile(ctx: BuildContext, x: number, z: number, rot: number): void {
  * the front, as at San Roque (rebuilt in 1784) and San Vicente.
  */
 function ermita(ctx: BuildContext, name: string, bells: number): void {
-  const b = MAP.buildings.find((x) => x.n === name);
+  const b = ctx.map.buildings.find((x) => x.n === name);
   if (!b) return;
   const ring = toPts(b.o);
   const c = centroid(ring);

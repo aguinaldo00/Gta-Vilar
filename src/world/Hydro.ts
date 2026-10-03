@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { Layer } from '../physics/CollisionWorld';
 import type { BuildContext } from './context';
 import { hash01, type Pt, pointInRing, ringBounds, toPts, triangulate } from './geo';
-import { MAP } from './mapData';
 import { Unit } from './props';
 import { type TerrainModel, WATER_LEVEL } from './Terrain';
 import { createWaterMaterial } from './Water';
@@ -128,7 +127,7 @@ function riverRocks(ctx: BuildContext, terrain: TerrainModel): void {
     s = new THREE.Vector3(),
     p = new THREE.Vector3(),
     up = new THREE.Vector3(0, 1, 0);
-  for (const r of MAP.rivers) {
+  for (const r of ctx.map.rivers) {
     const pts = toPts(r.p);
     for (let i = 1; i < pts.length; i++) {
       const [ax, az] = pts[i - 1],
@@ -183,17 +182,17 @@ export function buildHydro(ctx: BuildContext): void {
   };
   const depthAt = (x: number, z: number) => Math.max(0, WATER_LEVEL - terrain.base(x, z));
 
-  const poolRings = MAP.areas.filter((a) => a.k === 'water').map((a) => toPts(a.o));
+  const poolRings = ctx.map.areas.filter((a) => a.k === 'water').map((a) => toPts(a.o));
   const outsidePools = (x: number, z: number) => !poolRings.some((r) => pointInRing(x, z, r));
   const riverMesh = new WaterMesh();
-  for (const r of MAP.rivers) riverSurface(riverMesh, toPts(r.p), r.w / 2 + 2, 8, outsidePools, depthAt);
+  for (const r of ctx.map.rivers) riverSurface(riverMesh, toPts(r.p), r.w / 2 + 2, 8, outsidePools, depthAt);
   add(riverMesh.geometry(), river);
   const poolMesh = new WaterMesh();
   for (const ring of poolRings) gridSurface(poolMesh, ring, WATER_LEVEL + 0.005, depthAt);
   add(poolMesh.geometry(), pools);
 
   const streamMesh = new WaterMesh();
-  for (const s of MAP.streams)
+  for (const s of ctx.map.streams)
     riverSurface(
       streamMesh,
       toPts(s.p),
@@ -210,7 +209,7 @@ export function buildHydro(ctx: BuildContext): void {
   }
 
   const swimMesh = new WaterMesh();
-  for (const a of MAP.areas) {
+  for (const a of ctx.map.areas) {
     if (a.k !== 'pool') continue;
     for (const [p, q, s] of triangulate(toPts(a.o))) swimMesh.tri(p, q, s, 0.06, () => 1.6);
   }
@@ -222,7 +221,7 @@ export function buildHydro(ctx: BuildContext): void {
   ctx.animators.push((t) => {
     foam.map!.offset.y = -t * 0.9;
   });
-  for (const w of MAP.weirs) {
+  for (const w of ctx.map.weirs) {
     const pts = toPts(w.p);
     for (let i = 1; i < pts.length; i++) {
       const [ax, az] = pts[i - 1],

@@ -5,7 +5,7 @@
  *
  * Reads an OpenStreetMap XML export (data/villarcayo.osm by default) and
  * writes the simplified, projected map the game loads
- * (src/world/data/villarcayo.json). The browser never parses OSM.
+ * (public/maps/villarcayo.json, fetched at runtime). The browser never parses OSM.
  *
  * Projection: equirectangular around the centroid of the Plaza Mayor
  * (place=square, name=Plaza Mayor). +X = east, +Z = south, metres.
@@ -21,7 +21,7 @@ type Pt = [number, number];
 type Ring = Pt[];
 
 const IN = process.argv[2] ?? 'data/villarcayo.osm';
-const OUT = process.argv[3] ?? 'src/world/data/villarcayo.json';
+const OUT = process.argv[3] ?? 'public/maps/villarcayo.json';
 const EARTH_R = 6371008.8;
 
 // ---------------------------------------------------------------- parsing
