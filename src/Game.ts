@@ -6,9 +6,11 @@ import { Player } from './entities/Player';
 import { SkidMarks } from './entities/SkidMarks';
 import { type DriveControls, PARKED, Vehicle } from './entities/Vehicle';
 import type { VehicleKind } from './entities/vehicleSpecs';
+import { clamp } from './core/math';
 import { CollisionWorld, type Contact, Layer } from './physics/CollisionWorld';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
+import { TouchControls } from './ui/TouchControls';
 import { World } from './world/World';
 
 const FIXED_STEP = 1 / 60;
@@ -60,6 +62,7 @@ export class Game {
   private readonly hud = new HUD();
   private readonly minimap: Minimap;
   private readonly audio = new GameAudio();
+  private readonly touch: TouchControls | null;
   private readonly contacts: Contact[] = [];
   private last = -1;
   private acc = 0;
@@ -69,7 +72,8 @@ export class Game {
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const isTouch = TouchControls.supported();
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -77,6 +81,7 @@ export class Game {
     container.appendChild(this.renderer.domElement);
 
     this.input = new Input(this.renderer.domElement);
+    this.touch = isTouch ? new TouchControls(this.input) : null;
     this.world = new World(this.scene, this.collision);
     this.skids = new SkidMarks(this.scene);
     this.followCam = new FollowCamera(this.camera);
@@ -105,7 +110,17 @@ export class Game {
   begin(): void {
     this.running = true;
     this.audio.init();
-    this.input.requestLock();
+    if (this.touch) {
+      // Phones: go fullscreen and landscape where the browser allows it.
+      try {
+        document.documentElement.requestFullscreen?.().then(() => {
+          const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+          return o.lock?.('landscape');
+        }).catch(() => undefined);
+      } catch {
+        /* fullscreen not available (e.g. iPhone Safari) */
+      }
+    } else this.input.requestLock();
   }
 
   start(): void {
@@ -164,8 +179,10 @@ export class Game {
 
     const zone = this.world.zoneAt(this.player.pos.x, this.player.pos.z);
     const near = v ? null : this.nearestVehicle();
-    const prompt = near ? `Pulsa <b>F</b> / <b>E</b> para robar: <b>${near.spec.label}</b>` : null;
-    this.hud.update(dt, zone, this.player.state, v, prompt, this.input.locked || !this.running);
+    const action = this.touch ? 'Toca <b>ROBAR</b>' : 'Pulsa <b>F</b> / <b>E</b> para robar';
+    const prompt = near ? `${action}: <b>${near.spec.label}</b>` : null;
+    this.touch?.setDriving(!!v);
+    this.hud.update(dt, zone, this.player.state, v, prompt, this.input.locked || !this.running || !!this.touch);
     this.minimap.draw(this.player.pos.x, this.player.pos.z, this.player.facing, this.followCam.yaw, this.vehicles, v);
     this.input.endFrame();
   }
@@ -187,8 +204,8 @@ export class Game {
       let c: DriveControls = PARKED;
       if (v === drive && active) {
         c = {
-          throttle: i.axis(KEYS.back, KEYS.forward),
-          steer: i.axis(KEYS.left, KEYS.right),
+          throttle: this.forwardAxis(),
+          steer: this.sideAxis(),
           handbrake: i.isDown(...KEYS.jump),
         };
       } else if (v === drive) c = { throttle: 0, steer: 0, handbrake: false };
@@ -206,8 +223,8 @@ export class Game {
     // Camera-relative movement.
     let mx = 0, mz = 0;
     if (active) {
-      const f = i.axis(KEYS.back, KEYS.forward);
-      const s = i.axis(KEYS.left, KEYS.right);
+      const f = this.forwardAxis();
+      const s = this.sideAxis();
       const fw = this.followCam.forward();
       // Camera right = forward rotated 90° clockwise seen from above.
       mx = fw.x * f - fw.z * s;
@@ -218,8 +235,17 @@ export class Game {
         mz /= len;
       }
     }
-    this.player.update(dt, { moveX: mx, moveZ: mz, run: active && i.isDown(...KEYS.run), jump: this.jumpQueued }, this.world, this.collision, this.vehicles);
+    this.player.update(dt, { moveX: mx, moveZ: mz, run: active && (i.isDown(...KEYS.run) || Math.hypot(i.stickX, i.stickY) > 0.92), jump: this.jumpQueued }, this.world, this.collision, this.vehicles);
     this.jumpQueued = false;
+  }
+
+  /** Keyboard and touch joystick combined, -1..1. */
+  private forwardAxis(): number {
+    return clamp(this.input.axis(KEYS.back, KEYS.forward) + this.input.stickY, -1, 1);
+  }
+
+  private sideAxis(): number {
+    return clamp(this.input.axis(KEYS.left, KEYS.right) + this.input.stickX, -1, 1);
   }
 
   private nearestVehicle(): Vehicle | null {

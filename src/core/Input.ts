@@ -69,6 +69,27 @@ export class Input {
     return (this.isDown(...positive) ? 1 : 0) - (this.isDown(...negative) ? 1 : 0);
   }
 
+  /** Virtual joystick (touch): x = right, y = forward, both -1..1. */
+  stickX = 0;
+  stickY = 0;
+
+  /** On-screen button pressed (touch): behaves like holding a key. */
+  pressVirtual(code: string): void {
+    if (!this.down.has(code)) this.pressed.add(code);
+    this.down.add(code);
+  }
+
+  releaseVirtual(code: string): void {
+    this.down.delete(code);
+  }
+
+  /** Camera look from a touch drag (pixels). */
+  addLook(dx: number, dy: number): void {
+    this.mdx += dx;
+    this.mdy += dy;
+    this.lastLookTime = performance.now() / 1000;
+  }
+
   consumeMouse(): { dx: number; dy: number } {
     const r = { dx: this.mdx, dy: this.mdy };
     this.mdx = this.mdy = 0;

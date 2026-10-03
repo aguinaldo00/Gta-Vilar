@@ -2,7 +2,10 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0b0b0b" />
     <title>Villarcayo Sandbox</title>
     <style>
       :root {
@@ -74,6 +77,48 @@
       }
       #play:disabled { opacity: .6; cursor: wait; }
       #play:not(:disabled):hover { transform: translateY(-2px); }
+
+      /* ---------- Touch devices ---------- */
+      #start .keys.touch-only { display: none; }
+      body.touch #start .keys.touch-only { display: grid; }
+      body.touch .desktop-only { display: none !important; }
+      body.touch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+      #touch { position: fixed; inset: 0; z-index: 5; touch-action: none; }
+      .stick-base {
+        position: absolute; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%;
+        background: rgba(0,0,0,.25); border: 3px solid rgba(255,255,255,.35); opacity: 0; pointer-events: none;
+        left: 110px; top: calc(100% - 130px); transition: opacity .15s;
+      }
+      .stick-base.active { opacity: 1; }
+      .stick-knob {
+        position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; border-radius: 50%;
+        background: rgba(242,194,48,.85); border: 3px solid #111; transform: translate(-50%, -50%);
+      }
+      .touch-btn {
+        position: absolute; width: 84px; height: 84px; border-radius: 50%; border: 3px solid #111;
+        background: rgba(242,194,48,.8); color: #111; font: italic 900 15px Georgia, serif; touch-action: none;
+        box-shadow: 0 4px 0 rgba(0,0,0,.6); padding: 0;
+      }
+      .touch-btn.active { background: #fff; transform: translateY(3px); box-shadow: none; }
+      #btn-jump { right: calc(24px + env(safe-area-inset-right)); bottom: 28px; }
+      #btn-use { right: calc(124px + env(safe-area-inset-right)); bottom: 44px; width: 70px; height: 70px; background: rgba(143,208,255,.85); }
+      body.touch #minimap { left: calc(12px + env(safe-area-inset-left)); top: 12px; bottom: auto; width: 120px; height: 120px; }
+      body.touch #zone { font-size: 26px; right: 20px; bottom: auto; top: 96px; }
+      body.touch #topright { top: 8px; right: calc(16px + env(safe-area-inset-right)); }
+      body.touch #clock { font-size: 26px; }
+      body.touch #veh-name { font-size: 18px; }
+      body.touch #speed { font-size: 34px; }
+      body.touch #prompt { top: 10px; font-size: 14px; padding: 7px 12px; }
+      body.touch #status, body.touch #help-tip { display: none; }
+      body.touch #toast { font-size: 24px; }
+      #rotate-hint { display: none; font-size: 14px; color: var(--gta-yellow); }
+      @media (orientation: portrait) { body.touch #rotate-hint { display: block; } }
+      @media (max-height: 500px) {
+        #start { gap: 8px; }
+        #start h1 { font-size: 52px; }
+        #start p { font-size: 13px; }
+        #play { font-size: 22px; padding: 8px 32px; }
+      }
     </style>
   </head>
   <body>
@@ -110,7 +155,14 @@
         Plaza Mayor, el Ayuntamiento y la Torre del Corregimiento, el Camino Real, el Parque El Soto con el Río Nela y sus
         piscinas naturales, y la vieja vía del Santander-Mediterráneo.
       </p>
-      <div class="keys">
+      <div class="keys touch-only">
+        <b>Joystick</b><span>andar · conducir (a tope = correr)</span>
+        <b>Arrastrar</b><span>mover la cámara (lado derecho)</span>
+        <b>SALTAR</b><span>saltar · freno de mano</span>
+        <b>ROBAR</b><span>robar / salir del vehículo</span>
+      </div>
+      <div id="rotate-hint">↻ Gira el móvil en horizontal para jugar mejor</div>
+      <div class="keys desktop-only">
         <b>WASD</b><span>andar · conducir</span>
         <b>Shift</b><span>correr</span>
         <b>Espacio</b><span>saltar · freno de mano</span>
