@@ -11,6 +11,14 @@ describe('map data', () => {
     expect(m.roads.length).toBeGreaterThan(100);
   });
 
+  it('carries every baked layer (terrain, orthophoto, surroundings)', () => {
+    // A bare osm-to-map run drops them: the full bake (tools/geodata/bake_all.sh) must follow it.
+    expect(raw.meta.terrain?.file).toBeTruthy();
+    expect(raw.meta.ortho?.dir).toBeTruthy();
+    expect(raw.meta.surroundings).toBeTruthy();
+    expect(raw.buildings.some((b: { gy?: number }) => b.gy !== undefined)).toBe(true);
+  });
+
   it('every coordinate lies inside the bounds', () => {
     const { minX, maxX, minZ, maxZ } = parseMap(raw).meta.bounds;
     for (const b of raw.buildings) {
