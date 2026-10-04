@@ -19,7 +19,8 @@ export type Action =
   | 'radioPrev'
   | 'timeSkip'
   | 'radioPower'
-  | 'weatherNext';
+  | 'weatherNext'
+  | 'report';
 
 /**
  * Game-facing input: named actions and axes, independent of the device.

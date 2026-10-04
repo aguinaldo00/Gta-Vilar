@@ -112,6 +112,14 @@
       body.touch #radio .r-power { width: 40px; height: 40px; }
       body.touch #radio .r-ext, body.touch #radio .r-play { font-size: 12px; padding: 6px 12px; }
       body.touch #radio.on.settled { transform: translateX(-50%) scale(.85); }
+      /* P: the player's position, to paste in a report (also left on screen for a screenshot). */
+      #where {
+        position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); max-width: min(92vw, 640px);
+        background: rgba(0,0,0,.72); color: #fff; padding: 10px 14px 8px; border-radius: 6px; white-space: pre-wrap;
+        font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; opacity: 0; transition: opacity .3s; pointer-events: none; user-select: text;
+      }
+      #where.show { opacity: 1; pointer-events: auto; }
+      #where::after { content: attr(data-state); display: block; margin-top: 4px; color: #9fe39f; font: 11px Arial, sans-serif; }
       #lock-hint {
         position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); font-size: 14px; padding: 6px 12px;
         background: rgba(0,0,0,.55); display: none;
@@ -209,6 +217,7 @@
       .touch-btn.active { background: #fff; transform: translateY(3px); box-shadow: none; }
       #btn-jump { right: calc(24px + env(safe-area-inset-right)); bottom: 28px; }
       #btn-use { right: calc(124px + env(safe-area-inset-right)); bottom: 44px; width: 70px; height: 70px; background: rgba(143,208,255,.85); }
+      #btn-where { right: calc(18px + env(safe-area-inset-right)); top: 42%; width: 46px; height: 46px; font-size: 20px; background: rgba(255,255,255,.75); }
       body.touch #minimap { left: calc(12px + env(safe-area-inset-left)); top: 12px; bottom: auto; width: 120px; height: 120px; }
       body.touch #zone { font-size: 26px; right: 20px; bottom: auto; top: 96px; }
       body.touch #topright { top: 8px; right: calc(16px + env(safe-area-inset-right)); }
@@ -248,7 +257,8 @@
         <div><b>F / E</b> Robar / salir del vehículo</div>
         <div><b>Ratón</b> Girar la cámara</div>
         <div><b>R</b> Volver a la Plaza Mayor</div>
-        <div><b>Q / Z / rueda</b> Cambiar emisora · <b>X</b> apagar radio</div>
+        <div><b>Q / Z / rueda</b> Cambiar emisora · <b>X</b> apagar radio · <b>V</b> radio en ventana</div>
+        <div><b>P</b> Copiar mi posición (para avisar de un fallo)</div>
         <div><b>T</b> Adelantar una hora · <b>Y</b> cambiar el clima</div>
         <div><b>M</b> Sonido · <b>H</b> Ayuda</div>
       </div>
@@ -270,7 +280,7 @@
       <section class="m-panel" id="panel-settings" aria-label="Ajustes">
         <h2>AJUSTES</h2>
         <div class="m-fields"></div>
-        <p class="m-hint">Teclas en el juego: <b>WASD</b> mover · <b>Shift</b> correr · <b>Espacio</b> saltar / freno · <b>F</b> robar coche · <b>Q Z</b> emisora · <b>X</b> radio · <b>T</b> +1 hora · <b>Y</b> clima · <b>M</b> sonido · <b>H</b> ayuda</p>
+        <p class="m-hint">Teclas en el juego: <b>WASD</b> mover · <b>Shift</b> correr · <b>Espacio</b> saltar / freno · <b>F</b> robar coche · <b>Q Z</b> emisora · <b>X</b> radio · <b>T</b> +1 hora · <b>Y</b> clima · <b>M</b> sonido · <b>H</b> ayuda · <b>P</b> copiar mi posición (para avisar de un fallo)</p>
         <button class="m-back" data-close>VOLVER</button>
       </section>
       <section class="m-panel" id="panel-credits" aria-label="Créditos">

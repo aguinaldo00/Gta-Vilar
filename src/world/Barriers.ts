@@ -212,7 +212,8 @@ export function buildBarriers(ctx: BuildContext): void {
     const pts = toPts(b.p);
     const h = b.h ?? DEFAULT_H[b.k] ?? 1.5;
     const t = THICK[b.k] ?? 0.3;
-    const tint = b.k === 'retaining_wall' ? CONCRETE : WALL_TINTS[Math.floor(hash01(idx) * WALL_TINTS.length)];
+    // A colour checked on photos (the red brick wall of the Colegio car park) wins over the generic tints.
+    const tint = b.c ? new THREE.Color(b.c) : b.k === 'retaining_wall' ? CONCRETE : WALL_TINTS[Math.floor(hash01(idx) * WALL_TINTS.length)];
     const green = HEDGES[Math.floor(hash01(idx * 3 + 1) * HEDGES.length)];
     // A tall hedge along a street usually grows on a low garden wall.
     let onWall = false;

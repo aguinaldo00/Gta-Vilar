@@ -23,6 +23,7 @@ import { Locomotion } from './systems/Locomotion';
 import { VehicleInteraction } from './systems/VehicleInteraction';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
+import { PositionReport, reportText } from './ui/PositionReport';
 import { RadioPanel } from './ui/RadioPanel';
 import { TouchControls } from './ui/TouchControls';
 import { ClimateSystem, WEATHER_LABEL, WEATHERS, type Weather } from './world/Climate';
@@ -53,6 +54,8 @@ export class Game {
   readonly player = new Player();
   readonly vehicles: Vehicle[] = [];
   readonly followCam: FollowCamera;
+  /** P: where am I (for reporting a detail to fix). */
+  private readonly where = new PositionReport(document.getElementById('hud') ?? document.body);
   readonly pipeline: Pipeline;
   readonly quality: Config['quality']['desktop'];
   private readonly loop: FixedStepLoop;
@@ -482,6 +485,25 @@ export class Game {
     if (a.pressed('timeSkip')) {
       this.hours = (Math.floor(this.hours) + 1) % 24;
       this.hud.flash(`${String(Math.floor(this.hours)).padStart(2, '0')}:00`);
+    }
+    if (a.pressed('report')) {
+      const v = this.player.vehicle;
+      // The camera looks back at the player: the view direction is towards the player.
+      const lx = this.player.pos.x - this.camera.position.x,
+        lz = this.player.pos.z - this.camera.position.z;
+      this.where.show(
+        reportText({
+          x: this.player.pos.x,
+          z: this.player.pos.z,
+          lookX: lx,
+          lookZ: lz,
+          vehicle: v ? v.spec.label : null,
+          zone: this.world.zoneAt(this.player.pos.x, this.player.pos.z) || 'Villarcayo',
+          hours: this.hours,
+          weather: WEATHER_LABEL[this.climate.weather],
+          origin: this.world.map.meta.utmOrigin ?? { E: 453356, N: 4754203 },
+        }),
+      );
     }
     if (a.pressed('weatherNext')) this.hud.flash(WEATHER_LABEL[this.climate.cycleWeather()]);
     if (a.pressed('radioPower')) this.radio.togglePower();

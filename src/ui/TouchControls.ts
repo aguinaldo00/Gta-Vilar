@@ -39,6 +39,8 @@ export class TouchControls {
     this.layer.appendChild(this.base);
     this.jumpBtn = this.button('btn-jump', 'SALTAR', 'Touch.jump');
     this.useBtn = this.button('btn-use', 'ROBAR', 'Touch.use');
+    // Where am I (the P key): to report a detail to fix.
+    this.button('btn-where', '📍', 'KeyP');
     document.body.appendChild(this.layer);
 
     this.layer.addEventListener('pointerdown', (e) => this.onDown(e));

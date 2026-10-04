@@ -251,14 +251,50 @@
       "cut": true
     },
     {
-      "k": "verja",
+      "_": "El Sotillo: seto entre la hierba y la acera de los contenedores (entrada entre la esquina y los contenedores)",
+      "k": "hedge",
+      "h": 1.2,
       "p": [
-        -3.1,
-        -63.5,
-        2.2,
-        -58.9
-      ],
-      "h": 1.4
+        46.6,
+        -181.3,
+        21.71,
+        -154.47
+      ]
+    },
+    {
+      "_": "El Sotillo: seto, de la entrada a la esquina (entrada en la esquina)",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        20.35,
+        -153.0,
+        14.98,
+        -147.22
+      ]
+    },
+    {
+      "_": "El Sotillo: seto de la esquina hacia el Dia (entrada antes de llegar al Dia)",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        16.42,
+        -146.58,
+        27.28,
+        -136.53
+      ]
+    },
+    {
+      "_": "El Sotillo: seto hasta la esquina del paso de peatones y a lo largo de la calle (1,5 m dentro del borde de OSM: los contenedores quedan en la acera)",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        28.75,
+        -135.17,
+        31.54,
+        -132.64,
+        7.02,
+        -107.04
+      ]
     }
   ],
   "barrierKinds": [
@@ -269,6 +305,23 @@
       ],
       "k": "railing",
       "h": 1.0
+    },
+    {
+      "_": "Muro del aparcamiento del Colegio junto a El Sotillo: ladrillo rojo",
+      "near": [
+        17.2,
+        -207.9
+      ],
+      "k": "wall",
+      "c": "#9a4b35"
+    },
+    {
+      "near": [
+        46.6,
+        -181.3
+      ],
+      "k": "wall",
+      "c": "#9a4b35"
     }
   ],
   "extraShops": [
@@ -411,6 +464,15 @@
       "at": [
         38.4,
         -248.4
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "_": "El Sotillo: entrada en el muro del aparcamiento del Colegio (lado del Centro Joven)",
+      "at": [
+        32.8,
+        -193.8
       ]
     }
   ]

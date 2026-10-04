@@ -7,6 +7,7 @@ import { FACADE_STYLES, STYLE_COLOURS } from './facadeStyles';
 import { centroid, hash01, type Pt, signedArea, toPts, triangulate } from './geo';
 import { FLOOR_H } from './Materials';
 import type { MapBuilding } from './mapData';
+import { Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
 import { grandstand } from './Stands';
 
@@ -335,7 +336,21 @@ function orthoRoof(ctx: BuildContext, m: Mesh3, cx: number, cz: number): THREE.M
  * hipped on rectangular plots and skirted elsewhere. Collision follows the
  * footprint with one thin box per wall.
  */
+/** Square pillars of the porticoes under buildings that bridge a street (the CL-629 at Calle Obras Públicas). */
+function porticoPillars(ctx: BuildContext): void {
+  const P = ctx.map.pillars ?? [];
+  const mat = ctx.mats.tint('#e6e2d8');
+  for (let i = 0; i + 2 < P.length; i += 3) {
+    const [x, z, top] = [P[i], P[i + 1], P[i + 2]];
+    const g = ctx.terrain.heightAt(x, z);
+    const h = top - g + 0.2;
+    ctx.batch.add(Unit.box, mat, x, g - 0.2 + h / 2, z, 0, 0.55, h, 0.55);
+    ctx.collision.addCircle(x, z, 0.32, { top: h, mask: Layer.Solid });
+  }
+}
+
 export function buildBuildings(ctx: BuildContext): void {
+  porticoPillars(ctx);
   const { batch, mats, collision, roads } = ctx;
   let idx = 0;
   for (const b of ctx.map.buildings) {

@@ -31,8 +31,14 @@ export interface Station {
   logo: string;
 }
 
-const svg = (body: string, w = 240, h = 110) =>
-  `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" fill="currentColor" stroke="currentColor">${body}</svg>`;
+/** Logo canvas: 240 × 120, everything centred on x = 120 with at least 10 units of margin. */
+const svg = (body: string) =>
+  `<svg viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg" fill="currentColor" stroke="currentColor">${body}</svg>`;
+/**
+ * A centred word: `y` is its visual middle (dominant-baseline central), and the
+ * letter-spacing SVG adds after the last letter is compensated, so spaced
+ * words sit truly in the middle.
+ */
 const word = (
   text: string,
   x: number,
@@ -40,7 +46,24 @@ const word = (
   size: number,
   opts: { weight?: number; family?: string; italic?: boolean; ls?: number; fill?: string } = {},
 ) =>
-  `<text x="${x}" y="${y}" text-anchor="middle" stroke="none" font-family="${opts.family ?? "'Arial Black', 'Helvetica Neue', Arial, sans-serif"}" font-weight="${opts.weight ?? 900}" font-size="${size}"${opts.italic ? ' font-style="italic"' : ''}${opts.ls ? ` letter-spacing="${opts.ls}"` : ''}${opts.fill ? ` fill="${opts.fill}"` : ''}>${text}</text>`;
+  `<text x="${x + (opts.ls ?? 0) / 2}" y="${y}" text-anchor="middle" dominant-baseline="central" stroke="none" font-family="${opts.family ?? "'Arial Black', 'Helvetica Neue', Arial, sans-serif"}" font-weight="${opts.weight ?? 900}" font-size="${size}"${opts.italic ? ' font-style="italic"' : ''}${opts.ls ? ` letter-spacing="${opts.ls}"` : ''}${opts.fill ? ` fill="${opts.fill}"` : ''}>${text}</text>`;
+const SERIF = 'Georgia, serif';
+/** Wavy line from x0 to x1 (periods of 36), centred vertically on y. */
+const wave = (x0: number, x1: number, y: number, w: number, extra = '') => {
+  let d = `M${x0} ${y}`;
+  for (let x = x0; x < x1 - 1; x += 36) d += ` q9 -10 18 0 t18 0`;
+  return `<path d="${d}" fill="none" stroke-width="${w}" stroke-linecap="round"${extra}/>`;
+};
+/** Five-pointed star centred on (cx, cy). */
+const star = (cx: number, cy: number, r: number) => {
+  const pts: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r * 0.42 : r;
+    pts.push(`${(cx + Math.cos(a) * rr).toFixed(1)},${(cy + Math.sin(a) * rr).toFixed(1)}`);
+  }
+  return `<polygon points="${pts.join(' ')}" fill="none" stroke-width="5" stroke-linejoin="round"/>`;
+};
 
 export const STATIONS: Station[] = [
   {
@@ -49,7 +72,7 @@ export const STATIONS: Station[] = [
     tagline: 'Éxitos',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40.mp3' }],
     logo: svg(
-      `<rect x="40" y="8" width="160" height="94" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 40, 22, { ls: 6 })}${word('40', 120, 92, 58)}`,
+      `<rect x="62" y="8" width="116" height="104" rx="20" fill="none" stroke-width="6"/>${word('LOS', 120, 34, 20, { ls: 6 })}${word('40', 120, 76, 54)}`,
     ),
   },
   {
@@ -57,16 +80,14 @@ export const STATIONS: Station[] = [
     name: 'Cadena SER',
     tagline: 'Hablada',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/CADENASER.mp3' }],
-    logo: svg(
-      `${word('cadena', 120, 36, 24, { weight: 400, family: 'Georgia, serif', italic: true })}${word('SER', 120, 96, 66, { ls: 4 })}`,
-    ),
+    logo: svg(`${word('cadena', 120, 28, 24, { weight: 400, family: SERIF, italic: true })}${word('SER', 120, 80, 62, { ls: 4 })}`),
   },
   {
     id: 'cope',
     name: 'COPE',
     tagline: 'Hablada',
     streams: [{ url: 'https://flucast23-h-cloud.flumotion.com/cope/net1.mp3' }],
-    logo: svg(`<rect x="30" y="20" width="180" height="70" rx="6" fill="none" stroke-width="5"/>${word('COPE', 120, 78, 56, { ls: 3 })}`),
+    logo: svg(`<rect x="22" y="22" width="196" height="76" rx="8" fill="none" stroke-width="5"/>${word('COPE', 120, 60, 44, { ls: 3 })}`),
   },
   {
     id: 'ondacero',
@@ -77,7 +98,7 @@ export const STATIONS: Station[] = [
       { url: 'https://atres-live.ondacero.es/live/ondacero/master.m3u8', hls: true },
     ],
     logo: svg(
-      `<circle cx="58" cy="55" r="34" fill="none" stroke-width="9"/><path d="M98 55 q14 -22 28 0 t28 0 t28 0" fill="none" stroke-width="6"/>${word('onda cero', 150, 102, 22, { weight: 700 })}`,
+      `<circle cx="120" cy="42" r="28" fill="none" stroke-width="8"/>${wave(30, 84, 42, 5)}${wave(156, 210, 42, 5)}${word('onda cero', 120, 98, 22, { weight: 700 })}`,
     ),
   },
   {
@@ -85,7 +106,7 @@ export const STATIONS: Station[] = [
     name: 'Kiss FM',
     tagline: 'Música de los 80, 90 y hoy',
     streams: [{ url: 'https://kissfm.kissfmradio.cires21.com/kissfm.mp3' }],
-    logo: svg(`${word('KISS', 120, 70, 64, { italic: true, ls: 2 })}${word('F M', 120, 100, 20, { ls: 10 })}`),
+    logo: svg(`${word('KISS', 120, 48, 56, { italic: true, ls: 2 })}${word('FM', 120, 98, 20, { ls: 10 })}`),
   },
   {
     id: 'rockfm',
@@ -96,7 +117,7 @@ export const STATIONS: Station[] = [
       { url: 'https://rockfm-cope.flumotion.com/playlist.m3u8', hls: true },
     ],
     logo: svg(
-      `<path d="M28 18 L212 18 L200 92 L40 92 Z" fill="none" stroke-width="5"/>${word('ROCK', 120, 70, 50, { family: 'Impact, "Arial Black", sans-serif', weight: 400, ls: 4 })}${word('FM', 196, 44, 16, { ls: 2 })}`,
+      `<path d="M24 14 L216 14 L202 106 L38 106 Z" fill="none" stroke-width="5" stroke-linejoin="round"/>${word('ROCK', 120, 52, 44, { family: 'Impact, "Arial Black", sans-serif', weight: 400, ls: 4 })}${word('FM', 120, 88, 16, { ls: 6 })}`,
     ),
   },
   {
@@ -105,7 +126,7 @@ export const STATIONS: Station[] = [
     tagline: 'Música en español',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/CADENADIAL.mp3' }],
     logo: svg(
-      `${word('cadena', 120, 36, 22, { weight: 400, family: 'Georgia, serif', italic: true })}${word('Dial', 120, 94, 62, { family: 'Georgia, serif', weight: 700, italic: true })}`,
+      `${word('cadena', 120, 28, 22, { weight: 400, family: SERIF, italic: true })}${word('Dial', 120, 78, 56, { family: SERIF, weight: 700, italic: true })}`,
     ),
   },
   {
@@ -117,10 +138,10 @@ export const STATIONS: Station[] = [
       { url: 'https://atres-live.europafm.com/live/europafm/master.m3u8', hls: true },
     ],
     logo: svg(
-      `${Array.from({ length: 10 }, (_, i) => {
-        const a = (i / 10) * Math.PI * 2;
-        return `<circle cx="${(120 + Math.cos(a) * 44).toFixed(1)}" cy="${(52 + Math.sin(a) * 40).toFixed(1)}" r="4" stroke="none"/>`;
-      }).join('')}${word('europa', 120, 60, 30, { weight: 700 })}${word('FM', 120, 104, 18, { ls: 8 })}`,
+      `${Array.from({ length: 12 }, (_, i) => {
+        const a = (i / 12) * Math.PI * 2;
+        return `<circle cx="${(120 + Math.cos(a) * 66).toFixed(1)}" cy="${(50 + Math.sin(a) * 38).toFixed(1)}" r="4" stroke="none"/>`;
+      }).join('')}${word('europa', 120, 50, 26, { weight: 700 })}${word('FM', 120, 108, 16, { ls: 6 })}`,
     ),
   },
   {
@@ -132,7 +153,7 @@ export const STATIONS: Station[] = [
       { url: 'https://rtvelivestream.rtve.es/rtvesec/rne/rne_r1_main.m3u8', hls: true },
     ],
     logo: svg(
-      `<rect x="44" y="14" width="152" height="82" rx="41" fill="none" stroke-width="6"/>${word('rne', 120, 76, 56, { weight: 900 })}`,
+      `<rect x="48" y="18" width="144" height="84" rx="42" fill="none" stroke-width="6"/>${word('rne', 120, 58, 50, { weight: 900 })}`,
     ),
   },
   {
@@ -141,9 +162,7 @@ export const STATIONS: Station[] = [
     tagline: 'Éxitos de siempre',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40_CLASSIC.mp3' }],
     logo: svg(
-      `<rect x="40" y="8" width="160" height="80" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 36, 18, { ls: 6 })}${word('40', 120, 80, 46)}${word('CLASSIC', 120, 106, 16, { ls: 6 })}`,
-      240,
-      112,
+      `<rect x="68" y="6" width="104" height="82" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 28, 16, { ls: 5 })}${word('40', 120, 62, 42)}${word('CLASSIC', 120, 106, 15, { ls: 5 })}`,
     ),
   },
   {
@@ -152,9 +171,7 @@ export const STATIONS: Station[] = [
     tagline: 'Electrónica',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40_DANCE.mp3' }],
     logo: svg(
-      `<rect x="40" y="8" width="160" height="80" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 36, 18, { ls: 6 })}${word('40', 120, 80, 46)}${word('DANCE', 120, 106, 16, { ls: 8 })}`,
-      240,
-      112,
+      `<rect x="68" y="6" width="104" height="82" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 28, 16, { ls: 5 })}${word('40', 120, 62, 42)}${word('DANCE', 120, 106, 15, { ls: 6 })}`,
     ),
   },
   {
@@ -165,20 +182,14 @@ export const STATIONS: Station[] = [
       { url: 'https://flucast23-h-cloud.flumotion.com/cope/cadena100.mp3' },
       { url: 'https://cadena100-cope.flumotion.com/playlist.m3u8', hls: true },
     ],
-    logo: svg(
-      `${word('cadena', 120, 34, 22, { weight: 400, family: 'Georgia, serif', italic: true })}${word('100', 120, 96, 64, { ls: 2 })}`,
-    ),
+    logo: svg(`${word('cadena', 120, 28, 22, { weight: 400, family: SERIF, italic: true })}${word('100', 120, 80, 58, { ls: 2 })}`),
   },
   {
     id: 'megastar',
     name: 'MegaStar FM',
     tagline: 'Nuevos éxitos',
     streams: [{ url: 'https://flucast23-h-cloud.flumotion.com/cope/megastar.mp3' }],
-    logo: svg(
-      `<path d="M120 10 L132 44 L168 44 L139 64 L150 98 L120 78 L90 98 L101 64 L72 44 L108 44 Z" fill="none" stroke-width="5"/>${word('MEGASTAR', 120, 108, 16, { ls: 4 })}`,
-      240,
-      112,
-    ),
+    logo: svg(`${star(120, 46, 38)}${word('MEGASTAR', 120, 106, 15, { ls: 4 })}`),
   },
   {
     id: 'marca',
@@ -186,7 +197,7 @@ export const STATIONS: Station[] = [
     tagline: 'Deportes',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOMARCA_NACIONAL.mp3' }],
     logo: svg(
-      `<rect x="24" y="22" width="192" height="66" fill="none" stroke-width="5"/>${word('MARCA', 120, 74, 46, { italic: true, ls: 2 })}`,
+      `<rect x="20" y="24" width="200" height="72" fill="none" stroke-width="5"/>${word('MARCA', 120, 60, 40, { italic: true, ls: 2 })}`,
     ),
   },
   {
@@ -197,7 +208,7 @@ export const STATIONS: Station[] = [
       { url: 'https://dispatcher.rndfnk.com/crtve/rner3/main/mp3/high' },
       { url: 'https://rtvelivestream.rtve.es/rtvesec/rne/rne_r3_main.m3u8', hls: true },
     ],
-    logo: svg(`<circle cx="120" cy="55" r="42" fill="none" stroke-width="6"/>${word('3', 120, 80, 66)}`),
+    logo: svg(`<circle cx="120" cy="60" r="46" fill="none" stroke-width="6"/>${word('3', 120, 62, 58)}`),
   },
   {
     id: 'merindades',
@@ -206,7 +217,7 @@ export const STATIONS: Station[] = [
     synth: 'folk',
     ident: 'Radio Merindades. Música de la tierra, desde Villarcayo.',
     logo: svg(
-      `<path d="M20 78 L62 30 L84 54 L112 18 L150 66 L172 44 L220 78 Z" stroke="none" opacity="0.85"/><path d="M20 84 L220 84" stroke-width="3"/>${word('RADIO MERINDADES', 120, 104, 15, { ls: 3 })}`,
+      `<path d="M24 80 L64 34 L86 58 L120 18 L154 58 L176 34 L216 80 Z" stroke="none" opacity="0.85"/><path d="M24 88 L216 88" stroke-width="3"/>${word('RADIO MERINDADES', 120, 106, 14, { ls: 3 })}`,
     ),
   },
   {
@@ -216,7 +227,7 @@ export const STATIONS: Station[] = [
     synth: 'chill',
     ident: 'Nela FM. Relájate, que el río baja tranquilo.',
     logo: svg(
-      `${word('nela', 120, 62, 58, { family: 'Georgia, serif', weight: 700, italic: true })}<path d="M40 78 q20 -12 40 0 t40 0 t40 0 t40 0" fill="none" stroke-width="4"/><path d="M40 92 q20 -12 40 0 t40 0 t40 0 t40 0" fill="none" stroke-width="3" opacity="0.6"/>`,
+      `${word('nela', 120, 42, 54, { family: SERIF, weight: 700, italic: true })}${wave(48, 192, 84, 4)}${wave(48, 192, 100, 3, ' opacity="0.6"')}`,
     ),
   },
   {
@@ -226,9 +237,7 @@ export const STATIONS: Station[] = [
     synth: 'rock',
     ident: 'Corregimiento Rock. ¡Sube el volumen, Villarcayo!',
     logo: svg(
-      `<path d="M96 96 L96 30 L90 30 L90 14 L100 14 L100 22 L110 22 L110 14 L120 14 L120 22 L130 22 L130 14 L140 14 L140 22 L150 22 L150 14 L150 30 L144 30 L144 96 Z" stroke="none"/><rect x="114" y="50" width="12" height="18" fill="#000" stroke="none" opacity="0.6"/>${word('CORREGIMIENTO', 120, 108, 13, { ls: 3 })}`,
-      240,
-      114,
+      `<path d="M102 88 L102 34 L96 34 L96 12 L106 12 L106 20 L115 20 L115 12 L125 12 L125 20 L134 20 L134 12 L144 12 L144 34 L138 34 L138 88 Z" stroke="none"/><rect x="114" y="46" width="12" height="18" fill="#000" stroke="none" opacity="0.6"/>${word('CORREGIMIENTO', 120, 106, 13, { ls: 3 })}`,
     ),
   },
 ];

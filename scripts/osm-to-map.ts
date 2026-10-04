@@ -28,7 +28,9 @@ interface Corrections {
   shops?: Record<string, { at?: [number, number]; name?: string; w?: number; street?: string; front?: [number, number, number, number] }>;
   furniture?: { k: string; x: number; z: number; a: number; t?: string; replaces?: [number, number] }[];
   barriers?: { p: number[]; k: string; h?: number; cut?: boolean; hedge?: number }[];
-  barrierKinds?: { near: [number, number]; k: string; h?: number }[];
+  barrierKinds?: { near: [number, number]; k: string; h?: number; c?: string }[];
+  /** Openings checked on photos that OSM lacks (cut like barrier=gate). */
+  gates?: { at: [number, number] }[];
   extraShops?: { n: string; c: string; x: number; z: number; a: number; w: number }[];
 }
 const corrections: Corrections = (() => {
@@ -895,7 +897,8 @@ const BARRIER_KIND: Record<string, string> = {
 const GATES = new Set(['gate', 'sliding_gate', 'swing_gate', 'lift_gate', 'entrance']);
 const gateNodes: Pt[] = [];
 for (const n of nodes.values()) if (n.tags && GATES.has(n.tags.barrier ?? '')) gateNodes.push(project(n.lat, n.lon));
-const barriers: { p: number[]; k: string; h?: number; fix?: 1; hedge?: number }[] = [];
+for (const g of corrections.gates ?? []) gateNodes.push(g.at);
+const barriers: { p: number[]; k: string; h?: number; fix?: 1; hedge?: number; c?: string }[] = [];
 const bollards: number[] = [];
 for (const { cut, ...b } of corrections.barriers ?? []) barriers.push(cut ? b : { ...b, fix: 1 });
 for (const [id, w] of ways) {
@@ -960,6 +963,7 @@ for (const fix of corrections.barrierKinds ?? []) {
     if (!near) continue;
     b.k = fix.k;
     if (fix.h) b.h = fix.h;
+    if (fix.c) b.c = fix.c;
   }
 }
 for (const n of nodes.values()) {

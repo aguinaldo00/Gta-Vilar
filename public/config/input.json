@@ -56,6 +56,9 @@
     ],
     "weatherNext": [
       "KeyY"
+    ],
+    "report": [
+      "KeyP"
     ]
   }
 }

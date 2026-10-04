@@ -190,6 +190,8 @@ export interface MapData {
   /** Ground heights (local y) on the meta.terrain grid; absent = flat map. */
   heights?: Float32Array;
   buildings: MapBuilding[];
+  /** Portico pillars under buildings over a street (tools/geodata/passages.py): x, z, top (local y). */
+  pillars?: number[];
   /** Walls, fences and hedges (OSM, plus plot walls found in the LiDAR: src "lidar"); h in metres. */
   barriers?: {
     p: Coords;
@@ -202,6 +204,8 @@ export interface MapData {
     up?: 1 | -1;
     /** Hedge thickness, m. */
     t?: number;
+    /** Wall colour checked on photos (data/corrections.json barrierKinds), e.g. red brick. */
+    c?: string;
   }[];
   /** Street furniture at its mapped position (signs, containers, bins, poles, billboards...). */
   furniture?: MapFurniture[];
