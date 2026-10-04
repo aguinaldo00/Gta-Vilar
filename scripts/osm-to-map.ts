@@ -893,18 +893,37 @@ const BARRIER_KIND: Record<string, string> = {
   hedge: 'hedge',
 };
 const GATES = new Set(['gate', 'sliding_gate', 'swing_gate', 'lift_gate', 'entrance']);
+const gateNodes: Pt[] = [];
+for (const n of nodes.values()) if (n.tags && GATES.has(n.tags.barrier ?? '')) gateNodes.push(project(n.lat, n.lon));
 const barriers: { p: number[]; k: string; h?: number; fix?: 1; hedge?: number }[] = [];
 const bollards: number[] = [];
 for (const { cut, ...b } of corrections.barriers ?? []) barriers.push(cut ? b : { ...b, fix: 1 });
 for (const [id, w] of ways) {
   const kind = BARRIER_KIND[w.tags.barrier ?? ''];
   if (!kind || w.tags.building) continue;
-  const pts = wayPts(id);
+  let pts = wayPts(id);
   // Openings around gates: split the line at gate nodes.
   const gates = w.nds
     .map((n) => nodes.get(n))
     .filter((n) => n?.tags && GATES.has(n.tags.barrier ?? ''))
     .map((n) => project(n!.lat, n!.lon));
+  // Entrances mapped on the line but not joined to it (the Colegio car park's gate onto the
+  // frontón): a vertex there, so the opening is cut all the same.
+  for (const g of gateNodes) {
+    if (pts.some((p) => Math.hypot(p[0] - g[0], p[1] - g[1]) < 1.5)) continue;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1],
+        [bx, bz] = pts[i];
+      const L2 = (bx - ax) ** 2 + (bz - az) ** 2;
+      if (L2 < 1) continue;
+      const t = ((g[0] - ax) * (bx - ax) + (g[1] - az) * (bz - az)) / L2;
+      if (t <= 0 || t >= 1) continue;
+      if (Math.hypot(ax + (bx - ax) * t - g[0], az + (bz - az) * t - g[1]) > 0.6) continue;
+      pts = [...pts.slice(0, i), g, ...pts.slice(i)];
+      gates.push(g);
+      break;
+    }
+  }
   let runs: Pt[][] = [pts];
   for (const g of gates) {
     const next: Pt[][] = [];

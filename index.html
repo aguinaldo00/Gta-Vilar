@@ -101,8 +101,17 @@
       }
       #radio.ext .r-ext { display: block; }
       body.radio-on #prompt { top: 150px; }
-      body.touch #radio .r-name { font-size: 20px; }
-      body.touch #radio .r-logo { width: 100px; height: 46px; }
+      /* Phones: a compact panel (the screen is short in landscape), no genre line, no key hints. */
+      body.touch #radio { top: 6px; gap: 8px; }
+      body.touch #radio .r-card { min-width: 0; }
+      body.touch #radio .r-name { font-size: 15px; letter-spacing: 2px; }
+      body.touch #radio .r-logo { width: 64px; height: 30px; }
+      body.touch #radio .r-tag { display: none; }
+      body.touch #radio .r-state { font-size: 10px; min-height: 12px; }
+      body.touch #radio .r-arrow { width: 40px; height: 40px; }
+      body.touch #radio .r-power { width: 40px; height: 40px; }
+      body.touch #radio .r-ext, body.touch #radio .r-play { font-size: 12px; padding: 6px 12px; }
+      body.touch #radio.on.settled { transform: translateX(-50%) scale(.85); }
       #lock-hint {
         position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); font-size: 14px; padding: 6px 12px;
         background: rgba(0,0,0,.55); display: none;

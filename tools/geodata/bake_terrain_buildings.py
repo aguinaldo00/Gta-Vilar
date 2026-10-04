@@ -468,6 +468,11 @@ def apply_fixes(m, corr):
             if k in f:
                 a[k] = f[k]
         na += 1
+    # Parked cars the detector made up out of other things (a container and a lamp in a gateway).
+    drop = [f["at"] for f in corr.get("removeCars", [])]
+    if drop and m.get("cars"):
+        c = m["cars"]
+        m["cars"] = [v for i in range(0, len(c), 4) if not any((c[i] - x) ** 2 + (c[i + 1] - z) ** 2 < 4 for x, z in drop) for v in c[i : i + 4]]
     return nb, na
 
 def main(map_path, lidar_path, mdt_path):
@@ -495,6 +500,18 @@ def main(map_path, lidar_path, mdt_path):
             before = len(m["buildings"])
             m["buildings"] = [b for b in m["buildings"] if not (b.get("src") == "lidar" and any(Polygon(list(zip(b["o"][0::2], b["o"][1::2]))).buffer(0).contains(p) for p in drop))]
             added -= before - len(m["buildings"])
+    # Outlines checked against the cadastre (buildingFixes with "ring": a cadastral reference):
+    # the traced shape is replaced before the roofs and facades are measured on it.
+    if os.path.exists(corr_path):
+        cat_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(lidar_path)))), "raw", "catastro", "buildings.json")
+        rings = {c["ref"]: c["ring"] for c in json.load(open(cat_path))} if os.path.exists(cat_path) else {}
+        from shapely.geometry import Point as _Pt
+        for f in json.load(open(corr_path)).get("buildingFixes", []):
+            if "ring" not in f or f["ring"] not in rings:
+                continue
+            hits = [b for b in m["buildings"] if Polygon(list(zip(b["o"][0::2], b["o"][1::2]))).buffer(0).contains(_Pt(*f["at"]))]
+            for b in hits[:1]:
+                b["o"] = [round(v, 2) for v in rings[f["ring"]]]
     # A traced building's low LiDAR edge is often a yard roof or an annex: a pitched roof
     # rises at most ~4 m above its eaves (Plaza Mayor 2, by the kebab, came out one storey high).
     for b in m["buildings"]:

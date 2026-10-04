@@ -46,7 +46,7 @@ export const STATIONS: Station[] = [
   {
     id: 'los40',
     name: 'Los 40 Principales',
-    tagline: 'Los 40 Principales · Éxitos',
+    tagline: 'Éxitos',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40.mp3' }],
     logo: svg(
       `<rect x="40" y="8" width="160" height="94" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 40, 22, { ls: 6 })}${word('40', 120, 92, 58)}`,

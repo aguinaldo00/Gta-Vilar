@@ -204,12 +204,17 @@ function polideportivo(
   ctx.collision.addBox(o.cx, o.cz, L, W, { rot, bottom: g - 1, top: g + H + rise, absolute: true });
 }
 
-/** Fence around the sports grounds, with gaps where paths and roads come in. */
+/**
+ * Fence around the swimming pools, with gaps where paths and roads come in.
+ * Not around the Polideportivo: no data shows one there (its real fences and
+ * walls come from OSM and the LiDAR), and the assumed one closed the gate
+ * from the Colegio car park and the open side of the frontón.
+ */
 function sportsFences(ctx: BuildContext): void {
   const fence = fenceMaterial();
   const post = ctx.mats.tint('#2f4a3a');
   for (const a of ctx.map.areas) {
-    if (a.k !== 'sports' || !a.n || !/Polideportivo|Piscinas/.test(a.n)) continue;
+    if (a.k !== 'sports' || !a.n || !/Piscinas/.test(a.n)) continue;
     const ring = toPts(a.o);
     const h = 2.2;
     for (let i = 0; i < ring.length; i++) {

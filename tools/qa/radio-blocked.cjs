@@ -1,5 +1,6 @@
 // Radio where the page cannot load outside audio (as in the claude.ai viewer): every stream
-// request fails; the panel offers the radio's own window, Q changes its station, X closes it.
+// request fails; the panel offers the radio's own window (V, no click needed while driving),
+// Q changes the station in that same window (never a second one), V brings the radio back.
 //   npx vite preview --port 4173 &  node tools/qa/radio-blocked.cjs
 let chromium;
 try {
@@ -41,9 +42,7 @@ try {
   });
   await p.waitForTimeout(3000);
   console.log('dentro', JSON.stringify(await state()));
-  await p.click('#radio .r-ext');
-  await p.waitForTimeout(2000);
-  console.log('ventana', JSON.stringify(await state()), 'ventanas abiertas', popups.filter((x) => !x.isClosed()).length);
+  const open = () => popups.filter((x) => !x.isClosed()).length;
   const key = (k) =>
     p.evaluate((k) => {
       const g = window.__game;
@@ -52,12 +51,17 @@ try {
       g.input.releaseVirtual(k);
       g.update(1 / 60);
     }, k);
-  await p.keyboard.press('KeyQ'); // a real key press gives the page the user activation window.open needs
-  await key('KeyQ');
-  await p.waitForTimeout(2000);
-  console.log('Q', JSON.stringify(await state()), 'ventanas abiertas', popups.filter((x) => !x.isClosed()).length);
-  await key('KeyX');
+  await p.keyboard.press('KeyV');
+  await p.waitForTimeout(1500);
+  console.log('V', JSON.stringify(await state()), 'ventanas abiertas', open());
+  for (let i = 1; i <= 3; i++) {
+    await p.keyboard.press('KeyQ');
+    await key('KeyQ');
+    await p.waitForTimeout(1500);
+    console.log(`Q ${i}`, JSON.stringify(await state()), 'ventanas abiertas', open(), 'en total', popups.length);
+  }
+  await p.keyboard.press('KeyV');
   await p.waitForTimeout(1000);
-  console.log('X', JSON.stringify(await state()), 'ventanas abiertas', popups.filter((x) => !x.isClosed()).length);
+  console.log('V (volver)', JSON.stringify(await state()), 'ventanas abiertas', open());
   await b.close();
 })();

@@ -8,6 +8,8 @@ const STORAGE_KEY = 'villarcayo.radio';
 const volume = () => AudioMix.level('radio');
 /** How long a stream may take to start before the next source is tried (ms). */
 const STREAM_TIMEOUT = 15000;
+/** Phones and tablets: hints name the panel's buttons instead of keys. */
+const touch = () => document.body.classList.contains('touch');
 
 /** "Radio off" sits at the end of the dial, as in GTA IV. */
 export const RADIO_OFF: Station = { id: 'off', name: 'Radio apagada', tagline: '', logo: '' };
@@ -53,6 +55,12 @@ export class RadioSystem {
    */
   private external = false;
   private popup: Window | null = null;
+  /**
+   * The window opened but the page got no handle on it (some hosts open pop-ups
+   * detached): it cannot be steered or closed from here, so no second one is
+   * opened; the station is changed in it until the player closes it.
+   */
+  private detached = false;
   /** Switched off with the power button for this ride (back on in the next car). */
   private poweredOff = false;
 
@@ -73,10 +81,11 @@ export class RadioSystem {
     panel.onNext = () => this.next();
     panel.onPrev = () => this.prev();
     panel.onPower = () => this.togglePower();
-    panel.onExternal = () => {
-      this.external = true;
-      this.tune(this.index, false);
-    };
+    panel.onExternal = () => this.toggleExternal();
+    // V: the radio in its own window and back, from the keyboard (while driving the mouse is captured).
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyV' && !e.repeat && this.inVehicle) this.toggleExternal();
+    });
     document.addEventListener('securitypolicyviolation', (e) => {
       // Only <audio> loads count (media-src); hls.js and fetch go through connect-src, which MP3 streams do not need.
       if (/media-src|default-src/.test(e.effectiveDirective) && /^https?:/.test(e.blockedURI)) this.streamsBlocked = true;
@@ -229,24 +238,54 @@ export class RadioSystem {
     }
   }
 
-  /** The station's MP3 stream in a window of its own (the browser's own player). */
+  /** Live stations in their own window (V or the panel's button), or back in the game. */
+  toggleExternal(): void {
+    this.external = !this.external;
+    if (!this.external) this.closePopup();
+    this.detached = false;
+    this.tune(this.index, false);
+  }
+
+  /**
+   * The station's MP3 stream in the radio's window (the browser's own player).
+   * Only ever one: a station change loads into the window already open.
+   */
   private openExternal(sources: StreamSource[]): void {
     const url = (sources.find((s) => !s.hls) ?? sources[0]).url;
-    this.popup = window.open(url, 'villarcayo-radio', 'popup,width=420,height=160');
-    const text = this.popup ? 'Sonando en la ventana de la radio' : 'Permite las ventanas emergentes para oír la radio en directo';
+    let text = touch() ? 'Sonando en otra pestaña' : 'Sonando en la ventana de la radio · V para volver';
+    if (this.popup && !this.popup.closed) {
+      try {
+        this.popup.location.replace(url);
+      } catch {
+        this.closePopup();
+      }
+    }
+    if (!this.popup || this.popup.closed) {
+      if (this.detached) text = touch() ? 'Cambia la emisora en su pestaña' : 'Cambia la emisora en su ventana, o ciérrala y pulsa V';
+      else {
+        this.popup = window.open(url, 'villarcayo-radio', 'popup,width=420,height=160');
+        // Opened without a handle (or blocked): never open another one behind it.
+        if (!this.popup) {
+          this.detached = true;
+          text = 'Si no se abrió la ventana, permite las ventanas emergentes';
+        }
+      }
+    }
     // After the panel has swapped to the station (it clears the line).
     window.setTimeout(() => this.panel.status(text), 250);
     if (this.popup) window.focus();
+  }
+
+  private closePopup(): void {
+    if (this.popup && !this.popup.closed) this.popup.close();
+    this.popup = null;
   }
 
   /** Stops what plays; `keepPopup` when the radio's window will just load the next station. */
   private stopAll(keepPopup = false): void {
     this.loadToken++;
     this.panel.offerExternal(false);
-    if (!keepPopup) {
-      if (this.popup && !this.popup.closed) this.popup.close();
-      this.popup = null;
-    }
+    if (!keepPopup) this.closePopup();
     this.synth?.stop();
     if (this.hls) {
       this.hls.destroy();
@@ -309,7 +348,13 @@ export class RadioSystem {
     // No signal: stay on the station (the player chose it) and offer its own window, where the
     // page's restrictions do not apply; Q / Z move on.
     this.hiss(false);
-    this.panel.status(this.streamsBlocked ? 'Esta página no deja cargar la radio en directo' : 'Sin señal · Q / Z para cambiar');
+    this.panel.status(
+      this.streamsBlocked
+        ? 'Esta página no deja cargar la radio en directo'
+        : touch()
+          ? 'Sin señal · ‹ › para cambiar'
+          : 'Sin señal · Q / Z para cambiar',
+    );
     this.panel.offerExternal(true);
   }
 

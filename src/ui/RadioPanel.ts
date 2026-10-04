@@ -38,12 +38,12 @@ export class RadioPanel {
         <div class="r-name"></div>
         <div class="r-tag"></div>
         <div class="r-state"></div>
-        <div class="r-keys">X o clic de rueda: apagar · Q Z o rueda: cambiar</div>
+        <div class="r-keys">X: apagar · Q Z: cambiar · V: radio en ventana</div>
       </div>
       <button class="r-arrow r-next" aria-label="Siguiente emisora">›</button>
       <button class="r-power" aria-label="Apagar o encender la radio" title="Apagar / encender la radio">⏻</button>
       <button class="r-play">▶ Encender radio</button>
-      <button class="r-ext">▶ Escuchar en otra ventana</button>`;
+      <button class="r-ext">▶ Escuchar en otra ventana (V)</button>`;
     parent.appendChild(this.root);
     const q = <T extends HTMLElement>(s: string) => this.root.querySelector(s) as T;
     this.card = q('.r-card');
@@ -111,6 +111,10 @@ export class RadioPanel {
 
   /** Offer to play the live station in a window of its own (where the page cannot load it). */
   offerExternal(on: boolean): void {
+    // No keyboard on phones: the button names no key there (the touch layer is set up after the panel).
+    const ext = this.root.querySelector('.r-ext');
+    if (on && ext)
+      ext.textContent = document.body.classList.contains('touch') ? '▶ Escuchar en otra pestaña' : '▶ Escuchar en otra ventana (V)';
     this.root.classList.toggle('ext', on);
   }
 }

@@ -433,19 +433,29 @@ function bolera(ctx: BuildContext, c: Court, mat: THREE.Material): void {
   const iron = mats.tint('#3a3d40');
   // Clay floor (the photo of the roof covers it in the orthophoto).
   surface(ctx, c, 6, mat, 0.04);
-  // Side boards, open at the tiro end.
+  // Castro position (also where the side boards open, to walk in from the frontón side).
+  const cx = Math.min(c.L / 2 - 7, -c.L / 2 + 23);
+  const gap = cx - 9;
+  // Side boards, open at the tiro end and with a 2 m gap on each side.
   for (const z of [-c.W / 2, c.W / 2]) {
-    c.lb.add(Unit.box, wood, 1.5, 0.5, z, 0, c.L - 3, 1.0, 0.08);
-    for (let x = -c.L / 2 + 3; x <= c.L / 2; x += 2.5) c.lb.add(Unit.box, wood, x, 0.55, z, 0, 0.12, 1.1, 0.12);
-    const [wx, wz] = c.lb.point(1.5, z);
-    ctx.collision.addBox(wx, wz, c.L - 3, 0.12, { rot: c.rot, top: 1.0, mask: Layer.Bodies });
+    for (const [x0, x1] of [
+      [-c.L / 2 + 3, gap - 1],
+      [gap + 1, c.L / 2],
+    ]) {
+      if (x1 - x0 < 0.5) continue;
+      const mx = (x0 + x1) / 2;
+      c.lb.add(Unit.box, wood, mx, 0.5, z, 0, x1 - x0, 1.0, 0.08);
+      const [wx, wz] = c.lb.point(mx, z);
+      ctx.collision.addBox(wx, wz, x1 - x0, 0.12, { rot: c.rot, top: 1.0, mask: Layer.Bodies });
+    }
+    for (let x = -c.L / 2 + 3; x <= c.L / 2; x += 2.5)
+      if (Math.abs(x - gap) > 1.1) c.lb.add(Unit.box, wood, x, 0.55, z, 0, 0.12, 1.1, 0.12);
   }
   // Back board that stops the balls.
   c.lb.add(Unit.box, wood, c.L / 2 - 0.1, 0.6, 0, 0, 0.15, 1.2, c.W);
   const [bx0, bz0] = c.lb.point(c.L / 2 - 0.1, 0);
   ctx.collision.addBox(bx0, bz0, 0.15, c.W, { rot: c.rot, top: 1.2, mask: Layer.Bodies });
   // Castro: the nine bolos in three rows, 1.25 m apart, on iron plates; the emboque to the side.
-  const cx = Math.min(c.L / 2 - 7, -c.L / 2 + 23);
   c.lb.add(Unit.box, mats.tint('#b48c5c'), cx, 0.05, 0, 0, 3.6, 0.04, 3.6);
   for (let i = -1; i <= 1; i++)
     for (let j = -1; j <= 1; j++) {
@@ -467,6 +477,7 @@ function bolera(ctx: BuildContext, c: Court, mat: THREE.Material): void {
   for (let k = 0; k < 4; k++) c.lb.add(Unit.sphere, ball, tx - 0.4, 0.5, c.W / 2 - 1.45 + k * 0.36, 0, 0.18, 0.18, 0.18);
   // Benches for the people watching, along the side wall of the roof.
   for (let x = -c.L / 2 + 3; x < c.L / 2 - 2; x += 4) {
+    if (Math.abs(x + 1.5 - gap) < 2.6) continue;
     c.lb.add(Unit.box, wood, x + 1.5, 0.45, -c.W / 2 - 0.55, 0, 3, 0.06, 0.4);
     for (const dx of [0.3, 2.7]) c.lb.add(Unit.box, iron, x + dx, 0.22, -c.W / 2 - 0.55, 0, 0.06, 0.44, 0.35);
   }
