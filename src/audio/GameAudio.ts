@@ -1,4 +1,5 @@
 import type { Vehicle } from '../entities/Vehicle';
+import { AudioMix } from './AudioMix';
 
 /** Tiny synthesized engine + tyre screech, built from WebAudio oscillators and noise. */
 export class GameAudio {
@@ -19,7 +20,10 @@ export class GameAudio {
     if (!Ctor) return;
     const ctx = (this.ctx = new Ctor());
     this.master = ctx.createGain();
-    this.master.gain.value = 0.5;
+    this.master.gain.value = 0.5 * AudioMix.level('sfx');
+    AudioMix.onChange(() => {
+      if (!this.muted) this.master.gain.value = 0.5 * AudioMix.level('sfx');
+    });
     this.master.connect(ctx.destination);
 
     this.engineFilter = ctx.createBiquadFilter();
@@ -56,7 +60,7 @@ export class GameAudio {
 
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.5, this.ctx.currentTime, 0.05);
+    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.5 * AudioMix.level('sfx'), this.ctx.currentTime, 0.05);
     return this.muted;
   }
 

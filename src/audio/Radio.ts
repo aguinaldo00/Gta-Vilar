@@ -1,9 +1,11 @@
 import type { RadioPanel } from '../ui/RadioPanel';
+import { AudioMix } from './AudioMix';
 import { RadioSynth } from './RadioSynth';
 import { STATIONS, type Station, type StreamSource } from './stations';
 
 const STORAGE_KEY = 'villarcayo.radio';
-const VOLUME = 0.85;
+/** Radio level from Ajustes (master × radio channel). */
+const volume = () => AudioMix.level('radio');
 /** How long a stream may take to start before the next source is tried (ms). */
 const STREAM_TIMEOUT = 9000;
 
@@ -117,7 +119,11 @@ export class RadioSystem {
     if (!Ctor) return;
     const ctx = (this.ctx = new Ctor());
     const master = ctx.createGain();
-    master.gain.value = VOLUME;
+    master.gain.value = volume();
+    AudioMix.onChange(() => {
+      master.gain.value = volume();
+      if (!this.muted) this.audio.volume = volume();
+    });
     master.connect(ctx.destination);
     this.synth = new RadioSynth(ctx, master);
     this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
@@ -196,7 +202,7 @@ export class RadioSystem {
 
   setMuted(m: boolean): void {
     this.muted = m;
-    this.audio.volume = m ? 0 : VOLUME;
+    this.audio.volume = m ? 0 : volume();
     if (this.ctx) void (m ? this.ctx.suspend() : this.ctx.resume());
   }
 
@@ -295,7 +301,7 @@ export class RadioSystem {
 
   private async tryStream(src: StreamSource, token: number): Promise<'ok' | 'fail' | 'gesture'> {
     const a = this.audio;
-    a.volume = this.muted ? 0 : VOLUME;
+    a.volume = this.muted ? 0 : volume();
     let Hls: HlsCtor | null = null;
     if (src.hls && !a.canPlayType('application/vnd.apple.mpegurl')) {
       Hls = (await import('hls.js')).default;

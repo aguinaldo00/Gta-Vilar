@@ -26,6 +26,7 @@ const KEY = 'villarcayo.settings';
  * public/config/audio.json before the real recordings are added) only logs
  * once instead of breaking anything.
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: one shared mixer for the whole game
 export class AudioMix {
   static settings: Settings = AudioMix.load();
   private static readonly sounds = new Map<Channel, Set<{ howl: Howl; base: number }>>();

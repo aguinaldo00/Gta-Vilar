@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AudioMix } from '../audio/AudioMix';
 import { clamp, damp, dampAngle } from '../core/math';
 import { Layer, type PhysicsWorld } from '../physics/PhysicsWorld';
 import type { World } from '../world/World';
@@ -50,8 +51,9 @@ export class FollowCamera {
     collision: Pick<PhysicsWorld, 'raycast'>,
     world: World,
   ): void {
-    this.yaw -= mouse.dx * MOUSE_SENS;
-    this.pitch = clamp(this.pitch + mouse.dy * MOUSE_SENS * 0.85, -0.3, 1.25);
+    const sens = MOUSE_SENS * AudioMix.settings.sensitivity;
+    this.yaw -= mouse.dx * sens;
+    this.pitch = clamp(this.pitch + mouse.dy * sens * 0.85, -0.3, 1.25);
 
     if (t.inVehicle && sinceLook > AUTO_CENTER_DELAY && Math.abs(t.speed) > 2) {
       this.yaw = dampAngle(this.yaw, t.heading + Math.PI, 2.4, dt);

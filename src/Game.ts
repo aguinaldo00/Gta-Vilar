@@ -9,7 +9,7 @@ import type { Config } from './config/Config';
 import { EventBus } from './core/EventBus';
 import type { GameEvents } from './core/events';
 import { FixedStepLoop } from './core/FixedStepLoop';
-import { Pedestrians } from './entities/Pedestrians';
+import { PedestrianSystem } from './entities/PedestrianSystem';
 import { Player } from './entities/Player';
 import { SkidMarks } from './entities/SkidMarks';
 import { PARKED, Vehicle } from './entities/Vehicle';
@@ -68,7 +68,8 @@ export class Game {
   private lastSteps = 0;
   /** Sounds configuration (public/config/audio.json), once loaded. */
   audioConf: { menu?: { music: string; volume?: number }; voices?: Record<string, string[] | string> } | null = null;
-  private pedestrians: Pedestrians | null = null;
+  /** Townspeople (global: `__game.pedestrians.panicAt(x, z, r)`). */
+  pedestrians: PedestrianSystem | null = null;
   /** Time of day and weather (global: `__game.climate`). */
   readonly climate: ClimateSystem;
   private readonly rain: RainFX;
@@ -92,6 +93,18 @@ export class Game {
   private last = -1;
   private time = 0;
   private running = false;
+  /**
+   * menu: the live town behind the main menu, filmed by a slow crane shot;
+   * intro: the arrival (the camera descends to the player, no control yet);
+   * play: the player has control.
+   */
+  mode: 'menu' | 'intro' | 'play' = 'menu';
+  /** Arrival shot progress 0–1 (set by the ArrivalSequence while mode is 'intro'). */
+  arrival = 0;
+  private menuTime = 0;
+  private readonly arrivalFrom = new THREE.Vector3();
+  private readonly arrivalLook = new THREE.Vector3();
+  private readonly tmpV = new THREE.Vector3();
 
   constructor(
     container: HTMLElement,
@@ -143,6 +156,7 @@ export class Game {
         this.ambient = new AmbientZones(conf.zones ?? [], { riverDistance: (x, z) => this.world.terrain.riverDistance(x, z).d });
         this.weatherAudio = new WeatherAudio(conf.weather ?? {});
         this.audioConf = conf;
+        this.pedestrians?.setVoices(conf.voices);
       })
       .catch(() => undefined);
     this.skids = new SkidMarks(this.scene);
@@ -187,6 +201,13 @@ export class Game {
 
   /** Called from the start screen (a user gesture, so audio and pointer lock are allowed). */
   begin(): void {
+    // Straight into the world (tests, or skipping the arrival): no menu, HUD on.
+    const menu = document.getElementById('menu');
+    if (menu) menu.hidden = true;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    document.getElementById('hud')?.classList.remove('hud-hidden');
+    this.mode = 'play';
+    this.ambienceGain = 1;
     this.running = true;
     this.locomotion.enabled = true;
     this.audio.init();
@@ -209,6 +230,83 @@ export class Game {
 
   start(): void {
     requestAnimationFrame(this.frame);
+  }
+
+  /** The menu's backdrop at a given hour (the real clock is set when entering). */
+  menuPreview(hours: number): void {
+    this.mode = 'menu';
+    this.hours = hours;
+  }
+
+  /** Audio unlock (from the menu's click), without taking control yet. */
+  unlockAudio(): void {
+    this.audio.init();
+    this.radio.init();
+    AudioMix.unlock();
+  }
+
+  /**
+   * In the dark between the menu and the world: the player at the spawn,
+   * the follow camera settled behind them, and the arrival shot's start high
+   * above (it descends to the play camera while mode is 'intro').
+   */
+  prepareArrival(): void {
+    this.respawn(false);
+    const s = this.config.game.player.spawn;
+    this.followCam.yaw = s.facing + Math.PI;
+    this.followCam.pitch = 0.3;
+    this.mode = 'intro';
+    this.arrival = 0;
+    for (let i = 0; i < 30; i++) this.update(1 / 60);
+    const p = this.player.pos;
+    // Start high above and a little behind, looking down on the plaza.
+    const back = this.tmpV.set(Math.sin(this.followCam.yaw), 0, Math.cos(this.followCam.yaw));
+    this.arrivalFrom.set(p.x + back.x * 38, p.y + 46, p.z + back.z * 38);
+    this.arrivalLook.set(p.x - back.x * 30, p.y, p.z - back.z * 30);
+  }
+
+  /**
+   * Behind the main menu: a slow crane shot drifting round the Plaza Mayor
+   * and the Ayuntamiento, low over the square, as in a film's opening.
+   */
+  private menuShot(dt: number): void {
+    this.menuTime += dt;
+    const t = this.menuTime * 0.035;
+    const cx = -6,
+      cz = 4;
+    const r = 34 + Math.sin(t * 0.7) * 6;
+    const x = cx + Math.cos(t) * r,
+      z = cz + Math.sin(t) * r;
+    const cam = this.camera;
+    cam.position.set(x, this.world.heightAt(x, z) + 9 + Math.sin(t * 1.3) * 2.5, z);
+    cam.lookAt(cx + Math.cos(t + 1.9) * 8, this.world.heightAt(cx, cz) + 6, cz + Math.sin(t + 1.9) * 8);
+    if (cam.fov !== 50) {
+      cam.fov = 50;
+      cam.updateProjectionMatrix();
+    }
+  }
+
+  /** The arrival: from high above down to the follow camera behind the player, easing in and out. */
+  private arrivalShot(): void {
+    const k = this.arrival;
+    const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
+    const cam = this.camera;
+    const target = this.tmpV.copy(cam.position);
+    cam.position.lerpVectors(this.arrivalFrom, target, e);
+    // Look from the plaza ahead towards the player as the camera settles.
+    const look = new THREE.Vector3(this.player.pos.x, this.player.pos.y + 1.4, this.player.pos.z);
+    look.lerpVectors(this.arrivalLook, look, Math.min(1, e * 1.15));
+    cam.lookAt(look);
+    cam.fov = 50 + (62 - 50) * e;
+    cam.updateProjectionMatrix();
+  }
+
+  /** End of the arrival: control to the player. */
+  takeControl(lockPointer: boolean): void {
+    this.mode = 'play';
+    this.running = true;
+    this.locomotion.enabled = true;
+    if (lockPointer && !this.touch) this.input.requestLock();
   }
 
   private spawnVehicles(): void {
@@ -284,7 +382,9 @@ export class Game {
       veh.impact = 0;
     }
 
-    const mouse = this.running ? this.input.consumeMouse() : { dx: 0, dy: 0 };
+    // Mouse movement is dropped (not saved up) while the player has no control.
+    const moved = this.input.consumeMouse();
+    const mouse = this.running ? moved : { dx: 0, dy: 0 };
     const cam = this.config.game.camera;
     this.followCam.update(
       dt,
@@ -301,8 +401,11 @@ export class Game {
       this.physics,
       this.world,
     );
+    if (this.mode === 'menu') this.menuShot(dt);
+    else if (this.mode === 'intro') this.arrivalShot();
 
-    this.climate.update(dt * this.timeScale, this.camera.position);
+    // The menu holds its dusk; the clock runs once in the world.
+    this.climate.update(this.mode === 'menu' ? 0 : dt * this.timeScale, this.camera.position);
     const sky = { night: this.climate.lightsOn };
     // Slightly more exposure at night, so the lamp-lit streets stay readable.
     this.renderer.toneMappingExposure = 0.65 + this.climate.night * 0.35 - this.climate.params.cloud * 0.04;
@@ -326,8 +429,11 @@ export class Game {
     this.world.update(dt, this.time, this.player.pos, this.camera);
     this.world.breakables.update(dt, this.vehicles);
     this.world.parkedCars.update(dt, this.vehicles);
-    if (!this.pedestrians) this.pedestrians = new Pedestrians(this.world, this.scene, this.touch ? 14 : 40);
-    this.pedestrians.update(dt, this.camera.position, sky.night, this.vehicles);
+    if (!this.pedestrians) {
+      this.pedestrians = new PedestrianSystem(this.world, this.scene, this.touch ? 70 : 160, this.touch ? 14 : 36);
+      this.pedestrians.setVoices(this.audioConf?.voices);
+    }
+    this.pedestrians.update(dt, this.camera.position, this.followCam.yaw, this.climate.lightsOn, this.vehicles);
     this.world.screens.update(
       dt,
       this.renderer,

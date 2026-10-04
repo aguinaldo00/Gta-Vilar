@@ -58,6 +58,7 @@ test('player physics: walls, jumping, swimming', async ({ page }) => {
     // biome-ignore lint/suspicious/noExplicitAny: test hook
     (window as any).__game.begin();
     // Deterministic light: midday (the clock otherwise starts at the local time).
+    // biome-ignore lint/suspicious/noExplicitAny: test hook
     (window as any).__game.hours = 13;
     window.requestAnimationFrame = () => 0;
   });

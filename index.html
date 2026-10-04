@@ -6,7 +6,9 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#0b0b0b" />
-    <title>Villarcayo Sandbox</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&display=swap" />
+    <title>GTA Villarcayo</title>
     <style>
       :root {
         --gta-yellow: #f2c230;
@@ -97,31 +99,76 @@
       }
       #lock-hint.show { display: block; }
 
-      #start {
-        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-        background: radial-gradient(ellipse at center, rgba(10,14,30,.55), rgba(5,5,10,.9)); color: #fff; z-index: 10;
-        transition: opacity .5s;
-      }
-      #start.hidden { opacity: 0; pointer-events: none; }
-      #start h1 {
-        margin: 0; font: italic 900 clamp(48px, 9vw, 112px) Georgia, 'Times New Roman', serif; color: var(--gta-yellow);
-        line-height: .9; text-align: center;
-      }
-      #start h1 span { display: block; font-size: .32em; color: #fff; letter-spacing: 6px; font-style: normal; }
-      #start p { margin: 0; max-width: 620px; text-align: center; opacity: .85; line-height: 1.5; padding: 0 16px; }
-      #start .keys { display: grid; grid-template-columns: auto auto; gap: 4px 18px; font-size: 14px; opacity: .9; }
-      #start .keys b { color: var(--gta-yellow); text-align: right; }
-      #play {
-        pointer-events: auto; font: italic 900 30px Georgia, serif; padding: 12px 46px; background: var(--gta-yellow); color: #111;
-        border: 3px solid #111; cursor: pointer; box-shadow: 0 6px 0 #111;
-      }
-      #play:disabled { opacity: .6; cursor: wait; }
-      #start .credits { font-size: 12px; opacity: .7; }
-      #play:not(:disabled):hover { transform: translateY(-2px); }
 
+
+      /* ---------- Main menu (over the live town) ---------- */
+      #menu {
+        position: fixed; inset: 0; z-index: 10; color: #fff; overflow: hidden; font-family: 'Oswald', 'Arial Narrow', Arial, sans-serif;
+        transition: opacity 1s ease;
+      }
+      #menu.leaving { opacity: 0; pointer-events: none; }
+      #menu[hidden] { display: none; }
+      #menu .m-backdrop {
+        position: absolute; inset: -40px; background: #07090d url(ui/cover.webp) center 38% / cover no-repeat;
+        filter: blur(18px) brightness(.55) saturate(1.1); transition: opacity 2.2s ease;
+      }
+      #menu.ready .m-backdrop { opacity: 0; }
+      #menu .m-shade {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(ellipse 70% 60% at 38% 48%, rgba(0,0,0,0) 0%, rgba(0,0,0,.35) 70%, rgba(0,0,0,.75) 100%),
+          linear-gradient(90deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,.55) 100%),
+          linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 70%, rgba(0,0,0,.65) 100%);
+      }
+      #menu .m-logo {
+        position: absolute; left: 36%; top: 47%; transform: translate(-50%, -50%); width: min(52vw, 760px);
+        filter: drop-shadow(0 10px 30px rgba(0,0,0,.6)); animation: m-logo-in 1.6s ease both;
+      }
+      @keyframes m-logo-in { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%); } }
+      #menu .m-list {
+        position: absolute; right: 7vw; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: stretch;
+        gap: 6px; min-width: 300px; animation: m-list-in 1.2s .4s ease both;
+      }
+      @keyframes m-list-in { from { opacity: 0; transform: translate(20px, -50%); } to { opacity: 1; transform: translateY(-50%); } }
+      #menu .m-list button {
+        all: unset; cursor: pointer; padding: 8px 20px; font: 500 26px/1.15 'Oswald', 'Arial Narrow', sans-serif; letter-spacing: 3px;
+        color: #f2f2f2; text-shadow: 0 2px 8px rgba(0,0,0,.8); text-align: left; border-left: 3px solid transparent;
+        transition: background .2s, color .2s, padding .2s;
+      }
+      #menu .m-list button:focus, #menu .m-list button:hover { background: rgba(255,255,255,.94); color: #0b0b0b; text-shadow: none; padding-left: 26px; }
+      #menu .m-list button:disabled { opacity: .55; cursor: wait; background: none; color: #ddd; }
+      #menu .m-list button[hidden] { display: none; }
+      #menu.panel-open .m-list, #menu.panel-open .m-logo { opacity: .15; filter: blur(2px); transition: opacity .4s, filter .4s; }
+      #menu .m-panel {
+        position: absolute; right: 6vw; top: 50%; transform: translate(24px, -50%); width: min(520px, 88vw); max-height: 82vh; overflow: auto;
+        padding: 26px 30px; background: rgba(8,10,14,.82); border-left: 3px solid #fff; backdrop-filter: blur(6px);
+        opacity: 0; pointer-events: none; transition: opacity .35s, transform .35s;
+      }
+      #menu .m-panel.open { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
+      #menu .m-panel h2 { margin: 0 0 16px; font: 500 30px 'Oswald', sans-serif; letter-spacing: 6px; }
+      #menu .m-field { display: grid; grid-template-columns: 1fr 150px 52px; align-items: center; gap: 12px; margin: 10px 0; font: 400 15px 'Oswald', sans-serif; letter-spacing: 1px; }
+      #menu .m-field input[type=range] { accent-color: #fff; width: 100%; }
+      #menu .m-field select { grid-column: span 2; background: #111; color: #fff; border: 1px solid #555; padding: 4px 6px; font: 400 14px Arial, sans-serif; }
+      #menu .m-field output { text-align: right; opacity: .8; font-size: 13px; }
+      #menu .m-hint, #menu .m-small { font: 400 12px/1.6 Arial, sans-serif; opacity: .75; }
+      #menu .m-hint b { color: #fff; }
+      #menu .m-credits p { margin: 0 0 12px; font: 400 15px/1.5 'Oswald', sans-serif; letter-spacing: .5px; }
+      #menu .m-back { all: unset; cursor: pointer; margin-top: 10px; padding: 6px 16px; font: 500 18px 'Oswald', sans-serif; letter-spacing: 3px; border: 1px solid rgba(255,255,255,.6); }
+      #menu .m-back:hover, #menu .m-back:focus { background: #fff; color: #000; }
+      #menu .m-loading { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); text-align: center; transition: opacity .8s; }
+      #menu.ready .m-loading { opacity: 0; }
+      #menu .m-bar { width: 220px; height: 3px; background: rgba(255,255,255,.2); margin: 0 auto 10px; }
+      #menu .m-bar i { display: block; height: 100%; width: 8%; background: #fff; transition: width .4s; }
+      #menu .m-loading span { font: 400 14px 'Oswald', sans-serif; letter-spacing: 4px; }
+      #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 20; transition: opacity 1s ease; }
+      #fade.on { opacity: 1; }
+      #hud { transition: opacity .8s ease; }
+      #hud.hud-hidden { opacity: 0; }
+      @media (max-width: 760px), (max-height: 500px) {
+        #menu .m-logo { left: 50%; top: 32%; width: 70vw; }
+        #menu .m-list { right: 50%; top: auto; bottom: 8vh; transform: translateX(50%); min-width: 240px; animation: none; }
+      }
       /* ---------- Touch devices ---------- */
-      #start .keys.touch-only { display: none; }
-      body.touch #start .keys.touch-only { display: grid; }
       body.touch .desktop-only { display: none !important; }
       body.touch { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
       #touch { position: fixed; inset: 0; z-index: 5; touch-action: none; }
@@ -155,16 +202,14 @@
       #rotate-hint { display: none; font-size: 14px; color: var(--gta-yellow); }
       @media (orientation: portrait) { body.touch #rotate-hint { display: block; } }
       @media (max-height: 500px) {
-        #start { gap: 8px; }
-        #start h1 { font-size: 52px; }
-        #start p { font-size: 13px; }
-        #play { font-size: 22px; padding: 8px 32px; }
+        #menu .m-list button { font-size: 20px; padding: 6px 16px; }
+        #menu .m-logo { width: 46vw; }
       }
     </style>
   </head>
   <body>
     <div id="app"></div>
-    <div id="hud">
+    <div id="hud" class="hud-hidden">
       <canvas id="minimap" width="200" height="200"></canvas>
       <div id="zone" class="outlined"></div>
       <div id="prompt"></div>
@@ -192,30 +237,38 @@
       <div id="lock-hint">Haz clic para controlar la cámara con el ratón</div>
     </div>
 
-    <div id="start">
-      <h1><span>LAS MERINDADES</span>VILLARCAYO</h1>
-      <p>
-        Villarcayo calle a calle, a partir de OpenStreetMap: la Plaza Mayor con el templete, el Ayuntamiento y la Torre del
-        Corregimiento, el Parque El Soto con el Río Nela y sus piscinas naturales, y la Vía Verde del Santander-Mediterráneo
-        con la locomotora Mikado.
-      </p>
-      <div class="keys touch-only">
-        <b>Joystick</b><span>andar · conducir (a tope = correr)</span>
-        <b>Arrastrar</b><span>mover la cámara (lado derecho)</span>
-        <b>SALTAR</b><span>saltar · freno de mano</span>
-        <b>ROBAR</b><span>robar / salir del vehículo</span>
-      </div>
+    <div id="menu">
+      <div class="m-backdrop"></div>
+      <div class="m-shade"></div>
+      <img class="m-logo" src="ui/logo.webp" alt="Grand Theft Auto Villarcayo" />
+      <nav class="m-list" aria-label="Menú principal">
+        <button id="play" disabled>CARGANDO…</button>
+        <button data-panel="settings">AJUSTES</button>
+        <button data-panel="credits">CRÉDITOS</button>
+        <!-- Reserved for a future account / login entry. -->
+        <button id="m-login" data-panel="login" hidden>INICIAR SESIÓN</button>
+      </nav>
+      <section class="m-panel" id="panel-settings" aria-label="Ajustes">
+        <h2>AJUSTES</h2>
+        <div class="m-fields"></div>
+        <p class="m-hint">Teclas en el juego: <b>WASD</b> mover · <b>Shift</b> correr · <b>Espacio</b> saltar / freno · <b>F</b> robar coche · <b>Q Z</b> emisora · <b>X</b> radio · <b>T</b> +1 hora · <b>Y</b> clima · <b>M</b> sonido · <b>H</b> ayuda</p>
+        <button class="m-back" data-close>VOLVER</button>
+      </section>
+      <section class="m-panel" id="panel-credits" aria-label="Créditos">
+        <h2>CRÉDITOS</h2>
+        <div class="m-credits">
+          <p><b>GTA Villarcayo</b> · Merindades Games</p>
+          <p>Villarcayo de Merindad de Castilla la Vieja, calle a calle.</p>
+          <p class="m-small">Mapa: © colaboradores de OpenStreetMap (ODbL 1.0)<br />Relieve, LiDAR y ortofoto: PNOA © Instituto Geográfico Nacional / Junta de Castilla y León (CC BY 4.0)<br />Edificios y fachadas: © Dirección General del Catastro (CC BY 4.0)<br />Motor: three.js · física: Rapier · audio: Howler.js</p>
+          <p class="m-small">Proyecto de fans sin ánimo de lucro, sin relación con Rockstar Games.</p>
+        </div>
+        <button class="m-back" data-close>VOLVER</button>
+      </section>
+      <section class="m-panel" id="panel-login" aria-label="Iniciar sesión"></section>
+      <div class="m-loading"><div class="m-bar"><i></i></div><span>CARGANDO…</span></div>
       <div id="rotate-hint">↻ Gira el móvil en horizontal para jugar mejor</div>
-      <div class="keys desktop-only">
-        <b>WASD</b><span>andar · conducir</span>
-        <b>Shift</b><span>correr</span>
-        <b>Espacio</b><span>saltar · freno de mano</span>
-        <b>F / E</b><span>robar / salir del vehículo</span>
-        <b>Ratón</b><span>cámara</span>
-      </div>
-      <button id="play" disabled>CARGANDO…</button>
-      <small class="credits">Mapa: © colaboradores de OpenStreetMap (ODbL) · Relieve, LiDAR y ortofoto: PNOA © Instituto Geográfico Nacional (CC BY 4.0) · Edificios: © Dirección General del Catastro (CC BY 4.0)</small>
     </div>
+    <div id="fade"></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

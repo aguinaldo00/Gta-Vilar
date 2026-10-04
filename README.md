@@ -86,12 +86,24 @@ The data pipeline runs in two steps. The browser never parses OSM.
 | Picnic, playgrounds, pines | 7 picnic tables + picnic sites (riverside tables in El Soto), 13 playgrounds, conifers (`leaf_type=needleleaved`) | Extra tables around each picnic site; swings and slide; hedges on field boundaries; field patchwork where OSM has no land use |
 | Terrain and heights | — (from the **PNOA-LiDAR** and **MDT05/MDT25**) | Real relief at 2 m; building walls up to the measured eave and roofs up to the measured ridge; river levels and bed depth from the LiDAR ground. Façades are still stylised (no open data on façade colour or window layout); the orthophoto on roofs has some relief displacement; the NW LiDAR tile is missing, so that corner uses the 5 m MDT |
 
+## Menu and arrival
+
+`index.html` + `src/ui/MainMenu.ts`: the main menu over the live town (a crane shot round the Plaza Mayor at dusk), logo and list as in the design mockups: **Entrar al mundo**, **Ajustes** (volumes per channel, mouse, length of the day, weather and hour when entering), **Créditos**, and a hidden slot for a future login. The first click unlocks the browser's audio. `src/ui/ArrivalSequence.ts` runs the way in: fade to black (1 s, menu music down) → player placed in the dark → fade in from black, blurred to sharp (2 s) → the camera descends from high above to behind the player (3.6 s) → control → HUD fades in half a second later. `game.begin()` skips all of it (tests).
+
+## Sound files (placeholders)
+
+`public/config/audio.json` lists every recorded sound the game plays through Howler.js, with placeholder paths under `public/assets/audio/` (menu music; ambient zones for the Plaza Mayor, the Río Nela, the bar street and the outskirts, each with loop, night loop, music layer and stingers; rain, wind and thunder; pedestrians' reaction lines). Drop the files at those paths (or change the paths): a missing file plays as silence. Zones are data: circle, river distance or outskirts, priority and crossfade time. Volumes per channel are in Ajustes.
+
+## Climate
+
+`src/world/Climate.ts` (`__game.climate`): time of day (a day in 24 real minutes by default) and weather (despejado, nublado, lluvia, lluvia fuerte, niebla) with smooth transitions, changing by itself; wet ground, lightning, fog; street lamps and windows light up at night or under a dark sky. Debug: **T** one hour on, **Y** next weather, `__game.climate.setTime(21.5)`, `__game.climate.setWeather('niebla')`, or `?hora=21&clima=lluvia` in the URL. Rain drops are a hook for now (`RainFX.particles`): the realistic rain will plug in there.
+
 ## Life in town
 
 - **Car radio (GTA IV style)**: on when you get into a vehicle; the station's logo and name show at the top centre (click it, use the ‹ › buttons, **Q / Z** or the mouse wheel to change). National stations play their live streams (Los 40, Cadena SER, COPE, Onda Cero, Kiss FM, Rock FM, Cadena Dial, Europa FM, RNE; HLS through hls.js, loaded on demand); Radio Merindades, Nela FM and Corregimiento Rock are made up and their music is generated live. The last station is remembered. Logos are original monochrome plates; to use official artwork, put `public/radio/<id>.svg` and list the id in `public/radio/logos.json` (shown in greyscale).
 - **Day and night**: the clock starts at your local time and runs a day in 24 minutes (**T** skips an hour). The sun follows Villarcayo's path (rise ~7:30, set ~20:30), with golden and blue hours, stars and moonlit shadows; street lamps glow and light the street around you, a share of windows light up, headlights come on.
 - **Footsteps** sound different on asphalt, paving, grass, gravel and water.
-- **Pedestrians** walk the sidewalks and paths (stepping aside from cars) and sit on the real benches; most go home after dark.
+- **Pedestrians** (`src/entities/PedestrianSystem.ts`, `PedestrianAI.ts`): a population of townspeople in the busy places (more near shops and the plaza), simulated near the camera, drawn with a pool of re-coloured bodies. They walk, stop, look at their phone, sit on the real benches, jump aside from a fast car, fly when hit (ragdoll) and get up angry; `__game.pedestrians.panicAt(x, z, r)` sends them running for shelter. Voice lines are hooks to the files in audio.json.
 - **Parked cars** (from the LiDAR) can be shoved by a driven car; **signs, lamp posts and bollards** fall over when hit.
 
 ## Graphics and quality levels
