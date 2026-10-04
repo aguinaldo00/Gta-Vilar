@@ -260,6 +260,7 @@ export function buildCommerce(ctx: BuildContext): Signs {
     for (let i = 0; i < s.n.length; i++) code = (code * 31 + s.n.charCodeAt(i)) % 100003;
     const h = hash01(code * 0.37, 2.3);
     const st = styleOf(s, h);
+    if (s.aw) st.awning = s.aw;
     // The shop front stands on the pavement in front of the wall.
     const ground = ctx.terrain.heightAt(s.x + Math.sin(s.a) * 1.5, s.z + Math.cos(s.a) * 1.5);
     const lb = new LocalBatch(batch, s.x, ground, s.z, s.a);
@@ -338,7 +339,7 @@ export function buildCommerce(ctx: BuildContext): Signs {
     }
 
     // Bar and café terraces where the pavement or the square has room.
-    if ((s.c === 'bar' || s.c === 'cafe') && h < 0.7 && !s.s) {
+    if ((s.c === 'bar' || s.c === 'cafe') && (s.tr || (h < 0.7 && !s.nt)) && !s.s) {
       const out = 2.6;
       const px = s.x + Math.sin(s.a) * out,
         pz = s.z + Math.cos(s.a) * out;

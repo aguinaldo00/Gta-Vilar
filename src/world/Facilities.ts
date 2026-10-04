@@ -276,12 +276,19 @@ function gasolinera(
       for (const slide of [0, 6, -6, 12, -12]) {
         const x = road.x + nx * off + tx * slide,
           z = road.z + nz * off + tz * slide;
+        // Corners, centre and the pump islands: no service way (the car wash lane) may run under an island.
         const corners = [
           [-8, -4.5],
           [8, -4.5],
           [-8, 4.5],
           [8, 4.5],
           [0, 0],
+          [-4, -3],
+          [-4, 0],
+          [-4, 3],
+          [4, -3],
+          [4, 0],
+          [4, 3],
         ].map(([a, b]) => [x + tx * a + nx * b, z + tz * a + nz * b]);
         if (corners.every(([qx, qz]) => free(qx, qz))) {
           cx = x;
@@ -311,7 +318,13 @@ function gasolinera(
       lb.add(Unit.box, mats.tint('#222'), x + 0.32, 0.9, z + 0.3, 0, 0.06, 0.6, 0.06);
     }
     const [wx, wz] = lb.point(x, 0);
-    ctx.collision.addBox(wx, wz, 1.4, 6, { rot: face, top: 2 });
+    // Where no clear spot was found the canopy stands at the mapped point: an island on a
+    // driveway (the car wash lane) must not close it.
+    const onLane = [-3, 0, 3].some((z) => {
+      const lane = ctx.roads.nearest(...lb.point(x, z), 4, (r) => VEHICLE_ROADS.has(r.k));
+      return lane !== null && lane.d < 0.8;
+    });
+    if (!onLane) ctx.collision.addBox(wx, wz, 1.4, 6, { rot: face, top: 2 });
   }
   // Price totem by the road.
   lb.add(Unit.box, white, -9.5, 3, 4, 0, 0.5, 6, 1.6);

@@ -282,7 +282,7 @@ function addChunked(ctx: BuildContext, surfaces: FlatMesh[], mat: THREE.Material
 
 export function buildRoads(ctx: BuildContext): void {
   const { mats, terrain } = ctx;
-  // Atlas slots: 0 asphalt, 1 sidewalk, 2 paving, 3 dirt, 4 gravel, 5 white paint.
+  // Atlas slots: 0 asphalt, 1 sidewalk, 2 paving, 3 dirt, 4 gravel, 5 white paint, 6 red paving.
   const asphalt = new FlatMesh(8, 0);
   const sidewalk = new FlatMesh(2, 1);
   const paving = new FlatMesh(3, 2);
@@ -290,6 +290,7 @@ export function buildRoads(ctx: BuildContext): void {
   const gravel = new FlatMesh(4, 4);
   const marks = new FlatMesh(1, 5);
   const kerbs = new FlatMesh(1, 1);
+  const redPaving = new FlatMesh(2, 6);
   const net = ctx.roads;
   // A point on the carriageway of any street (the sidewalk of one street must not cover another).
   const onCarriageway = (x: number, z: number) => {
@@ -351,6 +352,15 @@ export function buildRoads(ctx: BuildContext): void {
     }
   }
 
+  // Red paving (car parks and squares checked on photos), just over the grey paving.
+  for (const a of ctx.map.areas) {
+    if (a.pv !== 'red') continue;
+    const y = ground(0.046);
+    for (const [p, q, s] of subdivideTris(triangulate(toPts(a.o), (a.h ?? []).map(toPts)), 4)) {
+      redPaving.tri(p[0], y(p[0], p[1]), p[1], q[0], y(q[0], q[1]), q[1], s[0], y(s[0], s[1]), s[1]);
+    }
+  }
+
   // Zebra crossings at the OSM crossing nodes.
   for (let i = 0; i < ctx.map.crossings.length; i += 3) {
     const x = ctx.map.crossings[i],
@@ -375,7 +385,7 @@ export function buildRoads(ctx: BuildContext): void {
     }
   }
 
-  addChunked(ctx, [sidewalk, kerbs, asphalt, paving, dirt, gravel, marks], mats.roadAtlas);
+  addChunked(ctx, [sidewalk, kerbs, asphalt, paving, redPaving, dirt, gravel, marks], mats.roadAtlas);
 }
 
 /** Deck slab and parapets for bridges that actually cross the river or the pools. */

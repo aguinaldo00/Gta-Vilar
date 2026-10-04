@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { Layer } from '../physics/PhysicsWorld';
+import { LocalBatch } from './Batcher';
 import { CUSTOM_CHURCHES } from './Churches';
 import type { BuildContext } from './context';
 import { CUSTOM_FACILITIES } from './Facilities';
 import { FACADE_STYLES, STYLE_COLOURS } from './facadeStyles';
-import { centroid, hash01, type Pt, signedArea, toPts, triangulate } from './geo';
+import { centroid, hash01, orientedBox, type Pt, signedArea, toPts, triangulate } from './geo';
 import { FLOOR_H } from './Materials';
 import type { MapBuilding } from './mapData';
 import { Unit } from './props';
@@ -387,7 +388,8 @@ export function buildBuildings(ctx: BuildContext): void {
       // Under a roof baked from the LiDAR (the Bolera Nela's pitched roof) only the pillars, up to its eaves.
       // Checked roofs (b.rc) get posts every ~6 m along the sides; other canopies keep them at the corners.
       const every = b.rc ? 6 : Number.POSITIVE_INFINITY;
-      if (roofRef) pillars(ctx, outer, ground, Math.max(2.5, roofRef.e - ground), every);
+      if (b.tent) tent(ctx, outer, ground, b.ch ?? 2.6, b.rc ?? '#ecebe4');
+      else if (roofRef) pillars(ctx, outer, ground, Math.max(2.5, roofRef.e - ground), every);
       else canopy(ctx, outer, ground, b.ch ?? (Math.min(h - ground, 6) > 1.5 ? Math.min(h - ground, 6) : 3.2), b.rc, every);
       continue;
     }
@@ -535,6 +537,49 @@ function canopy(ctx: BuildContext, ring: Pt[], ground: number, h: number, colour
   // A checked colour is sheet metal seen from above as in the photo: plain paint, not the tile texture.
   ctx.batch.addWorld(roof.geometry(), every === Number.POSITIVE_INFINITY ? ctx.mats.roofVC : ctx.mats.tint(colour));
   pillars(ctx, ring, ground, h, every);
+}
+
+/**
+ * Bar tent awning (carpa) on its traced footprint: a fabric roof with the ridge along
+ * the long side, a scalloped valance all round, and slim posts every ~3 m.
+ */
+function tent(ctx: BuildContext, ring: Pt[], ground: number, h: number, colour: string): void {
+  const o = orientedBox(ring);
+  let rot = o.angle,
+    L = o.w,
+    D = o.d;
+  if (D > L) {
+    rot += Math.PI / 2;
+    [L, D] = [D, L];
+  }
+  const lb = new LocalBatch(ctx.batch, o.cx, ground, o.cz, rot);
+  const cloth = ctx.mats.tint(colour);
+  const rise = Math.min(1.2, D * 0.25);
+  const slope = Math.atan2(rise, D / 2),
+    len = Math.hypot(rise, D / 2);
+  for (const side of [-1, 1]) {
+    lb.add(Unit.box, cloth, 0, h + rise / 2, (side * D) / 4, 0, L + 0.2, 0.04, len + 0.1, side * slope);
+    // Valance along the long sides.
+    lb.add(Unit.box, cloth, 0, h - 0.15, (side * D) / 2, 0, L + 0.2, 0.3, 0.03);
+  }
+  for (const side of [-1, 1]) {
+    // Gable ends: the triangle approximated by stacked strips, and the valance.
+    for (let k = 0; k < 4; k++) {
+      const t = (k + 0.5) / 4;
+      lb.add(Unit.box, cloth, (side * (L + 0.2)) / 2, h + rise * (k / 4) + rise / 8, 0, 0, 0.03, rise / 4, D * (1 - t));
+    }
+    lb.add(Unit.box, cloth, (side * (L + 0.2)) / 2, h - 0.15, 0, 0, 0.03, 0.3, D);
+  }
+  const post = ctx.mats.tint('#d8d8d4');
+  const n = Math.max(1, Math.round(L / 3));
+  for (let k = 0; k <= n; k++) {
+    const x = -L / 2 + (L * k) / n;
+    for (const side of [-1, 1]) {
+      lb.add(Unit.cyl, post, x, h / 2, (side * D) / 2, 0, 0.05, h, 0.05);
+      const [px, pz] = lb.point(x, (side * D) / 2);
+      ctx.collision.addCircle(px, pz, 0.06, { top: h, mask: Layer.Solid });
+    }
+  }
 }
 
 /** Posts at the corners of a roof, and every `every` metres along the sides. */

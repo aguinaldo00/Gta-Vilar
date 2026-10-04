@@ -57,6 +57,8 @@ export interface MapBuilding {
   rc?: string;
   ch?: number;
   face?: [number, number];
+  /** Canopy of fabric with a ridge along its length (a bar's tent awning). */
+  tent?: 1;
 }
 
 /**
@@ -95,12 +97,20 @@ export interface MapArea {
   wall?: string;
   fh?: number;
   steps?: [number, number, number][];
+  /** Red concrete paving (k 'paving' for outlines of their own, or on a parking / pedestrian area). */
+  pv?: 'red';
 }
 
 /** Shop, bar or public service, on the street-facing wall of its building. */
 export interface MapShop {
   /** Second front of a corner shop, on the other street. */
   s?: 1;
+  /** No terrace in front (photos). */
+  nt?: 1;
+  /** Terrace in front (photos). */
+  tr?: 1;
+  /** Awning colour (photos). */
+  aw?: string;
   /** Point on the wall. */
   x: number;
   z: number;

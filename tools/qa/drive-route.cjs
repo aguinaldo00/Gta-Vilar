@@ -27,12 +27,25 @@ const route = (process.argv[2] ?? '')
       ? v.teleport(x0, z0, Math.atan2(x1 - x0, z1 - z0))
       : Object.assign(v, { x: x0, z: z0, heading: Math.atan2(x1 - x0, z1 - z0), vx: 0, vz: 0 });
     g.player.enterVehicle(v);
+    // Remember where the body last touched something, to name what blocks a stuck car.
+    let touch = [];
+    const body = v.body;
+    if (body) {
+      const move = body.move.bind(body);
+      body.move = (...a) => {
+        const r = move(...a);
+        if (r.contacts.length)
+          touch = r.contacts.map((c) => `(${c.px?.toFixed(1)},${c.pz?.toFixed(1)}) n=(${c.nx.toFixed(2)},${c.nz.toFixed(2)})`);
+        return r;
+      };
+    }
     const out = [];
     for (const [tx, tz] of route.slice(1)) {
       let ok = false,
         best = Number.POSITIVE_INFINITY,
-        still = 0;
-      for (let f = 0; f < 60 * 30; f++) {
+        still = 0,
+        backs = 0;
+      for (let f = 0; f < 60 * 40; f++) {
         const d = Math.hypot(tx - v.x, tz - v.z);
         if (d < 2) {
           ok = true;
@@ -41,20 +54,35 @@ const route = (process.argv[2] ?? '')
         let err = Math.atan2(tx - v.x, tz - v.z) - v.heading;
         while (err > Math.PI) err -= 2 * Math.PI;
         while (err < -Math.PI) err += 2 * Math.PI;
-        for (const k of ['KeyW', 'KeyA', 'KeyD']) g.input.releaseVirtual(k);
-        if (Math.abs(v.speed) < 4) g.input.pressVirtual('KeyW');
+        for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) g.input.releaseVirtual(k);
+        if (still > 120 && backs < 4) {
+          // Stuck against something: back up a little with the wheel the other way, as a driver would.
+          backs++;
+          still = 0;
+          for (let r = 0; r < 70; r++) {
+            for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) g.input.releaseVirtual(k);
+            if (Math.abs(v.speed) < 2.5) g.input.pressVirtual('KeyS');
+            g.input.pressVirtual(err > 0 ? 'KeyD' : 'KeyA');
+            g.update(1 / 60);
+          }
+          continue;
+        }
+        // Slow down for sharp turns (a gateway off the street, the car wash).
+        if (Math.abs(v.speed) < (Math.abs(err) > 0.7 ? 1.6 : 4)) g.input.pressVirtual('KeyW');
         if (err > 0.08) g.input.pressVirtual('KeyA');
         else if (err < -0.08) g.input.pressVirtual('KeyD');
         g.update(1 / 60);
         if (d < best - 0.05) {
           best = d;
           still = 0;
-        } else if (++still > 180) break;
+        } else if (++still > 180 && backs >= 4) break;
       }
-      out.push(`${ok ? 'OK ' : 'ATASCADO'} → (${tx},${tz}) en (${v.x.toFixed(1)},${v.z.toFixed(1)})`);
+      out.push(
+        `${ok ? 'OK ' : 'ATASCADO'} → (${tx},${tz}) en (${v.x.toFixed(1)},${v.z.toFixed(1)})${ok ? '' : ` rumbo ${v.heading.toFixed(2)} contactos ${touch.join(' ')}`}`,
+      );
       if (!ok) break;
     }
-    for (const k of ['KeyW', 'KeyA', 'KeyD']) g.input.releaseVirtual(k);
+    for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) g.input.releaseVirtual(k);
     return out;
   }, route);
   for (const l of log) console.log('   ', l);

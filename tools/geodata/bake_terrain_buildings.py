@@ -453,9 +453,12 @@ def apply_fixes(m, corr):
             print(f"buildingFixes: nothing at {f['at']}")
             continue
         b = min(hits, key=lambda b: Polygon(list(zip(b["o"][0::2], b["o"][1::2]))).area)
-        for k in ("t", "rc", "ch", "face"):
+        for k in ("t", "rc", "ch", "face", "tent"):
             if k in f:
                 b[k] = f[k]
+        # Facade colour seen in the photos ("#rrggbb"), over the cadastre photo's.
+        if "fc" in f:
+            b["fc"] = int(f["fc"].lstrip("#"), 16)
         nb += 1
     for f in corr.get("pitchFixes", []):
         hits = [a for a in m["areas"] if a.get("k") == "pitch" and inside(a["o"], f["at"])]

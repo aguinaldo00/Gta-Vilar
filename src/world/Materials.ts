@@ -251,6 +251,12 @@ function roadAtlasMaterial(tiles: (THREE.Texture | null)[]): Lambert {
       g.fillRect(x, y, C, C);
     }
   });
+  // Slot 6: red concrete paving, the sidewalk slabs dyed red (the newer streets and car parks).
+  g.drawImage(canvas, C, C, C, C, 2 * C, 0, C, C);
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = '#c4705f';
+  g.fillRect(2 * C, 0, C, C);
+  g.globalCompositeOperation = 'source-over';
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;

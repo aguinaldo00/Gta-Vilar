@@ -25,7 +25,19 @@ import polygonClipping, { type MultiPolygon as ClipMulti } from 'polygon-clippin
  * furniture and railings that OSM does not map.
  */
 interface Corrections {
-  shops?: Record<string, { at?: [number, number]; name?: string; w?: number; street?: string; front?: [number, number, number, number] }>;
+  shops?: Record<
+    string,
+    {
+      at?: [number, number];
+      name?: string;
+      w?: number;
+      street?: string;
+      front?: [number, number, number, number];
+      terrace?: boolean;
+      awning?: string;
+      back?: [number, number, number, number];
+    }
+  >;
   furniture?: { k: string; x: number; z: number; a: number; t?: string; replaces?: [number, number] }[];
   barriers?: { p: number[]; k: string; h?: number; cut?: boolean; hedge?: number }[];
   barrierKinds?: { near: [number, number]; k: string; h?: number; c?: string }[];
@@ -33,6 +45,7 @@ interface Corrections {
   gates?: { at: [number, number] }[];
   /** Ways under a building checked on photos: clear height and width (a footway that cars use). */
   passages?: { near: [number, number]; tp?: number; w?: number }[];
+  redPaving?: { near?: [number, number]; k?: string; p?: number[] }[];
   extraShops?: { n: string; c: string; x: number; z: number; a: number; w: number }[];
 }
 const corrections: Corrections = (() => {
@@ -350,6 +363,7 @@ function assembleRings(wayIds: string[]): Pt[][] {
 }
 
 const flat = (r: Pt[]) => r.flatMap(([x, z]) => [q(x), q(z)]);
+const unflat = (o: number[]): Pt[] => Array.from({ length: o.length / 2 }, (_, i) => [o[2 * i], o[2 * i + 1]] as Pt);
 
 // ---------------------------------------------------------- polygon source
 
@@ -702,6 +716,8 @@ interface AreaOut {
   s?: string;
   c?: 1;
   l?: 'n' | 'b';
+  /** Red concrete paving (photos / orthophoto). */
+  pv?: 'red';
 }
 const areas: AreaOut[] = [];
 for (const p of polygons) {
@@ -728,6 +744,16 @@ for (const p of polygons) {
   // Parking layout: parallel / perpendicular / diagonal bays.
   if (match[2] === 'parking' && t.orientation) a.s = t.orientation;
   areas.push(a);
+}
+// Red paving checked on photos: a mapped area containing `near`, or an outline of its own (`p`).
+for (const r of corrections.redPaving ?? []) {
+  if (r.p) {
+    areas.push({ k: 'paving', o: r.p, pv: 'red' });
+    continue;
+  }
+  const hit = r.near && areas.filter((a) => a.k === r.k && pointInRing(r.near!, unflat(a.o)));
+  if (!hit?.length) console.warn(`redPaving: no ${r.k} area at ${r.near}`);
+  else for (const a of hit) a.pv = 'red';
 }
 
 // ---------------------------------------------------------------- roads
@@ -1372,6 +1398,12 @@ function facingStreet(p: Pt): string {
 interface ShopOut {
   /** Secondary front of a corner shop (no terrace). */
   s?: 1;
+  /** No terrace in front (photos). */
+  nt?: 1;
+  /** Terrace in front (photos). */
+  tr?: 1;
+  /** Awning colour (photos). */
+  aw?: string;
   x: number;
   z: number;
   a: number;
@@ -1863,6 +1895,22 @@ for (const n of nodes.values())
   }
 
 // ---------------------------------------------------------------- output
+
+// Checked on photos (corrections.shops[name]): terrace or none (terrace: true / false), awning
+// colour, and a back door on the other street (`back`, a second front without terrace).
+for (const [key, f] of Object.entries(corrections.shops ?? {})) {
+  const name = f.name ?? key;
+  const mine = shops.filter((sh) => sh.n === name);
+  for (const sh of mine) {
+    if (f.terrace === false) sh.nt = 1;
+    if (f.terrace === true && !sh.s) sh.tr = 1;
+    if (f.awning) sh.aw = f.awning;
+  }
+  if (f.back && mine.length) {
+    const [x, z, a, w] = f.back;
+    shops.push({ s: 1, x, z, a, w, c: mine[0].c, n: name, ...(f.awning ? { aw: f.awning } : {}) });
+  }
+}
 
 const out = {
   meta: {
