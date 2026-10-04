@@ -25,7 +25,7 @@ import polygonClipping, { type MultiPolygon as ClipMulti } from 'polygon-clippin
  * furniture and railings that OSM does not map.
  */
 interface Corrections {
-  shops?: Record<string, { at?: [number, number]; name?: string; w?: number; street?: string }>;
+  shops?: Record<string, { at?: [number, number]; name?: string; w?: number; street?: string; front?: [number, number, number, number] }>;
   furniture?: { k: string; x: number; z: number; a: number; t?: string; replaces?: [number, number] }[];
   barriers?: { p: number[]; k: string; h?: number; cut?: boolean; hedge?: number }[];
   barrierKinds?: { near: [number, number]; k: string; h?: number }[];
@@ -546,6 +546,7 @@ interface PartTmp {
   top: number;
 }
 const partsTmp: PartTmp[] = [];
+const orphanParts = new Set<BuildingOut>();
 const CUSTOM_MODELS = new Set(['townhall', 'torre']);
 for (const [, w] of ways) {
   const t = w.tags;
@@ -568,6 +569,9 @@ for (const [, w] of ways) {
   if (ht) out.ht = ht;
   if (parent?.b.mat) out.mat = parent.b.mat;
   if (parent?.b.n) out.n = parent.b.n;
+  // A tiny part with no building around it (the stair head of a building OSM lacks): it holds shop
+  // fronts, but is left out of the output (the LiDAR traces the real building).
+  if (!parent && Math.abs(signedArea(ring)) < 15) orphanParts.add(out);
   partsTmp.push({ out, parent: parent?.b, ids, bottom: mlv, top: ht ?? mlv + lv });
 }
 const edgeOwners = new Map<string, PartTmp[]>();
@@ -1506,6 +1510,15 @@ for (const n of nodes.values()) {
     kiosks.push({ x: q(p[0]), z: q(p[1]), t: tags.name ?? (tags.shop === 'lottery' ? 'ONCE' : 'Prensa') });
     continue;
   }
+  if (fix?.front) {
+    // A front checked on photos on a building OSM lacks (traced from the LiDAR later on).
+    const cat = shopCategory(tags);
+    if (cat) {
+      const [x, z, a, w] = fix.front;
+      shops.push({ x, z, a, w, c: cat.c, n: shortName(tags, cat.label) });
+    }
+    continue;
+  }
   placeShop(p, tags, fix?.w);
 }
 for (const p of polygons) {
@@ -1806,7 +1819,7 @@ const out = {
     projection: 'ETRS89 / UTM 30N shifted to the origin; x east, z south, metres',
     bounds: B,
   },
-  buildings,
+  buildings: buildings.filter((b) => !orphanParts.has(b)),
   areas,
   roads,
   rails,

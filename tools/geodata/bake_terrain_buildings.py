@@ -452,6 +452,11 @@ def main(map_path, lidar_path, mdt_path):
     demolished = remove_demolished(m, dtm, roof, lidar_on_grid(m, lid, "dsm"))
     footprint, measured = measure_buildings(m, dtm, roof, H0, covered)
     added = trace_new_buildings(m, dtm, roof, footprint, H0)
+    # A traced building's low LiDAR edge is often a yard roof or an annex: a pitched roof
+    # rises at most ~4 m above its eaves (Plaza Mayor 2, by the kebab, came out one storey high).
+    for b in m["buildings"]:
+        if b.get("src") == "lidar" and "top" in b and b.get("eave") is not None and b["top"] - b["eave"] > 4.5:
+            b["eave"] = round(b["top"] - 4.0, 2)
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(lidar_path))))
     f_matched, f_photo = bake_facades(m, os.path.join(root, "raw", "catastro"), os.path.join(root, "data", "facades.json"))
     walls_path = os.path.join(os.path.dirname(lidar_path), "lidar_walls.npz")

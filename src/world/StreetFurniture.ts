@@ -302,19 +302,26 @@ export function buildStreetFurniture(ctx: BuildContext): void {
   const at = (f: MapFurniture) => new LocalBatch(ctx.batch, f.x, terrain.heightAt(f.x, f.z), f.z, f.a);
   const post = (lb: LocalBatch, h: number, r = 0.035, m: THREE.Material = grey) => lb.add(Unit.cyl, m, 0, h / 2, 0, 0, r * 2, h, r * 2);
 
+  // Traffic signs: a post and a plate that a car can knock down (Breakables).
+  const mtx = (x: number, y: number, z: number, sx: number, sy: number, sz: number) =>
+    new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
+  const signPost = (f: MapFurniture, cell: SignCell, size: number) => {
+    const h = size > 0.65 ? 2.6 : 2.5;
+    ctx.breakables.add(f.x, terrain.heightAt(f.x, f.z), f.z, f.a, 0.1, [
+      { key: 'sign-post', geo: Unit.cyl, mat: grey, local: mtx(0, h / 2, 0, 0.07, h, 0.07) },
+      { key: `sign-${cell}`, geo: quads[cell], mat: signMat, local: mtx(0, h - 0.35, 0.05, size, size, 1) },
+      { key: 'sign-back', geo: B, mat: grey, local: mtx(0, h - 0.35, 0.03, size * 0.85, size * 0.85, 0.02) },
+    ]);
+    collision.addCircle(f.x, f.z, 0.08, { top: h, mask: Layer.Player });
+  };
+
   for (const f of ctx.map.furniture ?? []) {
     const lb = at(f);
     switch (f.k) {
       case 'stop':
-      case 'give_way': {
-        post(lb, 2.6);
-        const size = f.k === 'stop' ? 0.6 : 0.7;
-        lb.add(quads[f.k], signMat, 0, 2.25, 0.05, 0, size, size, 1);
-        // Plain grey back of the plate.
-        lb.add(B, grey, 0, 2.25, 0.03, 0, size * 0.85, size * 0.85, 0.02);
-        collision.addCircle(f.x, f.z, 0.08, { top: 2.6, mask: Layer.Bodies });
+      case 'give_way':
+        signPost(f, f.k, f.k === 'stop' ? 0.6 : 0.7);
         break;
-      }
       case 'recycling': {
         const streams = (f.t ?? 'other').split(',');
         streams.forEach((s, i) => {
@@ -391,15 +398,10 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         lb.add(B, mats.white, 0, 0.75, 0, 0, 0.45, 1.5, 0.3);
         lb.add(B, mats.glow('#3ad06a'), 0, 1.3, 0.16, 0, 0.3, 0.06, 0.02);
         break;
-      case 'sign': {
+      case 'sign':
         // Single plate on a post (S-13 crossings, R-303, P-15a...).
-        const cell = (SIGN_CELLS as readonly string[]).includes(f.t ?? '') ? (f.t as SignCell) : 'S-13';
-        post(lb, 2.5);
-        lb.add(quads[cell], signMat, 0, 2.2, 0.05, 0, 0.6, 0.6, 1);
-        lb.add(B, grey, 0, 2.2, 0.03, 0, 0.5, 0.5, 0.02);
-        collision.addCircle(f.x, f.z, 0.08, { top: 2.5, mask: Layer.Bodies });
+        signPost(f, (SIGN_CELLS as readonly string[]).includes(f.t ?? '') ? (f.t as SignCell) : 'S-13', 0.6);
         break;
-      }
       case 'direction': {
         // Stacked direction plates on two posts.
         const lines = (f.t ?? '').split('|').filter(Boolean);
@@ -467,8 +469,8 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         // "ES" (the plaza's national flag, high and large) or "EU:small" (the row in front of the Ayuntamiento).
         const [code, size] = (f.t ?? 'ES').split(':');
         const kind = code === 'EU' ? 'eu' : code === 'CYL' ? 'cyl' : 'es';
-        const tall = size !== 'small';
-        flag(ctx, kind, f.x, y + 0.5, f.z, tall ? 11.5 : 7.5, f.a, 0, tall ? 2.2 : 1.1);
+        const [poleH, cloth] = size === 'small' ? [7.5, 1.1] : size === 'mid' ? [9, 1.35] : [11.5, 2.2];
+        flag(ctx, kind, f.x, y + 0.5, f.z, poleH, f.a, 0, cloth);
         collision.addCircle(f.x, f.z, 0.35, { top: 12, mask: Layer.Solid });
         break;
       }
@@ -516,6 +518,14 @@ export function buildStreetFurniture(ctx: BuildContext): void {
           lb.add(B, mats.iron, x, 0.95, z, 0, w, 0.04, d);
         collision.addBox(f.x, f.z, 2.0, 2.0, { rot: f.a, top: 0.6, mask: Layer.Bodies });
         break;
+      case 'stonebench': {
+        // Long low block of light stone (the benches round the Ayuntamiento's square).
+        const L = Number.parseFloat(f.t ?? '3') || 3;
+        lb.add(B, mats.tint('#e3dccb'), 0, 0.23, 0, 0, L, 0.46, 0.62);
+        lb.add(B, mats.tint('#eee8da'), 0, 0.48, 0, 0, L + 0.06, 0.06, 0.7);
+        collision.addBox(f.x, f.z, L, 0.62, { rot: f.a, top: 0.5, mask: Layer.Bodies });
+        break;
+      }
       case 'shrub':
         // Round clipped shrub in a stone planter.
         lb.add(B, mats.stone, 0, 0.25, 0, 0, 1.0, 0.5, 1.0);

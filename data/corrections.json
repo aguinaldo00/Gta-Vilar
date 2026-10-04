@@ -1,5 +1,5 @@
 {
- "_note": "Corrections checked against street-level photos (May 2025). Shops: keyed by the OSM name; 'at' moves the shop's point (local x, z), 'name' renames it, 'c' sets the category, 'w' its frontage in metres. Furniture: items missing from OSM, same format as map.furniture. Barriers: extra railings and walls. A furniture item with 'replaces': [x, z] moves the OSM item of the same kind found within 2 m of that point. barrierKinds: OSM barriers with a vertex within 3 m of 'near' take that kind (and height). A barrier with 'cut': true is opened where paths cross it; 'hedge': 1|-1 grows a hedge on its left/right side (verja).",
+ "_note": "Corrections checked against street-level photos (May 2025). Shops: keyed by the OSM name; 'at' moves the shop's point (local x, z), 'name' renames it, 'c' sets the category, 'w' its frontage in metres. Furniture: items missing from OSM, same format as map.furniture. Barriers: extra railings and walls. A furniture item with 'replaces': [x, z] moves the OSM item of the same kind found within 2 m of that point. barrierKinds: OSM barriers with a vertex within 3 m of 'near' take that kind (and height). A barrier with 'cut': true is opened where paths cross it; 'hedge': 1|-1 grows a hedge on its left/right side (verja). A shop with 'front': [x, z, a, w] is placed exactly there (for buildings OSM lacks).",
  "shops": {
   "Calé": {
    "name": "Carnicerías Hijos del Calé",
@@ -46,6 +46,14 @@
   },
   "Melo": {
    "name": "Colchones Melo"
+  },
+  "Shirin Kebab - Bar & Grill": {
+   "front": [
+    -1.5,
+    -60.0,
+    2.432,
+    5.0
+   ]
   }
  },
  "furniture": [
@@ -96,27 +104,6 @@
    ]
   },
   {
-   "k": "flagpole",
-   "x": -5.5,
-   "z": -6.6,
-   "a": -0.308,
-   "t": "EU:small"
-  },
-  {
-   "k": "flagpole",
-   "x": -4.0,
-   "z": -6.1,
-   "a": -0.308,
-   "t": "ES:small"
-  },
-  {
-   "k": "flagpole",
-   "x": -2.6,
-   "z": -5.7,
-   "a": -0.308,
-   "t": "CYL:small"
-  },
-  {
    "k": "sign",
    "x": 1.3,
    "z": -0.3,
@@ -164,6 +151,41 @@
    "x": -67.2,
    "z": 22.2,
    "a": 0.744
+  },
+  {
+   "k": "flagpole",
+   "x": -7.09,
+   "z": -4.79,
+   "a": -0.308,
+   "t": "EU:mid"
+  },
+  {
+   "k": "flagpole",
+   "x": -4.71,
+   "z": -4.03,
+   "a": -0.308,
+   "t": "ES:mid"
+  },
+  {
+   "k": "flagpole",
+   "x": -2.33,
+   "z": -3.27,
+   "a": -0.308,
+   "t": "CYL:mid"
+  },
+  {
+   "k": "stonebench",
+   "x": -7.2,
+   "z": -1.15,
+   "a": -0.308,
+   "t": "7.0"
+  },
+  {
+   "k": "stonebench",
+   "x": 2.32,
+   "z": 1.88,
+   "a": -0.308,
+   "t": "5.0"
   }
  ],
  "barriers": [
@@ -196,6 +218,16 @@
    "h": 1.7,
    "hedge": -1,
    "cut": true
+  },
+  {
+   "k": "verja",
+   "p": [
+    -3.1,
+    -63.5,
+    2.2,
+    -58.9
+   ],
+   "h": 1.4
   }
  ],
  "barrierKinds": [
@@ -204,8 +236,8 @@
     6.7,
     -45.1
    ],
-   "k": "verja",
-   "h": 1.6
+   "k": "railing",
+   "h": 1.0
   }
  ]
 }

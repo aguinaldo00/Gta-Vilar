@@ -4,6 +4,7 @@ import { Rng } from '../core/math';
 import { type ColliderOptions, type HeightGrid, Layer, type StaticColliders } from '../physics/PhysicsWorld';
 import { buildBarriers } from './Barriers';
 import { Batcher } from './Batcher';
+import { Breakables } from './Breakables';
 import { buildBuildings } from './Buildings';
 import { buildChurches } from './Churches';
 import { buildCommerce } from './Commerce';
@@ -54,6 +55,8 @@ export class World {
   readonly stats: { meshes: number; triangles: number; byStage?: Record<string, number> } = { meshes: 0, triangles: 0 };
   /** The Ayuntamiento's digital screen and the billboards (add slides with screens.add). */
   readonly screens: DigitalScreens;
+  /** Signs, lamp posts and bollards that cars knock over (update with the vehicles each frame). */
+  readonly breakables = new Breakables();
   private readonly animators: Animator[] = [];
   private readonly named: NamedArea[] = [];
   private readonly landmarkZones: { name: string; x: number; z: number; r: number }[] = [];
@@ -90,6 +93,7 @@ export class World {
       terrain: this.terrain,
       roads: this.roads,
       quality,
+      breakables: this.breakables,
     };
     this.env = new Environment(scene, renderer, rng, quality, map);
     // Without an orthophoto the ground falls back to the land-use texture.
@@ -128,6 +132,7 @@ export class World {
     this.stats.triangles = Math.round(batch.triangles);
     this.stats.byStage = Object.fromEntries(Object.entries(batch.byStage).map(([k, v]) => [k, Math.round(v)]));
     this.stats.meshes = batch.build(scene);
+    this.breakables.finish(scene);
     this.buildBounds(collision);
     // The background valley floor meets the map edge at its typical height.
     const B = this.bounds;

@@ -175,9 +175,10 @@ function buildAyuntamiento(ctx: BuildContext): void {
   P.add(cap, mats.stone, 0, topY + gh, gz);
   P.add(Unit.box, mats.stoneTrim, 0, topY + gh + 0.05, gz, 0, gw + 0.3, 0.2, 1.4);
   const clock = new THREE.Mesh(new THREE.CircleGeometry(1.15, 32), mats.clock);
-  clock.position.set(0, topY + gh * 0.55, gz + 0.62);
+  // In front of its stone ring (the ring's disc reaches gz + 0.63).
+  clock.position.set(0, topY + gh * 0.55, gz + 0.68);
   P.group.add(clock);
-  P.add(Unit.cyl16, mats.stoneTrim, 0, topY + gh * 0.55, gz + 0.58, 0, 2.7, 0.1, 2.7, Math.PI / 2);
+  P.add(Unit.cyl16, mats.stoneTrim, 0, topY + gh * 0.55, gz + 0.6, 0, 2.7, 0.12, 2.7, Math.PI / 2);
   const cageBase = topY + gh + gw / 2;
   for (const [lx, lz] of [
     [-0.8, -0.4],

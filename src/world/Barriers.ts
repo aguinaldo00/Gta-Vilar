@@ -323,6 +323,19 @@ export function buildBarriers(ctx: BuildContext): void {
           const iron = RAILING;
           prism(masonry, x0, z0, x1, z1, 0.06, g0 + h - 0.06, g1 + h - 0.06, g0 + h, g1 + h, iron, 1, caps);
           prism(masonry, x0, z0, x1, z1, 0.04, g0 + 0.25, g1 + 0.25, g0 + 0.3, g1 + 0.3, iron, 1, caps);
+          // Bars between the rails.
+          bars.quad(
+            [x0, g0 + 0.3, z0],
+            [x1, g1 + 0.3, z1],
+            [x1, g1 + h - 0.06, z1],
+            [x0, g0 + h - 0.06, z0],
+            [0, 0],
+            [len / n / 0.6, 0],
+            [len / n / 0.6, h - 0.36],
+            [0, h - 0.36],
+            [-(z1 - z0), 0, x1 - x0],
+            WHITE,
+          );
           const posts = Math.max(1, Math.round(len / n / 1.5));
           for (let j = 0; j <= posts; j++) {
             if (j === 0 && !caps[0] && k > 0) continue;
@@ -408,8 +421,10 @@ export function buildBarriers(ctx: BuildContext): void {
     const x = bol[i],
       z = bol[i + 1];
     const y = terrain.heightAt(x, z);
-    ctx.batch.add(post, ctx.mats.tint('#3a3a3a'), x, y + 0.45, z);
-    collision.addCircle(x, z, 0.15, { bottom: y - 0.5, top: y + 0.9, mask: Layer.Bodies, absolute: true });
+    ctx.breakables.add(x, y, z, 0, 0.12, [
+      { key: 'bollard', geo: post, mat: ctx.mats.tint('#3a3a3a'), local: new THREE.Matrix4().makeTranslation(0, 0.45, 0) },
+    ]);
+    collision.addCircle(x, z, 0.15, { bottom: y - 0.5, top: y + 0.9, mask: Layer.Player, absolute: true });
   }
   const barsMat = barsMaterial();
   for (const { masonry, hedges, mesh, bars } of chunks.values()) {

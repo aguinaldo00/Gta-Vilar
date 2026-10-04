@@ -241,6 +241,7 @@ export class Game {
     );
 
     this.world.update(dt, this.time, this.player.pos, this.camera);
+    this.world.breakables.update(dt, this.vehicles);
     this.world.screens.update(
       dt,
       this.renderer,

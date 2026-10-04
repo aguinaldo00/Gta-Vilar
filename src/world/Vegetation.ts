@@ -187,9 +187,21 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
         const r = roads.nearest(x, z, 4, (rd) => VEHICLE_ROADS.has(rd.k));
         if (!r || r.d > 2.5 || r.d < 0.3) continue;
         const gy = ctx.terrain.heightAt(x, z);
-        batch.add(Unit.cyl, mats.iron, x, gy + 0.45, z, 0, 0.14, 0.9, 0.14);
-        batch.add(Unit.blob, mats.iron, x, gy + 0.92, z, 0, 0.1, 0.1, 0.1);
-        ctx.collision.addCircle(x, z, 0.12, { top: 0.9, mask: Layer.Bodies });
+        ctx.breakables.add(x, gy, z, 0, 0.1, [
+          {
+            key: 'plaza-bollard',
+            geo: Unit.cyl,
+            mat: mats.iron,
+            local: new THREE.Matrix4().compose(new THREE.Vector3(0, 0.45, 0), new THREE.Quaternion(), new THREE.Vector3(0.14, 0.9, 0.14)),
+          },
+          {
+            key: 'plaza-bollard-top',
+            geo: Unit.blob,
+            mat: mats.iron,
+            local: new THREE.Matrix4().compose(new THREE.Vector3(0, 0.92, 0), new THREE.Quaternion(), new THREE.Vector3(0.1, 0.1, 0.1)),
+          },
+        ]);
+        ctx.collision.addCircle(x, z, 0.12, { top: 0.9, mask: Layer.Player });
       }
     }
     // Planters and bins around the inner edge.
@@ -353,6 +365,7 @@ export function buildVegetation(ctx: BuildContext): void {
   // Street lamps at their mapped positions.
   const lamp = LAMP();
   const ornate = ORNATE_LAMP();
+  const lampMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
   for (let i = 0; i < ctx.map.lamps.length; i += 2) {
     let x = ctx.map.lamps[i],
       z = ctx.map.lamps[i + 1];
@@ -370,8 +383,12 @@ export function buildVegetation(ctx: BuildContext): void {
       z = road.z + nz * (road.road.w / 2 + 0.4);
     }
     // Cast-iron fernandino lamps in the Plaza Mayor, plain poles elsewhere.
-    ctx.batch.addMatrix(inPlaza(x, z) ? ornate : lamp, ctx.mats.propsVC, m.makeTranslation(x, terrain.heightAt(x, z), z));
-    collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Bodies });
+    // Knocked over by cars (Breakables); only people bump into them.
+    const fancy = inPlaza(x, z);
+    ctx.breakables.add(x, terrain.heightAt(x, z), z, 0, fancy ? 0.3 : 0.15, [
+      { key: fancy ? 'lamp-ornate' : 'lamp', geo: fancy ? ornate : lamp, mat: lampMat },
+    ]);
+    collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Player });
   }
 
   // Benches face the nearest street or path.
