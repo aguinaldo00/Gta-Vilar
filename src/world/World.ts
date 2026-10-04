@@ -150,6 +150,7 @@ export class World {
     this.parkedCars = new ParkedCars(ctx);
     for (let i = 0; i < LAMP_LIGHTS; i++) {
       const l = new THREE.PointLight('#ffc27a', 0, 18, 1.6);
+      l.visible = false;
       this.lampLights.push(l);
       scene.add(l);
     }
@@ -300,10 +301,9 @@ export class World {
   /** Street lamp light pools: the nearest lamps to the camera get a real light at night. */
   updateNightLights(camera: THREE.Vector3, night: number): void {
     const L = this.lampLights;
-    if (night < 0.03) {
-      for (const l of L) l.intensity = 0;
-      return;
-    }
+    // Lights that are off are hidden, so daytime shaders do not pay for them.
+    for (const l of L) l.visible = night >= 0.03;
+    if (night < 0.03) return;
     const lamps = this.lampHeads;
     const best: { d: number; i: number }[] = [];
     for (let i = 0; i < lamps.length; i += 3) {

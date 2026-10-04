@@ -13,6 +13,7 @@ test('vehicles collide with buildings', async ({ page }) => {
     // biome-ignore lint/suspicious/noExplicitAny: test hook
     const g = (window as any).__game;
     g.begin();
+    g.hours = 13;
     window.requestAnimationFrame = () => 0;
     const v = g.vehicles[0];
     const p = v.sidePoint(1);

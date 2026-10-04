@@ -6,6 +6,7 @@ import type { Config } from './config/Config';
 import { EventBus } from './core/EventBus';
 import type { GameEvents } from './core/events';
 import { FixedStepLoop } from './core/FixedStepLoop';
+import { Pedestrians } from './entities/Pedestrians';
 import { Player } from './entities/Player';
 import { SkidMarks } from './entities/SkidMarks';
 import { PARKED, Vehicle } from './entities/Vehicle';
@@ -60,6 +61,7 @@ export class Game {
   readonly radio = new RadioSystem(new RadioPanel(document.getElementById('hud') ?? document.body));
   private wasDriving = false;
   private lastSteps = 0;
+  private pedestrians: Pedestrians | null = null;
   /** Time of day in hours: starts at the real local time and runs a game minute per second (a day in 24 minutes). */
   hours = new Date().getHours() + new Date().getMinutes() / 60;
   /** Game minutes per real second. */
@@ -269,10 +271,13 @@ export class Game {
         this.headlamp.target.position.set(car.x + fx * 16, car.y - 0.5, car.z + fz * 16);
         this.headlamp.intensity = 90 * sky.night;
       } else this.headlamp.intensity = 0;
+      this.headlamp.visible = this.headlamp.intensity > 0;
     }
     this.world.update(dt, this.time, this.player.pos, this.camera);
     this.world.breakables.update(dt, this.vehicles);
     this.world.parkedCars.update(dt, this.vehicles);
+    if (!this.pedestrians) this.pedestrians = new Pedestrians(this.world, this.scene, this.touch ? 14 : 40);
+    this.pedestrians.update(dt, this.camera.position, sky.night, this.vehicles);
     this.world.screens.update(
       dt,
       this.renderer,

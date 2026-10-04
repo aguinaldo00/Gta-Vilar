@@ -15,6 +15,7 @@ test('boots, walks, steals a car and drives', async ({ page }) => {
     // biome-ignore lint/suspicious/noExplicitAny: test hook
     const g = (window as any).__game;
     g.begin();
+    g.hours = 13;
     window.requestAnimationFrame = () => 0;
     const step = (s: number) => {
       for (let i = 0; i < Math.round(s * 60); i++) g.update(1 / 60);
