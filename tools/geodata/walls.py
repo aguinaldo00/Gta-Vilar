@@ -173,13 +173,51 @@ def lidar_barriers(m, walls, building_mask_1m):
     return out
 
 
+def open_crossings(m):
+    """
+    Cuts every wall, fence and hedge where a road, lane or path crosses it.
+    OSM often draws the wall around a car park or a yard as a closed line
+    without its gate, and LiDAR runs can bridge an entrance: either way the
+    way in was blocked. Each crossing leaves the way's width plus 0.6 m a side.
+    """
+    from shapely.geometry import LineString, MultiLineString
+    from shapely.ops import unary_union
+    from shapely.strtree import STRtree
+
+    corridors = []
+    for r in m["roads"]:
+        p = r["p"]
+        if len(p) < 4 or r.get("b"):
+            continue
+        corridors.append(LineString([(p[i], p[i + 1]) for i in range(0, len(p), 2)]).buffer(r["w"] / 2 + 0.6, cap_style=2))
+    tree = STRtree(corridors)
+    out, cuts = [], 0
+    for b in m["barriers"]:
+        p = b["p"]
+        line = LineString([(p[i], p[i + 1]) for i in range(0, len(p), 2)])
+        hits = [corridors[int(k)] for k in tree.query(line) if corridors[int(k)].intersects(line)]
+        if not hits:
+            out.append(b)
+            continue
+        rest = line.difference(unary_union(hits))
+        parts = list(rest.geoms) if isinstance(rest, MultiLineString) else [rest] if not rest.is_empty else []
+        cuts += 1
+        for part in parts:
+            if part.length < 1.0:
+                continue
+            nb = dict(b)
+            nb["p"] = [round(v, 2) for xy in part.coords for v in xy]
+            out.append(nb)
+    m["barriers"] = out
+    return cuts
+
+
 def bake_barriers(m, walls_npz, building_mask_1m):
     m["barriers"] = [b for b in m.get("barriers", []) if not b.get("src")]
-    if walls_npz is None:
-        return 0
-    found = lidar_barriers(m, walls_npz, building_mask_1m)
+    found = lidar_barriers(m, walls_npz, building_mask_1m) if walls_npz is not None else []
     m["barriers"].extend(found)
-    return len(found)
+    cuts = open_crossings(m)
+    return len(found), cuts
 
 
 def total_length(barriers):

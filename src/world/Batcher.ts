@@ -84,6 +84,9 @@ export class Batcher {
     if (!g.attributes.normal) g.computeVertexNormals();
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2), 2));
     if (wantColor && !g.attributes.color) g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+    // Material-specific attributes (facade style, road atlas cell) default to 0, so every geometry
+    // of a group has the same attributes and the group can be merged.
+    for (const name of extra) if (!g.attributes[name]) g.setAttribute(name, new THREE.Float32BufferAttribute(new Float32Array(n), 1));
     g.clearGroups();
     _box.setFromBufferAttribute(g.attributes.position as THREE.BufferAttribute).getCenter(_c);
     const key = `${mat.uuid}|${Math.floor(_c.x / CHUNK)}|${Math.floor(_c.z / CHUNK)}`;
@@ -99,7 +102,10 @@ export class Batcher {
     for (const { mat, geos } of this.groups.values()) {
       const merged = mergeGeometries(geos, false);
       for (const g of geos) g.dispose();
-      if (!merged) continue;
+      if (!merged) {
+        console.warn(`Batcher: could not merge ${geos.length} geometries of ${mat.name}`);
+        continue;
+      }
       merged.computeBoundingSphere();
       const mesh = new THREE.Mesh(merged, mat);
       mesh.castShadow = mat.userData.castShadow !== false;

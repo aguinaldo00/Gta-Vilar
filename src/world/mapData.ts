@@ -26,6 +26,19 @@ export interface MapBuilding {
   src?: 'lidar';
   /** Index of the roof (MapData.roofs) covering this footprint; its walls stop at that roof's eaves. */
   rf?: number;
+  /** Lifted over a passage (tunnel=building_passage): walls start this many metres above the ground. */
+  lift?: number;
+  /** Ground-floor piece beside a passage, under a lifted building (no roof; walls up to `top`). */
+  gf?: 1;
+  /** Facade style (row of src/world/facadeStyles.ts) and wall colour 0xRRGGBB from the cadastre photo. */
+  fs?: number;
+  fc?: number;
+  /** Galerías seen in the facade photo: 1 the whole facade, 2 one glazed bay. */
+  gal?: 0 | 1 | 2;
+  /** Cadastre: year of construction, current use, reference. */
+  year?: number;
+  use?: string;
+  cref?: string;
 }
 
 /**
@@ -62,6 +75,8 @@ export interface MapArea {
 
 /** Shop, bar or public service, on the street-facing wall of its building. */
 export interface MapShop {
+  /** Second front of a corner shop, on the other street. */
+  s?: 1;
   /** Point on the wall. */
   x: number;
   z: number;
@@ -143,6 +158,8 @@ export interface MapData {
   buildings: MapBuilding[];
   /** Walls, fences and hedges (OSM, plus plot walls found in the LiDAR: src "lidar"); h in metres. */
   barriers?: { p: Coords; k: 'wall' | 'fence' | 'hedge' | 'retaining_wall'; h?: number; src?: 'lidar' }[];
+  /** Parked cars seen by the LiDAR: flat [x, z, heading, length, ...]. */
+  cars?: number[];
   /** Bollards, flat [x, z, ...]. */
   bollards?: number[];
   /** Roofs shared by rows of buildings (absent: each building gets its own roof). */

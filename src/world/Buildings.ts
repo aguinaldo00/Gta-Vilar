@@ -3,6 +3,7 @@ import { Layer } from '../physics/PhysicsWorld';
 import { CUSTOM_CHURCHES } from './Churches';
 import type { BuildContext } from './context';
 import { CUSTOM_FACILITIES } from './Facilities';
+import { FACADE_STYLES, STYLE_COLOURS } from './facadeStyles';
 import { centroid, hash01, type Pt, signedArea, toPts, triangulate } from './geo';
 import { FLOOR_H } from './Materials';
 import type { MapBuilding } from './mapData';
@@ -10,18 +11,25 @@ import { VEHICLE_ROADS } from './Roads';
 
 /** Landmarks get dedicated models instead of a generic extrusion. */
 const CUSTOM = new Set(['townhall', 'torre']);
-const OLD_TOWN_RADIUS = 450;
 
-// Plaster and stone tones seen around the old town (cream, ochre, sand, brick, white).
-const FACADE_TINTS = ['#f3eee3', '#e8d7b5', '#f7f5f0', '#dcc39b', '#ead0bb', '#d9d1c1', '#e3dccb', '#d9b48c', '#c98f6b', '#e6c9a3'].map(
-  (c) => new THREE.Color(c),
-);
-const MODERN_TINTS = ['#e9e6df', '#cfc8bb', '#d8cdb8', '#bfb6a6'].map((c) => new THREE.Color(c));
 const STONE_TINT = new THREE.Color('#d8c49c');
 const WHITE = new THREE.Color('#ffffff');
+const GALERIA_STYLE = FACADE_STYLES.indexOf('galeria');
+/** Bay width (window spacing) per facade style, m. */
+const BAY_WIDTH = [2.9, 2.8, 3.1, 3.2, 3.4, 3.8, 4.2, 5.0, 2.6];
+
+/**
+ * Wall colour from a facade photo: the photos are mostly taken under an overcast
+ * sky, so lift the lightness and give back some saturation.
+ */
+function photoColour(hex: number): THREE.Color {
+  const c = new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl, THREE.SRGBColorSpace);
+  return c.setHSL(hsl.h, Math.min(1, hsl.s * 1.35), Math.min(0.92, hsl.l * 1.12 + 0.06), THREE.SRGBColorSpace);
+}
 const FLAT_ROOF = new THREE.Color('#8f8a84');
 const TERRACE = new THREE.Color('#b3a998');
-const INDUSTRIAL_TINTS = ['#e4e6e1', '#d8d4c8', '#c9d0d4', '#e8e0cf'].map((c) => new THREE.Color(c));
 
 /** Height in metres from OSM tags, with sensible defaults per building type. */
 export function buildingHeight(b: MapBuilding, distToCentre: number): number {
@@ -49,6 +57,9 @@ export class Mesh3 {
   nrm: number[] = [];
   uv: number[] = [];
   col: number[] = [];
+  /** Facade style code written with every vertex (see Materials.storeyAtlas). */
+  fs: number[] = [];
+  style = 0;
 
   /** Triangle; flipped if needed so its normal agrees with (nx, ny, nz). */
   tri(a: number[], b: number[], c: number[], ua: number[], ub: number[], uc: number[], n: number[], color: THREE.Color): void {
@@ -72,6 +83,7 @@ export class Mesh3 {
       this.nrm.push(fn[0], fn[1], fn[2]);
       this.uv.push(u[0], u[1]);
       this.col.push(color.r, color.g, color.b);
+      this.fs.push(this.style);
     }
   }
 
@@ -97,6 +109,7 @@ export class Mesh3 {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    g.setAttribute('fstyle', new THREE.Float32BufferAttribute(this.fs, 1));
     return g;
   }
 
@@ -322,7 +335,10 @@ export function buildBuildings(ctx: BuildContext): void {
     const distC = Math.hypot(cx, cz);
     // Ground under the walls (LiDAR-baked, or sampled); raised parts start mlv storeys up.
     const ground = b.gy ?? ctx.terrain.heightAt(cx, cz);
-    const y0 = ground + (b.mlv ?? 0) * FLOOR_H;
+    // Over a passage (b.lift) the building starts at the passage's clear height.
+    const y0 = ground + (b.mlv ?? 0) * FLOOR_H + (b.lift ?? 0);
+    // Storey rows of the facade are counted from here (the ground floor of a lifted building is its gf pieces).
+    const rowBase = ground + (b.mlv ?? 0) * FLOOR_H;
     // Measured volume: walls to the eaves, roof to the ridge. Otherwise from the storeys.
     // Roof baked over a row of buildings (tools/geodata/roofs.py): the walls stop at its eaves.
     const roofRef = b.rf !== undefined ? ctx.map.roofs?.[b.rf] : undefined;
@@ -331,7 +347,7 @@ export function buildBuildings(ctx: BuildContext): void {
     const eaveY = roofRef ? Math.max(y0 + 1.8, roofRef.e) : measured ? Math.min(h, Math.max(y0 + 1.8, b.eave!)) : h;
     const rise = measured ? h - eaveY : -1;
     // Walls reach a little below the ground on slopes so they never float.
-    const footY = (b.mlv ?? 0) > 0 ? y0 : ground - 1.2;
+    const footY = (b.mlv ?? 0) > 0 || b.lift ? y0 : ground - 1.2;
     const area = signedArea(outer);
     const rnd = hash01(idx);
 
@@ -344,28 +360,40 @@ export function buildBuildings(ctx: BuildContext): void {
     const church = b.t === 'church' || b.mat === 'stone' || b.t === 'station' || ruins;
     const wallsMesh = new Mesh3();
     const roofMesh = new Mesh3();
+    // Facade style and colour: from the cadastre and the facade photo when the map has them
+    // (tools/geodata/facades.py), otherwise from the building type.
+    const style = b.gal === 1 ? GALERIA_STYLE : (b.fs ?? (industrial ? 7 : church ? 1 : b.t === 'block' || distC > 650 ? 4 : 0));
+    wallsMesh.style = style + 0.5 * hash01(idx, 9.1);
     let tint: THREE.Color;
-    if (church) tint = STONE_TINT;
-    else if (b.t === 'block' || distC > 650) tint = MODERN_TINTS[Math.floor(rnd * MODERN_TINTS.length)];
-    else tint = FACADE_TINTS[Math.floor(rnd * FACADE_TINTS.length)];
+    if (b.fc !== undefined) tint = photoColour(b.fc);
+    else if (church) tint = STONE_TINT;
+    else {
+      const palette = STYLE_COLOURS[style] ?? STYLE_COLOURS[0];
+      tint = new THREE.Color(palette[Math.floor(rnd * palette.length)]);
+    }
     if (b.t === 'station') tint = new THREE.Color('#d8b98a');
-    if (industrial) tint = INDUSTRIAL_TINTS[Math.floor(rnd * INDUSTRIAL_TINTS.length)];
     // Pitched roofs start at the measured eaves; flat roofs (small rise) at the top.
     const pitched = measured ? rise > 0.9 : true;
     const top = ruins ? y0 + Math.min(h - y0, 3.5) : roofRef || (measured && pitched) ? eaveY : h;
 
     // Facade rhythm: storeys fitted to the measured wall height (real floor count), bay width varies per building.
     const storeys = Math.max(1, Math.round((top - y0) / FLOOR_H));
-    const storeyH = industrial ? 2 : measured && !ruins ? Math.min(3.6, Math.max(2.6, (top - y0) / storeys)) : FLOOR_H;
-    const bayW = industrial ? 2 : 2.9 + hash01(idx, 3.3) * 1.2;
+    const storeyH = style === 7 ? Math.max(3, top - y0) : measured && !ruins ? Math.min(3.6, Math.max(2.6, (top - y0) / storeys)) : FLOOR_H;
+    const bayW = (BAY_WIDTH[style] ?? 3.2) + hash01(idx, 3.3) * 0.9;
     for (const [k, ring] of [outer, ...holes].entries()) {
       // Window rows are counted from the storey base, so the ground floor stays at street level.
-      wallsLocal(wallsMesh, ring, footY, top, y0, tint, bayW, storeyH, k === 0 ? hidden : undefined);
+      wallsLocal(wallsMesh, ring, footY, top, rowBase, tint, bayW, storeyH, k === 0 ? hidden : undefined);
+    }
+    // Ceiling of the passage under a lifted building.
+    if (b.lift) {
+      for (const [p, q, r] of triangulate(outer, holes)) {
+        wallsMesh.tri([p[0], y0, p[1]], [q[0], y0, q[1]], [r[0], y0, r[1]], [0, 0.5], [0, 0.5], [0, 0.5], [0, -1, 0], tint);
+      }
     }
 
     // Roofs. Low annexes (one storey, small) get flat terraces, like the patios and garages of the old town.
     const lowAnnex = b.part && (b.lv ?? 1) <= 1 && area < 140;
-    if (ruins || roofRef) {
+    if (ruins || roofRef || b.gf) {
       // Roofless, or covered by the shared roof of its row (src/world/Roofs.ts).
     } else if (b.t === 'greenhouse') {
       flatRoof(roofMesh, outer, holes, top, new THREE.Color('#cfe0e4'));
@@ -382,7 +410,7 @@ export function buildBuildings(ctx: BuildContext): void {
       skirtRoof(roofMesh, outer, holes, top, WHITE, b.t === 'small' ? FLAT_ROOF : WHITE, measured ? Math.min(rise, 4) : 1.3);
     }
 
-    const wallMat = b.t === 'greenhouse' ? mats.galeria : industrial ? mats.corrugatedVC : church ? mats.stoneVC : mats.facadeVC;
+    const wallMat = b.t === 'greenhouse' ? mats.galeria : church && b.fs === undefined ? mats.stoneVC : mats.facadeVC;
     batch.addWorld(wallsMesh.geometry(), wallMat);
     if (!roofMesh.empty) {
       // Real roofs from the orthophoto (except glasshouses); stock tiles when there is none.
@@ -391,9 +419,9 @@ export function buildBuildings(ctx: BuildContext): void {
     }
 
     // White glazed galería on the street-facing side of old-town houses (as in the plaza photos).
-    // Only on the old houses (not on modern blocks), and at most two floors tall, like the real ones.
-    const oldHouse = b.t === 'house' && !b.src && top - y0 > 2 * FLOOR_H && top - y0 < 4.6 * FLOOR_H;
-    if (!church && !industrial && oldHouse && distC < OLD_TOWN_RADIUS && !b.mlv && rnd < 0.5) {
+    // A single glazed galería bay where the facade review saw one (b.gal = 2); whole galería
+    // facades (b.gal = 1) are a facade style of their own. None are added at random.
+    if (b.gal === 2 && !church && !industrial && top - y0 > 2 * FLOOR_H && !b.mlv) {
       let best: { i: number; len: number } | null = null;
       for (let i = 0; i < outer.length; i++) {
         if (hidden.has(i)) continue;

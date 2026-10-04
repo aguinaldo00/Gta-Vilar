@@ -53,6 +53,14 @@ function parkedCar(ctx: BuildContext, x: number, z: number, rot: number, seed: n
  * street-side lanes), most of them occupied by parked cars.
  */
 function carParks(ctx: BuildContext): void {
+  // Cars where the LiDAR saw them (tools/geodata/cars.py); the bay lines are in the orthophoto.
+  const seen = ctx.map.cars;
+  if (seen) {
+    // Thinned on phones: every other car.
+    const step = ctx.quality.detail ? 4 : 8;
+    for (let i = 0; i < seen.length; i += step) parkedCar(ctx, seen[i], seen[i + 1], seen[i + 2], i / 4 + 1);
+    return;
+  }
   const line = ctx.mats.tint('#ecebe4');
   let seed = 1;
   for (const a of ctx.map.areas) {

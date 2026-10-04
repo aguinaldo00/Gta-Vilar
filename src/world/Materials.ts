@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { facadeStylesTexture, N_CELLS, N_STYLES } from './facadeStyles';
 import * as T from './textures';
 import { waterTime } from './Water';
 
@@ -135,8 +136,8 @@ export class Materials {
     this.redPaint = lambert({ color: '#b33228' });
     this.coachGreen = lambert({ color: '#4e6b55' });
 
-    const atlas = T.facadeAtlasTexture();
-    this.facadeVC = storeyAtlas(lambert({ map: atlas, normalMap: T.normalMapFrom(atlas, 2.5), vertexColors: true }));
+    const atlas = facadeStylesTexture();
+    this.facadeVC = storeyAtlas(lambert({ map: atlas.map, normalMap: T.normalMapFrom(atlas.relief, 2.5), vertexColors: true }), atlas.mask);
     this.stoneVC = lambert({ map: ashlar, normalMap: ashlarN, vertexColors: true });
     this.roofVC = lambert({ map: tiles, normalMap: tilesN, vertexColors: true, side: THREE.DoubleSide, roughness: 0.8 });
     this.roofTintVC = lambert({
@@ -277,31 +278,54 @@ function roadAtlasMaterial(tiles: (THREE.Texture | null)[]): Lambert {
  * the ground floor (v < 1) samples the right atlas cell (plinth, doorway) and
  * upper storeys the left one (windows). Applied to both colour and normals.
  */
-function storeyAtlas(m: Lambert): Lambert {
+/**
+ * Facade material over the style atlas (src/world/facadeStyles.ts). Each vertex carries `fstyle`
+ * = style row + 0.5 * a per-building seed. The fragment shader picks the cell of each bay and
+ * storey: ground floor door or window (per bay), upper storeys in one of two window variants
+ * (per bay column, so balconies stack). Wall pixels (atlas alpha 255) take the building colour
+ * from the vertex colour; windows, doors, shutters and railings (alpha 128) keep their own.
+ */
+function storeyAtlas(m: Lambert, mask: THREE.Texture): Lambert {
+  m.userData.attributes = ['fstyle'];
   m.onBeforeCompile = (shader) => {
+    shader.uniforms.wallMaskMap = { value: mask };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float fstyle;\nvarying float vStyle;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvStyle = fstyle;');
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
         `#include <common>
+varying float vStyle;
+uniform sampler2D wallMaskMap;
+float h11(float n) { return fract(sin(n * 12.9898 + 4.1) * 43758.5453); }
 vec2 storeyCell(vec2 uv) {
-  // Ground floor: doorway (cell 1) or barred window (cell 2), chosen per bay.
+  // Interpolation leaves tiny per-pixel errors in the attribute: snap it, or the hashed
+  // door/window choice would flip from pixel to pixel.
+  float style = floor(vStyle + 0.004);
+  float seed = floor((vStyle - style) * 128.0 + 0.5) / 64.0;
+  float bay = floor(uv.x);
   float ground = step(uv.y, 0.999);
-  float door = step(fract(sin(floor(uv.x) * 12.9898 + 4.1) * 43758.5453), 0.4);
-  float cell = ground * (2.0 - door);
-  return vec2((cell + 0.01 + fract(uv.x) * 0.98) * 0.25, 0.01 + fract(uv.y) * 0.98);
+  float door = step(h11(bay + seed * 57.0), 0.38);
+  float variant = step(h11(bay * 1.7 + seed * 13.0 + 3.0), 0.4);
+  float cell = ground * (2.0 - door) + (1.0 - ground) * variant * 3.0;
+  float v = 1.0 - (style + 1.0) / ${N_STYLES}.0 + (0.01 + fract(uv.y) * 0.98) / ${N_STYLES}.0;
+  return vec2((cell + 0.01 + fract(uv.x) * 0.98) / ${N_CELLS}.0, v);
 }`,
       )
       .replace(
         '#include <map_fragment>',
         `
   vec2 cellUv = storeyCell(vMapUv);
-  vec2 gscale = vec2(0.245, 0.98);
-  vec4 sampledDiffuseColor = textureGrad(map, cellUv, dFdx(vMapUv) * gscale, dFdy(vMapUv) * gscale);
-  diffuseColor *= sampledDiffuseColor;`,
+  vec2 gscale = vec2(0.98 / ${N_CELLS}.0, 0.98 / ${N_STYLES}.0);
+  vec4 texel = textureGrad(map, cellUv, dFdx(vMapUv) * gscale, dFdy(vMapUv) * gscale);
+  float wallMask = textureGrad(wallMaskMap, cellUv, dFdx(vMapUv) * gscale, dFdy(vMapUv) * gscale).r;
+  diffuseColor.rgb *= texel.rgb * mix(vec3(1.0), vColor.rgb, wallMask);`,
       )
+      .replace('#include <color_fragment>', '')
       .replace(
         'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
-        'vec3 mapN = textureGrad( normalMap, storeyCell(vNormalMapUv), dFdx(vNormalMapUv) * vec2(0.245, 0.98), dFdy(vNormalMapUv) * vec2(0.245, 0.98) ).xyz * 2.0 - 1.0;',
+        `vec3 mapN = textureGrad( normalMap, storeyCell(vNormalMapUv), dFdx(vNormalMapUv) * vec2(0.98 / ${N_CELLS}.0, 0.98 / ${N_STYLES}.0), dFdy(vNormalMapUv) * vec2(0.98 / ${N_CELLS}.0, 0.98 / ${N_STYLES}.0) ).xyz * 2.0 - 1.0;`,
       );
   };
   return m;

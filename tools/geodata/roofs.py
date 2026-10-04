@@ -179,7 +179,7 @@ def bake_roofs(m, dtm, roof, H0, ortho_dir):
     items = []  # (building index, polygon, eave)
     for i, b in enumerate(m["buildings"]):
         b.pop("rf", None)
-        if b.get("hp") or b.get("t") in NO_ROOF_TYPES or CUSTOM_NAMES.match(b.get("n", "")):
+        if b.get("hp") or b.get("gf") or b.get("t") in NO_ROOF_TYPES or CUSTOM_NAMES.match(b.get("n", "")):
             continue
         p = footprint_polygon(b)
         if p.is_empty or p.area < 4:

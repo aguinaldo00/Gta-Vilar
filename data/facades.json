@@ -1,0 +1,757 @@
+{
+ "_doc": "Facade review from the cadastre photos (tools/geodata/facades.py). style: traditional | stone | mid | brick | terraces | modern | civic | industrial | galeria; galeria: 1 = whole facade of galerías, 2 = a glazed bay; colour: wall colour when the photo extraction is off.",
+ "3645901VN5534S": {
+  "style": "stone",
+  "galeria": 2
+ },
+ "3645974VN5534S": {
+  "style": "galeria",
+  "galeria": 1
+ },
+ "3443402VN5534S": {
+  "style": "galeria",
+  "galeria": 1
+ },
+ "3443403VN5534S": {
+  "style": "stone"
+ },
+ "3645903VN5534S": {
+  "style": "stone",
+  "galeria": 2
+ },
+ "3444202VN5534S": {
+  "style": "traditional",
+  "colour": "#a8504a"
+ },
+ "3344019VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d8b85a"
+ },
+ "3645902VN5534S": {
+  "style": "stone",
+  "colour": "#c9b896"
+ },
+ "3645973VN5534S": {
+  "style": "mid",
+  "galeria": 2
+ },
+ "3344018VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d8c3a8"
+ },
+ "3443401VN5534S": {
+  "style": "stone"
+ },
+ "3443404VN5534S": {
+  "style": "traditional",
+  "colour": "#efece4"
+ },
+ "3443202VN5534S": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#e9e4da"
+ },
+ "3344017VN5534S": {
+  "style": "brick"
+ },
+ "3344013VN5534S": {
+  "style": "modern",
+  "colour": "#d9c25a"
+ },
+ "3645904VN5534S": {
+  "style": "traditional",
+  "galeria": 2
+ },
+ "3645909VN5534S": {
+  "style": "mid",
+  "colour": "#b5695a"
+ },
+ "3344012VN5534S": {
+  "style": "traditional"
+ },
+ "3543421VN5534S": {
+  "style": "stone",
+  "colour": "#bdb3a2"
+ },
+ "3543401VN5534S": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#d8ccb0"
+ },
+ "3543422VN5534S": {
+  "style": "stone",
+  "galeria": 2
+ },
+ "3444401VN5534S": {
+  "style": "stone",
+  "galeria": 2
+ },
+ "3645923VN5534S": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#d8ccb5"
+ },
+ "3443201VN5534S": {
+  "style": "terraces",
+  "colour": "#b9b6ae"
+ },
+ "3344016VN5534S": {
+  "style": "brick",
+  "colour": "#a8604c"
+ },
+ "3645972VN5534S": {
+  "style": "mid",
+  "colour": "#c9c6bd"
+ },
+ "3443203VN5534S": {
+  "style": "stone"
+ },
+ "3543420VN5534S": {
+  "style": "traditional",
+  "colour": "#c9a560"
+ },
+ "3444402VN5534S": {
+  "style": "mid",
+  "colour": "#9a8d78"
+ },
+ "3344033VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#e3d5bd"
+ },
+ "3443905VN5534S": {
+  "style": "stone",
+  "galeria": 2
+ },
+ "3443901VN5534S": {
+  "style": "stone",
+  "colour": "#d6cdb8"
+ },
+ "3645905VN5534S": {
+  "style": "stone"
+ },
+ "3645971VN5534S": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#a6392f"
+ },
+ "3543402VN5534S": {
+  "style": "modern",
+  "colour": "#ecebe6"
+ },
+ "3543418VN5534S": {
+  "style": "galeria",
+  "galeria": 1,
+  "colour": "#d4b46a"
+ },
+ "3344010VN5534S": {
+  "style": "stone",
+  "galeria": 2
+ },
+ "3645970VN5534S": {
+  "style": "traditional",
+  "colour": "#d8c9a8"
+ },
+ "3645908VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#dccfa6"
+ },
+ "3543403VN5534S": {
+  "style": "mid",
+  "colour": "#b9b8b2"
+ },
+ "3543423VN5534S": {
+  "style": "traditional",
+  "colour": "#c4bcab"
+ },
+ "3344009VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#e5dfc6"
+ },
+ "3441523VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#cfa77a"
+ },
+ "3645982VN5534S": {
+  "style": "terraces",
+  "colour": "#e5dfd2"
+ },
+ "3344020VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d6a95a"
+ },
+ "3343906VN5534S": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#9e9a8e"
+ },
+ "3543419VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d9b862"
+ },
+ "3441525VN5534S": {
+  "style": "stone",
+  "galeria": 2
+ },
+ "3344014VN5534S": {
+  "style": "terraces",
+  "colour": "#d9cdb1"
+ },
+ "3645967VN5534S": {
+  "style": "civic",
+  "colour": "#b5aea3"
+ },
+ "3645910VN5534S": {
+  "style": "traditional",
+  "colour": "#e6d18e"
+ },
+ "3546801VN5534N": {
+  "style": "brick",
+  "galeria": 2,
+  "colour": "#9c5a46"
+ },
+ "3645911VN5534N": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#c98f7a"
+ },
+ "3543424VN5534S": {
+  "style": "galeria",
+  "galeria": 1,
+  "colour": "#b9b0a0"
+ },
+ "3343907VN5534S": {
+  "style": "stone",
+  "colour": "#a8a397"
+ },
+ "3343908VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#d7d4cc"
+ },
+ "3543404VN5534S": {
+  "style": "traditional",
+  "colour": "#d8d0c0"
+ },
+ "3441521VN5534S": {
+  "style": "traditional",
+  "colour": "#f0eee8"
+ },
+ "3543425VN5534S": {
+  "style": "traditional",
+  "colour": "#d4cdbd"
+ },
+ "3343903VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#c9c8c2"
+ },
+ "3645983VN5534S": {
+  "style": "terraces",
+  "colour": "#d5d2cb"
+ },
+ "3441526VN5534S": {
+  "style": "brick",
+  "galeria": 2,
+  "colour": "#b9895a"
+ },
+ "3344023VN5534S": {
+  "style": "mid",
+  "colour": "#d3d1cb"
+ },
+ "3543417VN5534S": {
+  "style": "brick",
+  "colour": "#b77d5c"
+ },
+ "3441527VN5534S": {
+  "style": "brick",
+  "galeria": 2,
+  "colour": "#c0915e"
+ },
+ "3546802VN5534N": {
+  "style": "brick",
+  "colour": "#8a6052"
+ },
+ "3344021VN5534S": {
+  "style": "brick",
+  "colour": "#b5704a"
+ },
+ "3344032VN5534S": {
+  "style": "traditional",
+  "colour": "#e7e3da"
+ },
+ "3645966VN5534S": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#d9cfb0"
+ },
+ "3344011VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d9b44a"
+ },
+ "3344022VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d6d3cc"
+ },
+ "3441551VN5534S": {
+  "style": "traditional",
+  "colour": "#e8e6e0"
+ },
+ "3543416VN5534S": {
+  "style": "modern",
+  "galeria": 2,
+  "colour": "#e1dccd"
+ },
+ "3344034VN5534S": {
+  "style": "terraces",
+  "colour": "#e6dcc2"
+ },
+ "3543405VN5534S": {
+  "style": "brick",
+  "colour": "#8f6a58"
+ },
+ "3344024VN5534S": {
+  "style": "brick",
+  "colour": "#a8553f"
+ },
+ "3441532VN5534S": {
+  "style": "terraces",
+  "colour": "#b9a38a"
+ },
+ "3343902VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#d8cdb2"
+ },
+ "3344008VN5534S": {
+  "style": "stone"
+ },
+ "3344025VN5534S": {
+  "style": "mid",
+  "colour": "#c8c6c0"
+ },
+ "3645965VN5534S": {
+  "style": "traditional",
+  "colour": "#efefea"
+ },
+ "3441533VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d6c3ad"
+ },
+ "3645964VN5534S": {
+  "style": "stone",
+  "colour": "#a9a596"
+ },
+ "3441520VN5534S": {
+  "style": "terraces",
+  "colour": "#dccfb0"
+ },
+ "3344026VN5534S": {
+  "style": "terraces",
+  "colour": "#ddd5c0"
+ },
+ "3645913VN5534N": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#d0cdc4"
+ },
+ "3543406VN5534S": {
+  "style": "traditional",
+  "colour": "#ddd5c0"
+ },
+ "3343905VN5534S": {
+  "style": "stone",
+  "colour": "#b5b0a2"
+ },
+ "3441528VN5534S": {
+  "style": "brick",
+  "galeria": 2,
+  "colour": "#a9705a"
+ },
+ "3441534VN5534S": {
+  "style": "stone",
+  "colour": "#b1ab9e"
+ },
+ "3546803VN5534N": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#b07f5a"
+ },
+ "3543407VN5534S": {
+  "style": "traditional",
+  "colour": "#ddd8c8"
+ },
+ "3343909VN5534S": {
+  "style": "stone",
+  "colour": "#b3ab98"
+ },
+ "3645963VN5534S": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#c9ad7a"
+ },
+ "3441519VN5534S": {
+  "style": "terraces",
+  "colour": "#d8b38f"
+ },
+ "3344006VN5534S": {
+  "style": "terraces",
+  "colour": "#e9e6df"
+ },
+ "3343910VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d8d5ce"
+ },
+ "3645914VN5534N": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#e4cbaa"
+ },
+ "3645962VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#d8c27a"
+ },
+ "3441535VN5534S": {
+  "style": "traditional",
+  "colour": "#f2f0ea"
+ },
+ "3344036VN5534S": {
+  "style": "traditional",
+  "colour": "#dcd8cc"
+ },
+ "3441529VN5534S": {
+  "style": "brick",
+  "galeria": 2,
+  "colour": "#b8805a"
+ },
+ "3546804VN5534N": {
+  "style": "brick",
+  "colour": "#7c5c4c"
+ },
+ "3343913VN5534S": {
+  "style": "stone",
+  "colour": "#b9b2a2"
+ },
+ "3543414VN5534S": {
+  "style": "galeria",
+  "galeria": 1,
+  "colour": "#ece9e0"
+ },
+ "3342304VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#9e9c95"
+ },
+ "3343911VN5534S": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#9e3f45"
+ },
+ "3645961VN5534S": {
+  "style": "traditional",
+  "colour": "#f0efea"
+ },
+ "3343914VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#dcc8a2"
+ },
+ "3344005VN5534S": {
+  "style": "terraces",
+  "colour": "#ddd5c2"
+ },
+ "3441531VN5534S": {
+  "style": "terraces",
+  "colour": "#a9a8a4"
+ },
+ "3344035VN5534S": {
+  "style": "stone",
+  "colour": "#c5b38e"
+ },
+ "3343912VN5534S": {
+  "style": "galeria",
+  "galeria": 1,
+  "colour": "#e9e7e1"
+ },
+ "3645915VN5534N": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#b9b3a6"
+ },
+ "3441539VN5534S": {
+  "style": "stone",
+  "colour": "#b5ad9a"
+ },
+ "3344003VN5534S": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#d9b864"
+ },
+ "3645916VN5534N": {
+  "style": "traditional",
+  "colour": "#e8e6de"
+ },
+ "3546805VN5534N": {
+  "style": "mid",
+  "colour": "#cfcdc7"
+ },
+ "3645960VN5534S": {
+  "style": "stone",
+  "colour": "#bcb5a4"
+ },
+ "3441548VN5534S": {
+  "style": "terraces",
+  "colour": "#ddd4c3"
+ },
+ "3342303VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#cfcdc8"
+ },
+ "3342302VN5534S": {
+  "style": "traditional",
+  "colour": "#eceae4"
+ },
+ "3546806VN5534N": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#c9c2b2"
+ },
+ "3346511VN5534N": {
+  "style": "mid",
+  "colour": "#d9c27c"
+ },
+ "3543411VN5534S": {
+  "style": "traditional",
+  "colour": "#f0eee6"
+ },
+ "3645917VN5534N": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#b9b19e"
+ },
+ "3543413VN5534S": {
+  "style": "terraces",
+  "colour": "#d9d3c8"
+ },
+ "3441550VN5534S": {
+  "style": "mid",
+  "colour": "#b4b2ad"
+ },
+ "3546807VN5534N": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#cfccc5"
+ },
+ "3543412VN5534S": {
+  "style": "stone",
+  "colour": "#c4b08a"
+ },
+ "3344002VN5534S": {
+  "style": "stone",
+  "colour": "#bdb5a2"
+ },
+ "3645959VN5534S": {
+  "style": "traditional",
+  "galeria": 2,
+  "colour": "#a99aa8"
+ },
+ "3342305VN5534S": {
+  "style": "brick",
+  "galeria": 2,
+  "colour": "#c7a55a"
+ },
+ "3441549VN5534S": {
+  "style": "terraces",
+  "colour": "#d4d2cd"
+ },
+ "3645958VN5534S": {
+  "style": "traditional",
+  "colour": "#d8c58a"
+ },
+ "3342306VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#e5e3dd"
+ },
+ "3346513VN5534N": {
+  "style": "traditional",
+  "colour": "#d9c08a"
+ },
+ "3346510VN5534N": {
+  "style": "mid",
+  "colour": "#d8bf6e"
+ },
+ "3344027VN5534S": {
+  "style": "stone",
+  "colour": "#b9b3a3"
+ },
+ "3441552VN5534S": {
+  "style": "terraces",
+  "colour": "#e2ddd2"
+ },
+ "3643803VN5534S": {
+  "style": "mid",
+  "colour": "#b8b6b0"
+ },
+ "3744602VN5534S": {
+  "style": "stone",
+  "colour": "#a39486"
+ },
+ "3643801VN5534S": {
+  "style": "traditional",
+  "colour": "#ecebe5"
+ },
+ "3546808VN5534N": {
+  "style": "industrial"
+ },
+ "3645957VN5534S": {
+  "style": "traditional",
+  "colour": "#e3ddcc"
+ },
+ "3643808VN5534S": {
+  "style": "stone",
+  "colour": "#a99d8a"
+ },
+ "3342307VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#e2e0db"
+ },
+ "3344028VN5534S": {
+  "style": "traditional",
+  "colour": "#d8cfbb"
+ },
+ "3645956VN5534S": {
+  "style": "traditional",
+  "colour": "#e0bf6c"
+ },
+ "3441557VN5534S": {
+  "style": "terraces",
+  "colour": "#d7d5d0"
+ },
+ "3243901VN5534S": {
+  "style": "traditional",
+  "colour": "#e2d39a"
+ },
+ "3342311VN5534S": {
+  "style": "mid",
+  "colour": "#e6e4de"
+ },
+ "3744601VN5534S": {
+  "style": "terraces",
+  "colour": "#e4e2dc"
+ },
+ "3342308VN5534S": {
+  "style": "mid",
+  "colour": "#e3e1dc"
+ },
+ "3645918VN5534N": {
+  "style": "terraces",
+  "colour": "#d9c48a"
+ },
+ "3643802VN5534S": {
+  "style": "terraces",
+  "colour": "#e5dfd0"
+ },
+ "3342203VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#b4b3ac"
+ },
+ "3546809VN5534N": {
+  "style": "brick",
+  "galeria": 2,
+  "colour": "#c47a4a"
+ },
+ "3546810VN5534N": {
+  "style": "traditional",
+  "colour": "#c9c6bd"
+ },
+ "3346509VN5534N": {
+  "style": "mid",
+  "colour": "#d6bc6a"
+ },
+ "3342309VN5534S": {
+  "style": "mid",
+  "colour": "#e2e0da"
+ },
+ "3342204VN5534S": {
+  "style": "galeria",
+  "galeria": 1,
+  "colour": "#b9b6ae"
+ },
+ "3643809VN5534S": {
+  "style": "stone",
+  "colour": "#c9c3a4"
+ },
+ "3643804VN5534S": {
+  "style": "mid",
+  "colour": "#dedcd6"
+ },
+ "3645919VN5534N": {
+  "style": "stone",
+  "colour": "#c5bba2"
+ },
+ "3546834VN5534N": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#e2e0db"
+ },
+ "3441517VN5534S": {
+  "style": "terraces",
+  "colour": "#e4e1db"
+ },
+ "3344001VN5534S": {
+  "style": "stone",
+  "colour": "#c4b494"
+ },
+ "3342310VN5534S": {
+  "style": "traditional",
+  "colour": "#e8e6e0"
+ },
+ "3142520VN5534S": {
+  "style": "stone",
+  "galeria": 2,
+  "colour": "#c9b17e"
+ },
+ "3546833VN5534N": {
+  "style": "brick",
+  "colour": "#8a6a5a"
+ },
+ "3142519VN5534S": {
+  "style": "terraces",
+  "galeria": 2,
+  "colour": "#e5e3dd"
+ },
+ "3645955VN5534S": {
+  "style": "mid",
+  "colour": "#e8e4dc"
+ },
+ "3342205VN5534S": {
+  "style": "galeria",
+  "galeria": 1,
+  "colour": "#8c7b66"
+ },
+ "3643805VN5534S": {
+  "style": "mid",
+  "galeria": 2,
+  "colour": "#ddd0a8"
+ },
+ "3645920VN5534N": {
+  "style": "brick",
+  "colour": "#a5584a"
+ }
+}

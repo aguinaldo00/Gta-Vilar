@@ -406,7 +406,10 @@ function buildPitch(ctx: BuildContext, a: MapArea, mats: { court: THREE.Material
   const c = courtFrame(ctx, ring);
   if (c.L < 3 || c.W < 2) return;
   const big = c.L > 70;
-  surface(ctx, c, sport === 'soccer' && !big ? 1 : (CELL[sport] ?? 1), mats.court, 0.055);
+  // The orthophoto on the ground already shows each pitch as it really is (natural grass without
+  // lines, faded courts...): painting a standard surface over it invented pitches that are no longer
+  // there. Only covered courts, which the photo shows as a roof, get their surface drawn.
+  if (a.c) surface(ctx, c, sport === 'soccer' && !big ? 1 : (CELL[sport] ?? 1), mats.court, 0.055);
   switch (sport) {
     case 'soccer':
     case 'futsal':
@@ -415,7 +418,7 @@ function buildPitch(ctx: BuildContext, a: MapArea, mats: { court: THREE.Material
         gh = big ? 2.44 : 2;
       for (const x of [-c.L / 2 + 0.3, c.L / 2 - 0.3]) goal(ctx, c, x, Math.min(gw, c.W * 0.5), gh, mats.net);
       if (sport === 'multi' && c.L > 16) for (const x of [-c.L / 2 + 1.2, c.L / 2 - 1.2]) hoop(ctx, c, x);
-      if (!big && !a.c) fenceAround(ctx, c, 3, mats.fence);
+      // Fences come from the OSM barriers and the LiDAR (tools/geodata/walls.py), not assumed.
       break;
     }
     case 'basketball':

@@ -347,7 +347,7 @@ export function buildVegetation(ctx: BuildContext): void {
     }
   }
 
-  hedgerows(ctx, blocked);
+  // Field hedges and walls are the real ones (OSM + LiDAR, src/world/Barriers.ts): none are invented.
   plazaFurniture(ctx, plazas);
 
   // Street lamps at their mapped positions.
@@ -400,45 +400,5 @@ export function buildVegetation(ctx: BuildContext): void {
     im.castShadow = ctx.quality.treeShadows;
     im.receiveShadow = true;
     ctx.scene.add(im);
-  }
-}
-
-/**
- * Field boundaries: the fincas around town are lined with hedges and the odd
- * dry-stone wall (setos y paredes), skipped where a road, track or building is.
- */
-function hedgerows(ctx: BuildContext, blocked: (x: number, z: number, clearance: number) => boolean): void {
-  const hedge = ctx.mats.hedge,
-    wall = ctx.mats.stone;
-  const done = new Set<string>();
-  for (const a of ctx.map.areas) {
-    if (a.k !== 'farmland' && a.k !== 'meadow') continue;
-    const ring = toPts(a.o);
-    for (let i = 0; i < ring.length; i++) {
-      const [ax, az] = ring[i],
-        [bx, bz] = ring[(i + 1) % ring.length];
-      const len = Math.hypot(bx - ax, bz - az);
-      const n = Math.max(1, Math.round(len / 6));
-      for (let k = 0; k < n; k++) {
-        const x0 = ax + ((bx - ax) * k) / n,
-          z0 = az + ((bz - az) * k) / n;
-        const x1 = ax + ((bx - ax) * (k + 1)) / n,
-          z1 = az + ((bz - az) * (k + 1)) / n;
-        const mx = (x0 + x1) / 2,
-          mz = (z0 + z1) / 2;
-        const key = `${Math.round(mx / 2)},${Math.round(mz / 2)}`;
-        if (done.has(key)) continue;
-        done.add(key);
-        if (blocked(mx, mz, 3)) continue;
-        const seg = len / n;
-        const ang = Math.atan2(-(z1 - z0), x1 - x0);
-        const h = hash01(mx, mz);
-        const y = ctx.terrain.heightAt(mx, mz);
-        if (h < 0.18) continue; // gaps
-        if (h < 0.3) ctx.batch.add(Unit.box, wall, mx, y + 0.45, mz, ang, seg, 0.9, 0.6);
-        else ctx.batch.add(Unit.box, hedge, mx, y + 0.6 + h * 0.2, mz, ang, seg * 0.95, 1.2 + h * 0.4, 1.1);
-        ctx.collision.addBox(mx, mz, seg, 0.8, { rot: ang, top: 1.2, mask: Layer.Bodies });
-      }
-    }
   }
 }

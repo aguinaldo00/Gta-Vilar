@@ -713,6 +713,8 @@ function buildingsNear(p: Pt, r: number): number {
 }
 
 interface RoadOut {
+  /** Passage under a building: clear height (m). */
+  tp?: number;
   p: number[];
   k: string;
   w: number;
@@ -745,6 +747,12 @@ for (const [id, w] of ways) {
     const r: RoadOut = { p: flat(simp), k: kind, w: width };
     if (t.name) r.n = t.name;
     if (t.bridge && t.bridge !== 'no') r.b = 1;
+    // Streets and paths through or under a building (tunnel=building_passage, covered=yes):
+    // tp = clear height, so the baker can open the passage in the building above.
+    if (t.tunnel === 'building_passage' || t.covered === 'yes') {
+      const mh = parseFloat(t.maxheight);
+      r.tp = Number.isFinite(mh) && mh > 2 ? mh : VEHICLE.has(hw) ? 4.5 : 3.2;
+    }
     if (VEHICLE.has(hw)) {
       // Junction vertices (shared with another highway) — no centre-line dashes there.
       const j: number[] = [];
@@ -1199,6 +1207,8 @@ function facingStreet(p: Pt): string {
 }
 
 interface ShopOut {
+  /** Secondary front of a corner shop (no terrace). */
+  s?: 1;
   x: number;
   z: number;
   a: number;
@@ -1207,8 +1217,52 @@ interface ShopOut {
   n: string;
 }
 const shops: ShopOut[] = [];
-const shopStats = { onAddressStreet: 0, otherStreet: 0, noStreetNear: 0, ownBuilding: 0, neighbourBuilding: 0 };
-const usedOnWall = new Map<string, [number, number][]>();
+const shopStats = { onAddressStreet: 0, otherStreet: 0, noStreetNear: 0, ownBuilding: 0, neighbourBuilding: 0, cornerFronts: 0 };
+// Building footprints on a grid, to tell walls that look onto a street from courtyard and party walls.
+// Arcades (soportales: parts raised above the ground) and canopies are open at street level.
+const footGrid = new Map<string, { ring: Pt[]; open: boolean; outline: boolean }[]>();
+for (const b of buildings) {
+  if (b.t === 'canopy') continue;
+  const ring: Pt[] = [];
+  for (let k = 0; k < b.o.length; k += 2) ring.push([b.o[k], b.o[k + 1]]);
+  const open = (b.mlv ?? 0) > 0;
+  const xs = ring.map((p) => p[0]),
+    zs = ring.map((p) => p[1]);
+  for (let gx = Math.floor(Math.min(...xs) / WG); gx <= Math.floor(Math.max(...xs) / WG); gx++)
+    for (let gz = Math.floor(Math.min(...zs) / WG); gz <= Math.floor(Math.max(...zs) / WG); gz++) {
+      const k = `${gx},${gz}`;
+      (footGrid.get(k) ?? footGrid.set(k, []).get(k)!).push({ ring, open, outline: !!b.hp });
+    }
+}
+/** 'solid' inside a ground-level building or part; 'outline' only inside the outline of a building drawn by its parts; 'free' otherwise. */
+const groundAt = (p: Pt): 'solid' | 'outline' | 'free' => {
+  const cell = (footGrid.get(`${Math.floor(p[0] / WG)},${Math.floor(p[1] / WG)}`) ?? []).filter((f) => pointInRing(p, f.ring));
+  if (cell.some((f) => f.open)) return 'free';
+  if (cell.some((f) => !f.outline)) return 'solid';
+  return cell.length ? 'outline' : 'free';
+};
+
+/**
+ * True if, walking out from the middle of the wall, a street or the Plaza
+ * Mayor is reached before any building: a shop front cannot be on a
+ * courtyard wall or on a wall shared with the house next door.
+ */
+function looksOntoStreet(w: Wall): boolean {
+  const mx = (w.a[0] + w.b[0]) / 2,
+    mz = (w.a[1] + w.b[1]) / 2;
+  // Up to 3.5 m inside an outline but outside all of its parts is an arcade or a porch
+  // (soportal); any further it is the building's courtyard or interior.
+  let underOutline = 0;
+  for (let d = 0.6; d <= 16; d += 0.6) {
+    const p: Pt = [mx + w.n[0] * d, mz + w.n[1] * d];
+    const g = groundAt(p);
+    if (g === 'solid') return false;
+    if (g === 'outline' && (underOutline += 0.6) > 3.5) return false;
+    if (streetGap(p) <= 0.5 || (plazaRing && pointInRing(p, plazaRing))) return true;
+  }
+  return false;
+}
+
 /** Footprints (outline and its parts) that contain p: the shop's own building. */
 function buildingsAt(p: Pt): Set<number> {
   const out = new Set<number>();
@@ -1248,7 +1302,7 @@ function placeShop(p: Pt, t: Tags, frontage?: number): void {
   const label = shortName(t, cat.label);
   const own = buildingsAt(p);
   const street = streetKey(t['addr:street']);
-  let best: { w: Wall; s: number; t: number } | null = null;
+  const cands: { w: Wall; s: number; t: number }[] = [];
   const cx = Math.floor(p[0] / WG),
     cz = Math.floor(p[1] / WG);
   for (let i = -1; i <= 1; i++)
@@ -1259,50 +1313,33 @@ function placeShop(p: Pt, t: Tags, frontage?: number): void {
         const tt = Math.max(0, Math.min(1, ((p[0] - w.a[0]) * (w.b[0] - w.a[0]) + (p[1] - w.a[1]) * (w.b[1] - w.a[1])) / (w.len * w.len)));
         const m: Pt = [w.a[0] + (w.b[0] - w.a[0]) * tt + w.n[0] * 2.5, w.a[1] + (w.b[1] - w.a[1]) * tt + w.n[1] * 2.5];
         const gap = streetGap(m);
-        const open = gap < 10 || (plazaRing && pointInRing(m, plazaRing));
+        const open = (gap < 10 || (plazaRing && pointInRing(m, plazaRing))) && looksOntoStreet(w);
         const facing = street ? facingStreet(m) : '';
         const streetScore = !street || !facing ? 0 : facing === street ? -10 : 12;
         const score =
           d + (open ? 0 : 30) + (w.len < 4 ? 6 : 0) + Math.max(0, gap) * 0.3 + (own.size && !own.has(w.bi) ? 15 : 0) + streetScore;
-        if (!best || score < best.s) best = { w, s: score, t: tt };
+        if (score <= 45) cands.push({ w, s: score, t: tt });
       }
     }
-  if (!best || best.s > 45) return;
-  const { w } = best;
-  // Shops mapped as a whole building or unit take its frontage; points get a typical old-town front.
-  const wanted = frontage ? Math.min(16, frontage) : Math.max(3.2, Math.min(7, 1.6 + label.length * 0.32));
-  const width = Math.min(w.len - 0.8, wanted);
-  if (width < 2) return;
-  // Keep the front inside the wall and clear of fronts already on it.
-  const half = width / 2 / w.len;
-  const used = usedOnWall.get(w.key) ?? [];
-  const free = (c: number) => used.every(([u0, u1]) => c + half < u0 || c - half > u1);
-  const lo = 0.4 / w.len + half,
-    hi = 1 - 0.4 / w.len - half;
-  let tc = Math.max(lo, Math.min(hi, best.t));
-  if (!free(tc)) {
-    const options = [];
-    for (let k = 0; k <= 20; k++) options.push(lo + ((hi - lo) * k) / 20);
-    const ok = options.filter(free).sort((x, y) => Math.abs(x - best!.t) - Math.abs(y - best!.t));
-    if (!ok.length) return;
-    tc = ok[0];
-  }
-  if (street) {
-    const f = facingStreet([w.a[0] + (w.b[0] - w.a[0]) * tc + w.n[0] * 2.5, w.a[1] + (w.b[1] - w.a[1]) * tc + w.n[1] * 2.5]);
-    shopStats[f === street ? 'onAddressStreet' : f ? 'otherStreet' : 'noStreetNear']++;
-  }
-  if (own.size) shopStats[own.has(w.bi) ? 'ownBuilding' : 'neighbourBuilding']++;
-  used.push([tc - half, tc + half]);
-  usedOnWall.set(w.key, used);
-  shops.push({
-    x: q(w.a[0] + (w.b[0] - w.a[0]) * tc),
-    z: q(w.a[1] + (w.b[1] - w.a[1]) * tc),
-    a: Math.round(Math.atan2(w.n[0], w.n[1]) * 1000) / 1000,
-    w: q(width),
-    c: cat.c,
-    n: label,
-  });
+  if (!cands.length) return;
+  cands.sort((x, y) => x.s - y.s);
+  pending.push({ w: cands[0].w, t: cands[0].t, s: cands[0].s, cands: cands.slice(0, 5), c: cat.c, n: label, frontage, street, own });
 }
+
+interface PendingShop {
+  w: Wall;
+  /** Position of the shop's point along the wall (0..1). */
+  t: number;
+  s: number;
+  /** Best walls, best first. */
+  cands: { w: Wall; s: number; t: number }[];
+  c: string;
+  n: string;
+  frontage?: number;
+  street: string;
+  own: Set<number>;
+}
+const pending: PendingShop[] = [];
 for (const n of nodes.values()) if (n.tags) placeShop(project(n.lat, n.lon), n.tags);
 for (const p of polygons) {
   if (p.tags.amenity === 'place_of_worship' || p.tags.amenity === 'townhall' || p.tags.amenity === 'school') continue;
@@ -1317,50 +1354,113 @@ for (const p of polygons) {
   placeShop(centroid(p.outer), p.tags, side);
 }
 
-// Picnic tables: mapped ones plus a few around each picnic site (the riverside "mesas" in El Soto).
+/**
+ * Each facade is shared out among the shops mapped along it, in their order
+ * along the wall: a shop's front runs from halfway to the previous shop to
+ * halfway to the next one (or to the end of the wall), so a shop alone in
+ * its unit takes the whole frontage. Corner shops turn the corner when the
+ * next wall of their building also looks onto a street and has no shop.
+ */
+const wallByKey = new Map<string, Wall>();
+for (const ws of wallGrid.values()) for (const w of ws) wallByKey.set(w.key, w);
+const byWall = new Map<string, PendingShop[]>();
+// Best-fitting shops first; a wall holds one front per 2.6 m, the rest go to their next best wall.
+const MIN_FRONT = 2.6;
+for (const ps of [...pending].sort((x, y) => x.s - y.s)) {
+  const c = ps.cands.find((c) => (byWall.get(c.w.key)?.length ?? 0) < Math.max(1, Math.floor((c.w.len - 0.8) / MIN_FRONT)));
+  if (!c) continue;
+  ps.w = c.w;
+  ps.t = c.t;
+  (byWall.get(c.w.key) ?? byWall.set(c.w.key, []).get(c.w.key)!).push(ps);
+}
+const MARGIN = 0.4;
+const MAX_FRONT = 14;
+function emit(w: Wall, t0: number, t1: number, ps: PendingShop, main: boolean): void {
+  const width = (t1 - t0) * w.len;
+  if (width < 1.6) return;
+  const tc = (t0 + t1) / 2;
+  shops.push({
+    x: q(w.a[0] + (w.b[0] - w.a[0]) * tc),
+    z: q(w.a[1] + (w.b[1] - w.a[1]) * tc),
+    a: Math.round(Math.atan2(w.n[0], w.n[1]) * 1000) / 1000,
+    w: q(width),
+    c: ps.c,
+    n: ps.n,
+    ...(main ? {} : { s: 1 }),
+  });
+}
+for (const [key, list] of byWall) {
+  const w = wallByKey.get(key)!;
+  list.sort((x, y) => x.t - y.t);
+  const m = MARGIN / w.len;
+  // Shops whose points crowd together (or project past the same end) share the wall evenly, in order.
+  const crowded = list.some((ps, i) => i > 0 && (ps.t - list[i - 1].t) * w.len < MIN_FRONT);
+  if (crowded)
+    list.forEach((ps, i) => {
+      ps.t = (i + 0.5) / list.length;
+    });
+  list.forEach((ps, i) => {
+    let lo = i === 0 ? m : (list[i - 1].t + ps.t) / 2 + m / 2;
+    let hi = i === list.length - 1 ? 1 - m : (ps.t + list[i + 1].t) / 2 - m / 2;
+    // Never wider than the mapped unit, nor than a typical large shop.
+    const cap = Math.min(ps.frontage ?? MAX_FRONT, MAX_FRONT) / w.len;
+    if (hi - lo > cap) {
+      const c = Math.max(lo + cap / 2, Math.min(hi - cap / 2, ps.t));
+      lo = c - cap / 2;
+      hi = c + cap / 2;
+    }
+    emit(w, lo, hi, ps, true);
+    if (ps.street) {
+      const f = facingStreet([w.a[0] + (w.b[0] - w.a[0]) * ps.t + w.n[0] * 2.5, w.a[1] + (w.b[1] - w.a[1]) * ps.t + w.n[1] * 2.5]);
+      shopStats[f === ps.street ? 'onAddressStreet' : f ? 'otherStreet' : 'noStreetNear']++;
+    }
+    if (ps.own.size) shopStats[ps.own.has(w.bi) ? 'ownBuilding' : 'neighbourBuilding']++;
+    // Corner: the front reaches a wall end, and the building's next wall looks onto a street too.
+    for (const [atEnd, step] of [
+      [hi >= 1 - m - 1e-6, 1],
+      [lo <= m + 1e-6, -1],
+    ] as [boolean, number][]) {
+      if (!atEnd || (step === 1 ? (1 - ps.t) * w.len : ps.t * w.len) > 5) continue;
+      const [bi, ei] = w.key.split(':').map(Number);
+      const n = buildings[bi].o.length / 2;
+      const next = wallByKey.get(`${bi}:${(ei + step + n) % n}`);
+      if (!next || byWall.has(next.key) || !looksOntoStreet(next)) continue;
+      const len = Math.min(next.len - MARGIN, 5);
+      if (step === 1) emit(next, MARGIN / next.len, MARGIN / next.len + len / next.len, ps, false);
+      else emit(next, 1 - MARGIN / next.len - len / next.len, 1 - MARGIN / next.len, ps, false);
+      shopStats.cornerFronts++;
+    }
+  });
+}
+
+/** Direction (radians, rotation about Y) of the nearest street or path segment, for unoriented street furniture. */
+function roadAngleNear(p: Pt): number {
+  let best = Infinity,
+    ang = 0;
+  const cx = Math.floor(p[0] / WG),
+    cz = Math.floor(p[1] / WG);
+  for (let i = -1; i <= 1; i++)
+    for (let j = -1; j <= 1; j++)
+      for (const s of roadSegGrid.get(`${cx + i},${cz + j}`) ?? []) {
+        const d = segDist(p, s.a, s.b);
+        if (d < best) {
+          best = d;
+          ang = Math.atan2(-(s.b[1] - s.a[1]), s.b[0] - s.a[0]);
+        }
+      }
+  return ang;
+}
+
+// Picnic tables: only the ones mapped in OSM (none are invented around picnic sites).
 const tables: number[] = [];
-const isClear = (p: Pt) =>
-  streetGap(p) > 2.5 &&
-  !rivers.some((r) => {
-    for (let i = 2; i < r.p.length; i += 2) if (segDist(p, [r.p[i - 2], r.p[i - 1]], [r.p[i], r.p[i + 1]]) < r.w / 2 + 4) return true;
-    return false;
-  }) &&
-  !buildingCentroids.some((c) => Math.hypot(c[0] - p[0], c[1] - p[1]) < 8);
-let seed = 7;
-const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 for (const n of nodes.values()) {
   const t = n.tags;
-  if (!t) continue;
+  if (!t || t.leisure !== 'picnic_table') continue;
   const p = project(n.lat, n.lon);
   if (!inB(p)) continue;
-  if (t.leisure === 'picnic_table') tables.push(q(p[0]), q(p[1]), Math.round(rnd() * 314) / 100, t.material === 'stone' ? 1 : 0);
-  if (t.tourism === 'picnic_site') {
-    for (let k = 0, placed = 0; k < 60 && placed < 7; k++) {
-      const a = rnd() * Math.PI * 2,
-        r = 4 + rnd() * 22;
-      const c: Pt = [p[0] + Math.cos(a) * r, p[1] + Math.sin(a) * r];
-      if (!isClear(c) || tables.some((_, i) => i % 4 === 0 && Math.hypot(tables[i] - c[0], tables[i + 1] - c[1]) < 5)) continue;
-      tables.push(q(c[0]), q(c[1]), Math.round(rnd() * 314) / 100, 0);
-      placed++;
-    }
-  }
-}
-for (const p of polygons) {
-  if (p.tags.tourism !== 'picnic_site') continue;
-  const xs = p.outer.map((v) => v[0]),
-    zs = p.outer.map((v) => v[1]);
-  const area = Math.abs(signedArea(p.outer));
-  const want = Math.max(2, Math.min(10, Math.round(area / 500)));
-  for (let k = 0, placed = 0; k < 200 && placed < want; k++) {
-    const c: Pt = [
-      Math.min(...xs) + rnd() * (Math.max(...xs) - Math.min(...xs)),
-      Math.min(...zs) + rnd() * (Math.max(...zs) - Math.min(...zs)),
-    ];
-    if (!pointInRing(c, p.outer) || !isClear(c)) continue;
-    if (tables.some((_, i) => i % 4 === 0 && Math.hypot(tables[i] - c[0], tables[i + 1] - c[1]) < 6)) continue;
-    tables.push(q(c[0]), q(c[1]), Math.round(rnd() * 314) / 100, 0);
-    placed++;
-  }
+  // Orientation is not mapped: face the nearest street, like the benches.
+  const a = roadAngleNear(p);
+  tables.push(q(p[0]), q(p[1]), Math.round(a * 100) / 100, t.material === 'stone' ? 1 : 0);
 }
 
 // Playground equipment points (centroid of each mapped playground).

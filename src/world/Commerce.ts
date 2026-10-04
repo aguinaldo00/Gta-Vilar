@@ -255,7 +255,10 @@ export function buildCommerce(ctx: BuildContext): Signs {
   const B = Unit.box;
 
   for (const s of ctx.map.shops) {
-    const h = hash01(s.x * 1.7, s.z * 2.3);
+    // Seeded by the name, so both fronts of a corner shop look alike.
+    let code = 0;
+    for (let i = 0; i < s.n.length; i++) code = (code * 31 + s.n.charCodeAt(i)) % 100003;
+    const h = hash01(code * 0.37, 2.3);
     const st = styleOf(s, h);
     // The shop front stands on the pavement in front of the wall.
     const ground = ctx.terrain.heightAt(s.x + Math.sin(s.a) * 1.5, s.z + Math.cos(s.a) * 1.5);
@@ -275,7 +278,12 @@ export function buildCommerce(ctx: BuildContext): Signs {
       for (const x of [dx - 0.5, dx + 0.5]) lb.add(B, frame, x, 1.15, 0.09, 0, 0.08, 2.3, 0.1);
       lb.add(B, frame, dx, 1.1, 0.1, 0, 0.06, 0.06, 0.06);
       lb.add(B, mats.tint('#c9b27a'), dx + 0.38, 1.05, 0.14, 0, 0.03, 0.35, 0.03); // handle
-      if (W > 4.5) lb.add(B, frame, (dx + 0.5 + half) / 2, 1.45, 0.08, 0, 0.08, 2.1, 0.1);
+      // Wide fronts are glazed in bays of about 2.4 m, like the real shop windows.
+      const bays = Math.max(1, Math.round(W / 2.4));
+      for (let k = 1; k < bays; k++) {
+        const x = -half + (W * k) / bays;
+        if (Math.abs(x - dx) > 0.7) lb.add(B, frame, x, 1.45, 0.08, 0, 0.08, 2.1, 0.1);
+      }
     } else if (st.front === 'shutter') {
       lb.add(B, mats.corrugated, 0, 1.5, 0.05, 0, W - 0.5, 3.0, 0.06);
       lb.add(B, frame, 0, 3.05, 0.1, 0, W - 0.3, 0.25, 0.2);
@@ -288,7 +296,7 @@ export function buildCommerce(ctx: BuildContext): Signs {
     }
 
     // Fascia sign with the real name (8:1, sized to the front).
-    const sw = st.front === 'door' ? Math.min(W, s.c === 'office' ? 2.6 : 5) : W;
+    const sw = st.front === 'door' ? Math.min(W, s.c === 'office' ? 2.6 : 5) : Math.min(W, 6.5);
     const sh = Math.min(0.9, Math.max(0.32, sw / 8));
     const sy = st.front === 'shutter' ? 3.25 + sh / 2 : 2.75 + sh / 2;
     lb.add(B, mats.tint(st.bg), 0, sy, 0.05, 0, sw + 0.1, sh + 0.1, 0.1);
@@ -330,7 +338,7 @@ export function buildCommerce(ctx: BuildContext): Signs {
     }
 
     // Bar and café terraces where the pavement or the square has room.
-    if ((s.c === 'bar' || s.c === 'cafe') && h < 0.7) {
+    if ((s.c === 'bar' || s.c === 'cafe') && h < 0.7 && !s.s) {
       const out = 2.6;
       const px = s.x + Math.sin(s.a) * out,
         pz = s.z + Math.cos(s.a) * out;

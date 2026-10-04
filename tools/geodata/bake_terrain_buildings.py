@@ -33,6 +33,9 @@ from skimage import measure
 from heightpng import write_height_png
 from roofs import bake_roofs, fix_hidden_walls
 from walls import bake_barriers, total_length
+from passages import open_passages
+from cars import detect_cars
+from facades import bake_facades
 
 TERRAIN_CELL = 2  # m, runtime heightmap resolution
 MIN_ROOF_CELLS = 4
@@ -401,7 +404,9 @@ def main(map_path, lidar_path, mdt_path):
     m, lid, mdt, mdt_geo = load_inputs(map_path, lidar_path, mdt_path)
     LIDAR = lid
     # Start from the OSM-only buildings (re-runs must not stack LiDAR additions).
-    m["buildings"] = [b for b in m["buildings"] if b.get("src") != "lidar"]
+    m["buildings"] = [b for b in m["buildings"] if b.get("src") != "lidar" and not b.get("gf")]
+    for b in m["buildings"]:
+        b.pop("lift", None)
     dtm, covered = merged_dtm(m, lid, mdt, mdt_geo)
     dtm, street_share = smooth_streets(m, dtm)
     minX, minZ, W, H = game_grid(m)
@@ -410,9 +415,12 @@ def main(map_path, lidar_path, mdt_path):
     demolished = remove_demolished(m, dtm, roof, lidar_on_grid(m, lid, "dsm"))
     footprint, measured = measure_buildings(m, dtm, roof, H0, covered)
     added = trace_new_buildings(m, dtm, roof, footprint, H0)
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(lidar_path))))
+    f_matched, f_photo = bake_facades(m, os.path.join(root, "raw", "catastro"), os.path.join(root, "data", "facades.json"))
     walls_path = os.path.join(os.path.dirname(lidar_path), "lidar_walls.npz")
     walls_npz = np.load(walls_path) if os.path.exists(walls_path) else None
-    n_walls = bake_barriers(m, walls_npz, footprint | np.isfinite(roof))
+    n_walls, n_cuts = bake_barriers(m, walls_npz, footprint | np.isfinite(roof))
+    n_cars = detect_cars(m, walls_npz, footprint | np.isfinite(roof)) if walls_npz is not None else 0
     trees = lidar_trees(m, dtm, H0)
     river_levels(m, dtm, H0)
     carve_water(m, dtm, H0)
@@ -420,6 +428,7 @@ def main(map_path, lidar_path, mdt_path):
     grid = write_terrain(m, dtm, H0, out_png)
     n_roofs, n_foot, roof_stats = bake_roofs(m, dtm, roof, H0, os.path.join(os.path.dirname(map_path), "ortho"))
     shown = fix_hidden_walls(m)
+    passages = open_passages(m)
     m["meta"]["sources"] = [
         "OpenStreetMap contributors (ODbL 1.0)",
         "PNOA-LiDAR 2025 © Instituto Geográfico Nacional / Junta de Castilla y León (CC BY 4.0)",
@@ -429,8 +438,10 @@ def main(map_path, lidar_path, mdt_path):
     print(f"datum H0 = {H0:.2f} m; relief {grid.min():.1f} .. {grid.max():.1f} m; streets smoothed over {street_share * 100:.1f}% of the map")
     print(f"OSM buildings the LiDAR shows as bare ground (removed): {demolished}")
     print(f"buildings measured by LiDAR: {measured}; added from LiDAR: {added}; trees from LiDAR: {trees}")
-    print(f"barriers: {len(m['barriers']) - n_walls} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km)")
-    print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}")
+    print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses")
+    print(f"parked cars seen by the LiDAR: {n_cars}")
+    print(f"facades: {f_matched} footprints matched to the cadastre, {f_photo} coloured from its facade photo")
+    print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}; buildings opened over passages: {passages}")
     print(f"terrain {m['meta']['terrain']['cols']}x{m['meta']['terrain']['rows']} -> {out_png} ({os.path.getsize(out_png) // 1024} KB)")
 
 
