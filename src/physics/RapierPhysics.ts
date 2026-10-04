@@ -6,6 +6,7 @@ import {
   type ColliderOptions,
   type HeightGrid,
   Layer,
+  type MovableCollider,
   type PhysicsWorld,
   type VehicleBody,
   type VehicleContact,
@@ -168,6 +169,22 @@ export class RapierPhysics implements PhysicsWorld {
       .setCollisionGroups(staticGroups(o.mask ?? 7));
     this.world.createCollider(desc);
     this.dirty = true;
+  }
+
+  addMovableBox(x: number, y: number, z: number, w: number, d: number, h: number, rot: number, mask: number): MovableCollider {
+    const desc = RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2)
+      .setTranslation(x, y + h / 2, z)
+      .setRotation({ x: 0, y: Math.sin(rot / 2), z: 0, w: Math.cos(rot / 2) })
+      .setCollisionGroups(staticGroups(mask));
+    const col = this.world.createCollider(desc);
+    this.dirty = true;
+    return {
+      setPose: (px, py, pz, r) => {
+        col.setTranslation({ x: px, y: py + h / 2, z: pz });
+        col.setRotation({ x: 0, y: Math.sin(r / 2), z: 0, w: Math.cos(r / 2) });
+        this.dirty = true;
+      },
+    };
   }
 
   addCircle(x: number, z: number, r: number, o: ColliderOptions): void {

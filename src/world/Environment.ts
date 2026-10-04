@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import type { Rng } from '../core/math';
+import { mixColor, NIGHT, type SunState, sunState } from './DayNight';
 import type { MapData } from './mapData';
 import type { Quality } from './World';
 
@@ -27,8 +28,18 @@ export class Environment {
   readonly bgCamera = new THREE.PerspectiveCamera(60, 1, 10, 30000);
   private readonly sky: Sky;
   private readonly shadowSpan: number;
+  private readonly scene: THREE.Scene;
+  private readonly hemi: THREE.HemisphereLight;
+  private readonly bgHemi: THREE.HemisphereLight;
+  private readonly farSun: THREE.DirectionalLight;
+  private readonly stars: THREE.Points;
+  /** Direction the shadow-casting light comes from (the sun by day, the moon at night). */
+  private readonly lightDir = SUN_DIR.clone();
+  /** Current time of day (see setTime). */
+  state: SunState = sunState(17.5);
 
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer, rng: Rng, quality: Quality, map?: MapData) {
+    this.scene = scene;
     this.sky = new Sky();
     this.sky.scale.setScalar(20000);
     const u = this.sky.material.uniforms;
@@ -47,6 +58,10 @@ export class Environment {
     this.sky.material.fragmentShader = this.sky.material.fragmentShader
       .replace('void main() {', 'uniform float skyGain;\nvoid main() {')
       .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * skyGain, 1.0 );');
+    // The sky adds over a twilight backdrop (blue hour after sunset, night blue).
+    this.sky.material.blending = THREE.AdditiveBlending;
+    this.sky.material.depthWrite = false;
+    this.bgScene.background = new THREE.Color('#000000');
     this.bgScene.add(this.sky);
     const real = map ? buildSurroundings(map, quality.detail === 1 ? 4 : 8, quality) : null;
     // The real hills of Las Merindades when the map has them; a stylised ring of mountains otherwise.
@@ -60,10 +75,13 @@ export class Environment {
     floor.position.y = -0.6;
     if (!real) this.bgScene.add(floor);
     this.bgScene.fog = new THREE.Fog(HAZE, 600, 11000);
-    this.bgScene.add(new THREE.HemisphereLight('#cfe0f0', '#6d6450', 1.2));
-    const farSun = new THREE.DirectionalLight('#ffe2b8', 2.2);
+    this.bgHemi = new THREE.HemisphereLight('#cfe0f0', '#6d6450', 1.2);
+    this.bgScene.add(this.bgHemi);
+    const farSun = (this.farSun = new THREE.DirectionalLight('#ffe2b8', 2.2));
     farSun.position.copy(SUN_DIR);
     this.bgScene.add(farSun);
+    this.stars = buildStars(rng);
+    this.bgScene.add(this.stars);
 
     // Image-based lighting from the sky (without the mountains, which would read as a dark band).
     const envScene = new THREE.Scene();
@@ -78,7 +96,8 @@ export class Environment {
 
     scene.background = null;
     scene.fog = new THREE.FogExp2(HAZE, quality.fogDensity);
-    scene.add(new THREE.HemisphereLight('#cfe0f0', '#7a6a50', 0.1));
+    this.hemi = new THREE.HemisphereLight('#cfe0f0', '#7a6a50', 0.1);
+    scene.add(this.hemi);
 
     this.sun = new THREE.DirectionalLight('#ffe0b2', 1.9);
     this.sun.castShadow = true;
@@ -93,6 +112,53 @@ export class Environment {
     this.sun.shadow.normalBias = 0.04;
     this.sun.shadow.radius = 2.5;
     scene.add(this.sun, this.sun.target);
+  }
+
+  /**
+   * Lighting for a clock time (hours): sun or moon direction and colour, sky,
+   * haze, ambient light, stars; NIGHT drives the lamps and lit windows.
+   * Returns the state so the game can light lamps and headlights.
+   */
+  setTime(hours: number): SunState {
+    const st = (this.state = sunState(hours));
+    const { day, golden, night } = st;
+    const u = this.sky.material.uniforms;
+    // The sky follows the real sun (it darkens by itself below the horizon).
+    // Below the horizon the scattering model goes black at once: hold its sun at the horizon
+    // and dim it with the night instead, for a blue-and-amber twilight.
+    u.sunPosition.value.copy(st.sun).setY(Math.max(st.sun.y, 0.005)).normalize().multiplyScalar(1000);
+    u.turbidity.value = 4 + golden * 6;
+    u.rayleigh.value = 1.3 + golden * 1.2;
+    // Keep the sky bright through the golden hour: the low sun paints it orange by itself.
+    u.skyGain.value = 0.25 * (0.04 + 0.96 * Math.max(day, golden * 1.1, 1 - night)) * (1 - 0.9 * night);
+    // Shadows from the sun by day and from the moon at night.
+    this.lightDir.copy(st.elevation > -0.02 ? st.sun : st.moon);
+    if (this.lightDir.y < 0.12) this.lightDir.setY(0.12).normalize();
+    const sunCol = mixColor('#ff8a3c', '#fff1dc', (st.elevation - 0.02) / 0.4);
+    const moonCol = new THREE.Color('#8ea6d8');
+    this.sun.color.copy(sunCol).lerp(moonCol, night);
+    this.sun.intensity = 2.1 * day + 0.32 * night;
+    this.farSun.color.copy(this.sun.color);
+    this.farSun.intensity = 2.2 * day + 0.25 * night;
+    this.farSun.position.copy(this.lightDir);
+    // Ambient: sky light by day, a dim blue at night.
+    this.hemi.color.copy(mixColor('#cfe0f0', '#ffcfa0', golden)).lerp(new THREE.Color('#41557d'), night);
+    this.hemi.intensity = 0.1 + night * 0.35;
+    this.bgHemi.color.copy(this.hemi.color);
+    this.bgHemi.intensity = 1.2 * (0.12 + 0.88 * day);
+    this.scene.environmentIntensity = 0.35 * (0.12 + 0.88 * day);
+    // Haze: blue-grey by day, peach at sunset, deep blue at night.
+    const fog = mixColor(HAZE, '#d6a483', golden).lerp(new THREE.Color('#0d1626'), night);
+    (this.scene.fog as THREE.FogExp2).color.copy(fog);
+    (this.bgScene.fog as THREE.Fog).color.copy(fog);
+    (this.floor.material as THREE.MeshBasicMaterial).color.copy(mixColor('#a9b4a6', '#141c26', night));
+    (this.stars.material as THREE.PointsMaterial).opacity = night * 0.9;
+    // Blue hour: strongest half-way into the night, fading to a dark night blue.
+    const twilight = Math.min(1, night * (1 - night) * 4);
+    (this.bgScene.background as THREE.Color).copy(mixColor('#000000', '#0a1220', night)).lerp(new THREE.Color('#2b4a78'), twilight * 0.85);
+    this.stars.visible = night > 0.02;
+    NIGHT.value = night;
+    return st;
   }
 
   /** Height of the distant valley floor (so it meets the edge of the map). */
@@ -115,9 +181,38 @@ export class Environment {
     const step = (this.shadowSpan * 2) / this.sun.shadow.mapSize.x;
     const fx = Math.round(focus.x / step) * step;
     const fz = Math.round(focus.z / step) * step;
-    this.sun.position.set(fx + SUN_DIR.x * 200, focus.y + SUN_DIR.y * 200, fz + SUN_DIR.z * 200);
+    const L = this.lightDir;
+    this.sun.position.set(fx + L.x * 200, focus.y + L.y * 200, fz + L.z * 200);
+    this.stars.position.copy(camera.position);
     this.sun.target.position.set(fx, focus.y, fz);
   }
+}
+
+/** A dome of stars (seen through the night sky). */
+function buildStars(rng: Rng): THREE.Points {
+  const n = 2500;
+  const pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const y = rng.range(0.05, 1);
+    const r = Math.sqrt(1 - y * y);
+    pos.set([Math.cos(a) * r * 9000, y * 9000, Math.sin(a) * r * 9000], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({
+    color: '#dfe8ff',
+    size: 1.6,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0,
+    fog: false,
+    depthWrite: false,
+  });
+  const p = new THREE.Points(g, m);
+  p.frustumCulled = false;
+  p.renderOrder = -1;
+  return p;
 }
 
 /**

@@ -49,6 +49,8 @@ export class Player {
   private readonly armL = new THREE.Group();
   private readonly armR = new THREE.Group();
   private phase = 0;
+  /** Footsteps taken (one per half stride), read by the footstep sounds. */
+  steps = 0;
   private knockTimer = 0;
   private tumble = 0;
   private capsule: CharacterBody | null = null;
@@ -250,7 +252,9 @@ export class Player {
       armLift = 0,
       legBend = 0;
     if (st === 'walk' || st === 'run' || st === 'wade') {
+      const before = Math.floor(this.phase / Math.PI);
       this.phase += hs * dt * (st === 'run' ? 1.6 : 2.4);
+      if (Math.floor(this.phase / Math.PI) !== before) this.steps++;
       const amp = st === 'run' ? 0.95 : 0.6;
       legSwing = Math.sin(this.phase) * amp;
       armSwing = -Math.sin(this.phase) * amp * 0.85;

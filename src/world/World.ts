@@ -1,10 +1,15 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { Quality } from '@/config/Config';
 import { Rng } from '../core/math';
 import { type ColliderOptions, type HeightGrid, Layer, type StaticColliders } from '../physics/PhysicsWorld';
 import { buildBarriers } from './Barriers';
 import { Batcher } from './Batcher';
 import { Breakables } from './Breakables';
+import { ParkedCars } from './ParkedCars';
+
+/** Real point lights under the nearest street lamps at night. */
+const LAMP_LIGHTS = 6;
+
 import { buildBuildings } from './Buildings';
 import { buildChurches } from './Churches';
 import { buildCommerce } from './Commerce';
@@ -57,8 +62,15 @@ export class World {
   readonly screens: DigitalScreens;
   /** Signs, lamp posts and bollards that cars knock over (update with the vehicles each frame). */
   readonly breakables = new Breakables();
+  /** Parked cars from the LiDAR, which a driven car can shove. */
+  parkedCars!: ParkedCars;
+  private readonly lampHeads: number[] = [];
+  /** Light pools under the street lamps nearest the camera at night (a few real lights). */
+  private readonly lampLights: THREE.PointLight[] = [];
   private readonly animators: Animator[] = [];
   private readonly named: NamedArea[] = [];
+  /** Grassy land use (parks, gardens, fields) for the footstep surface. */
+  private readonly greens: NamedArea[] = [];
   private readonly landmarkZones: { name: string; x: number; z: number; r: number }[] = [];
 
   constructor(
@@ -80,6 +92,7 @@ export class World {
     const grounded: StaticColliders = {
       addBox: (x, z, w, d, o) => collision.addBox(x, z, w, d, lift(o, terrain.heightAt(x, z))),
       addCircle: (x, z, r, o) => collision.addCircle(x, z, r, lift(o, terrain.heightAt(x, z))),
+      addMovableBox: (x, y, z, w, d, h, rot, mask) => collision.addMovableBox(x, y, z, w, d, h, rot, mask),
     };
     const ctx: BuildContext = {
       map,
@@ -94,6 +107,7 @@ export class World {
       roads: this.roads,
       quality,
       breakables: this.breakables,
+      lamps: this.lampHeads,
     };
     this.env = new Environment(scene, renderer, rng, quality, map);
     // Without an orthophoto the ground falls back to the land-use texture.
@@ -133,6 +147,12 @@ export class World {
     this.stats.byStage = Object.fromEntries(Object.entries(batch.byStage).map(([k, v]) => [k, Math.round(v)]));
     this.stats.meshes = batch.build(scene);
     this.breakables.finish(scene);
+    this.parkedCars = new ParkedCars(ctx);
+    for (let i = 0; i < LAMP_LIGHTS; i++) {
+      const l = new THREE.PointLight('#ffc27a', 0, 18, 1.6);
+      this.lampLights.push(l);
+      scene.add(l);
+    }
     this.buildBounds(collision);
     // The background valley floor meets the map edge at its typical height.
     const B = this.bounds;
@@ -170,6 +190,27 @@ export class World {
   }
 
   private indexPlaces(): void {
+    const GREEN = new Set([
+      'park',
+      'garden',
+      'grass',
+      'meadow',
+      'farmland',
+      'pitch',
+      'playground',
+      'forest',
+      'scrub',
+      'orchard',
+      'allotments',
+      'cemetery',
+      'camp',
+    ]);
+    for (const a of this.map.areas) {
+      if (!GREEN.has(a.k)) continue;
+      const ring = toPts(a.o);
+      const b = ringBounds(ring);
+      this.greens.push({ name: a.k, ring, b, area: 0 });
+    }
     for (const a of this.map.areas) {
       if (!a.n || a.k === 'parking') continue;
       const ring = toPts(a.o);
@@ -209,6 +250,29 @@ export class World {
     return this.terrain.waterAt(x, z);
   }
 
+  /**
+   * What the ground is made of at (x, z), for footsteps: water, asphalt (a
+   * carriageway), gravel (tracks and paths), grass (parks, gardens, fields)
+   * or pavement (sidewalks, squares, the rest of the town).
+   */
+  surfaceAt(x: number, z: number): 'water' | 'asphalt' | 'gravel' | 'grass' | 'pavement' {
+    if (this.terrain.waterAt(x, z) !== null) return 'water';
+    const road = this.roads.nearest(x, z, 0.5);
+    if (road && road.d < 0) {
+      const k = road.road.k;
+      if (VEHICLE_ROADS.has(k)) return k === 'track' ? 'gravel' : 'asphalt';
+      if (k === 'path' || k === 'track' || k === 'bridleway') return 'gravel';
+      return 'pavement';
+    }
+    for (const a of this.greens) {
+      if (x < a.b.minX || x > a.b.maxX || z < a.b.minZ || z > a.b.maxZ) continue;
+      if (pointInRing(x, z, a.ring)) return 'grass';
+    }
+    // Away from streets, outside the town: fields and meadows.
+    const near = this.roads.nearest(x, z, 6);
+    return near ? 'pavement' : 'grass';
+  }
+
   /** Place name for the HUD: landmark, named area, street name, or the municipality. */
   zoneAt(x: number, z: number): string {
     for (const l of this.landmarkZones) if (Math.hypot(x - l.x, z - l.z) < l.r) return l.name;
@@ -231,6 +295,35 @@ export class World {
     const lane = hit.road.w / 4;
     // Spain drives on the right; a vehicle heading along (dx, dz) has its right side at (-dz, dx).
     return { x: hit.x - hit.dz * lane, z: hit.z + hit.dx * lane, heading: Math.atan2(hit.dx, hit.dz) };
+  }
+
+  /** Street lamp light pools: the nearest lamps to the camera get a real light at night. */
+  updateNightLights(camera: THREE.Vector3, night: number): void {
+    const L = this.lampLights;
+    if (night < 0.03) {
+      for (const l of L) l.intensity = 0;
+      return;
+    }
+    const lamps = this.lampHeads;
+    const best: { d: number; i: number }[] = [];
+    for (let i = 0; i < lamps.length; i += 3) {
+      const d = (lamps[i] - camera.x) ** 2 + (lamps[i + 2] - camera.z) ** 2;
+      if (best.length < L.length || d < best[best.length - 1].d) {
+        best.push({ d, i });
+        best.sort((a, b) => a.d - b.d);
+        if (best.length > L.length) best.pop();
+      }
+    }
+    L.forEach((l, k) => {
+      const b = best[k];
+      if (!b) {
+        l.intensity = 0;
+        return;
+      }
+      l.position.set(lamps[b.i], lamps[b.i + 1] - 0.4, lamps[b.i + 2]);
+      // Fade the farthest ones so lights do not pop as they are reassigned.
+      l.intensity = 16 * night * Math.min(1, Math.max(0, 1.4 - Math.sqrt(b.d) / 60));
+    });
   }
 
   update(dt: number, time: number, focus: THREE.Vector3, camera: THREE.PerspectiveCamera): void {

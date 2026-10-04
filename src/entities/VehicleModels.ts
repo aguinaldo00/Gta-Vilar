@@ -30,6 +30,11 @@ export interface VehicleRig {
 
 let shared: Record<'tire' | 'glass' | 'dark' | 'chrome' | 'headlight' | 'plate' | 'skin' | 'shirt' | 'hair', THREE.Material> | null = null;
 
+/** Headlamps glow brighter at night (0 day … 1 night). */
+export function setHeadlights(night: number): void {
+  (sharedMats().headlight as THREE.MeshStandardMaterial).emissiveIntensity = 0.6 + night * 5;
+}
+
 function sharedMats() {
   if (!shared) {
     shared = {

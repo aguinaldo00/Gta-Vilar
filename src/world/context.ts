@@ -28,4 +28,6 @@ export interface BuildContext {
   quality: Quality;
   /** Signs, lamp posts and bollards a car can knock down. */
   breakables: Breakables;
+  /** Street lamp heads (x, y, z triples) for the night lights. */
+  lamps: number[];
 }

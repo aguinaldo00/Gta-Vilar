@@ -41,6 +41,15 @@
     ],
     "respawn": [
       "KeyR"
+    ],
+    "radioNext": [
+      "KeyQ"
+    ],
+    "radioPrev": [
+      "KeyZ"
+    ],
+    "timeSkip": [
+      "KeyT"
     ]
   }
 }

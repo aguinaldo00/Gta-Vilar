@@ -14,7 +14,10 @@ export type Action =
   | 'use'
   | 'help'
   | 'mute'
-  | 'respawn';
+  | 'respawn'
+  | 'radioNext'
+  | 'radioPrev'
+  | 'timeSkip';
 
 /**
  * Game-facing input: named actions and axes, independent of the device.

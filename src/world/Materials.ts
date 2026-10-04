@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { NIGHT } from './DayNight';
 import { facadeStylesTexture, N_CELLS, N_STYLES } from './facadeStyles';
 import * as T from './textures';
 import { waterTime } from './Water';
@@ -289,6 +290,7 @@ function storeyAtlas(m: Lambert, mask: THREE.Texture): Lambert {
   m.userData.attributes = ['fstyle'];
   m.onBeforeCompile = (shader) => {
     shader.uniforms.wallMaskMap = { value: mask };
+    shader.uniforms.nightGlow = NIGHT;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float fstyle;\nvarying float vStyle;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvStyle = fstyle;');
@@ -298,6 +300,7 @@ function storeyAtlas(m: Lambert, mask: THREE.Texture): Lambert {
         `#include <common>
 varying float vStyle;
 uniform sampler2D wallMaskMap;
+uniform float nightGlow;
 float h11(float n) { return fract(sin(n * 12.9898 + 4.1) * 43758.5453); }
 vec2 storeyCell(vec2 uv) {
   // Interpolation leaves tiny per-pixel errors in the attribute: snap it, or the hashed
@@ -323,6 +326,18 @@ vec2 storeyCell(vec2 uv) {
   diffuseColor.rgb *= texel.rgb * mix(vec3(1.0), vColor.rgb, wallMask);`,
       )
       .replace('#include <color_fragment>', '')
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+  // At night some windows are lit: warm light behind the glass of a random third of them.
+  if (nightGlow > 0.01) {
+    float lum = dot(texel.rgb, vec3(0.3, 0.59, 0.11));
+    float glassPx = (1.0 - wallMask) * step(lum, 0.32) * step(texel.r, texel.b + 0.03);
+    vec2 win = floor(vMapUv);
+    float lit = step(h11(win.x * 3.17 + win.y * 11.3 + floor(vStyle * 64.0) * 0.71), 0.24);
+    totalEmissiveRadiance += vec3(1.0, 0.7, 0.4) * glassPx * lit * nightGlow * 0.75;
+  }`,
+      )
       .replace(
         'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
         `vec3 mapN = textureGrad( normalMap, storeyCell(vNormalMapUv), dFdx(vNormalMapUv) * vec2(0.98 / ${N_CELLS}.0, 0.98 / ${N_STYLES}.0), dFdy(vNormalMapUv) * vec2(0.98 / ${N_CELLS}.0, 0.98 / ${N_STYLES}.0) ).xyz * 2.0 - 1.0;`,

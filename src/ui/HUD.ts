@@ -34,7 +34,7 @@ export class HUD {
   private zoneTimer = 0;
   private lastPrompt: string | null = null;
 
-  update(dt: number, zone: string, state: string, vehicle: Vehicle | null, prompt: string | null, locked: boolean): void {
+  update(dt: number, zone: string, state: string, vehicle: Vehicle | null, prompt: string | null, locked: boolean, hours: number): void {
     if (zone !== this.currentZone) {
       this.currentZone = zone;
       this.zone.textContent = zone;
@@ -62,8 +62,10 @@ export class HUD {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.toast.classList.remove('show');
     }
-    const d = new Date();
-    this.clock.textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    // Game clock (time of day of the world, see Game.hours).
+    const h = Math.floor(hours) % 24,
+      m = Math.floor((hours % 1) * 60);
+    this.clock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
   toggleHelp(): void {

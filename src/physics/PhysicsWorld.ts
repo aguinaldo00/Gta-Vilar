@@ -31,10 +31,18 @@ export interface ColliderOptions {
   absolute?: boolean;
 }
 
+/** A level box that gameplay can move (a parked car that was pushed). */
+export interface MovableCollider {
+  /** New position (x, z, base height y) and heading. */
+  setPose(x: number, y: number, z: number, rot: number): void;
+}
+
 /** Write-only sink for static level geometry (what world builders need). */
 export interface StaticColliders {
   addBox(x: number, z: number, w: number, d: number, o: ColliderOptions): void;
   addCircle(x: number, z: number, r: number, o: ColliderOptions): void;
+  /** Box of height `h` standing at base height `y` (world space) that can be moved later. */
+  addMovableBox(x: number, y: number, z: number, w: number, d: number, h: number, rot: number, mask: number): MovableCollider;
 }
 
 /** Regular grid of ground heights (row-major, z rows by x columns). */

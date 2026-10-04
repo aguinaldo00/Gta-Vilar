@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Layer } from '../physics/PhysicsWorld';
 import type { BuildContext } from './context';
+import { NIGHT } from './DayNight';
 import { hash01, type Pt, pointInRing, ringBounds, ringDist, SpatialGrid, toPts } from './geo';
 import { bench, planeTree, Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
@@ -366,6 +367,16 @@ export function buildVegetation(ctx: BuildContext): void {
   const lamp = LAMP();
   const ornate = ORNATE_LAMP();
   const lampMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
+  // The lanterns (the light vertex colour) glow at night.
+  lampMat.onBeforeCompile = (shader) => {
+    shader.uniforms.nightGlow = NIGHT;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float nightGlow;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(1.0, 0.8, 0.5) * step(0.8, dot(vColor.rgb, vec3(0.333))) * nightGlow * 3.0;',
+      );
+  };
   for (let i = 0; i < ctx.map.lamps.length; i += 2) {
     let x = ctx.map.lamps[i],
       z = ctx.map.lamps[i + 1];
@@ -389,6 +400,7 @@ export function buildVegetation(ctx: BuildContext): void {
       { key: fancy ? 'lamp-ornate' : 'lamp', geo: fancy ? ornate : lamp, mat: lampMat },
     ]);
     collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Player });
+    ctx.lamps.push(x, terrain.heightAt(x, z) + (fancy ? 4.1 : 4.3), z);
   }
 
   // Benches face the nearest street or path.

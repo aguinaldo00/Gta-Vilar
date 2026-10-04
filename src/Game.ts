@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GameAudio } from './audio/GameAudio';
+import { RadioSystem } from './audio/Radio';
 import { FollowCamera } from './camera/FollowCamera';
 import type { Config } from './config/Config';
 import { EventBus } from './core/EventBus';
@@ -8,6 +9,7 @@ import { FixedStepLoop } from './core/FixedStepLoop';
 import { Player } from './entities/Player';
 import { SkidMarks } from './entities/SkidMarks';
 import { PARKED, Vehicle } from './entities/Vehicle';
+import { setHeadlights } from './entities/VehicleModels';
 import { InputActions } from './input/InputActions';
 import { RawInput } from './input/RawInput';
 import { Layer } from './physics/PhysicsWorld';
@@ -17,6 +19,7 @@ import { Locomotion } from './systems/Locomotion';
 import { VehicleInteraction } from './systems/VehicleInteraction';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
+import { RadioPanel } from './ui/RadioPanel';
 import { TouchControls } from './ui/TouchControls';
 import type { MapData } from './world/mapData';
 import { World } from './world/World';
@@ -53,6 +56,15 @@ export class Game {
   private readonly hud = new HUD();
   private readonly minimap: Minimap;
   private readonly audio = new GameAudio();
+  /** Car radio (GTA IV style): on when the player is in a vehicle. */
+  readonly radio = new RadioSystem(new RadioPanel(document.getElementById('hud') ?? document.body));
+  private wasDriving = false;
+  private lastSteps = 0;
+  /** Time of day in hours: starts at the real local time and runs a game minute per second (a day in 24 minutes). */
+  hours = new Date().getHours() + new Date().getMinutes() / 60;
+  /** Game minutes per real second. */
+  timeScale = 1;
+  private readonly headlamp = new THREE.SpotLight('#fff1d6', 0, 50, 0.6, 0.55, 1.3);
   private readonly touch: TouchControls | null;
   private last = -1;
   private time = 0;
@@ -92,6 +104,7 @@ export class Game {
 
     this.spawnVehicles();
     this.scene.add(this.player.root);
+    this.scene.add(this.headlamp, this.headlamp.target);
     this.player.attachBody(
       this.physics.createCharacter({
         radius: this.player.radius,
@@ -129,6 +142,7 @@ export class Game {
     this.running = true;
     this.locomotion.enabled = true;
     this.audio.init();
+    this.radio.init();
     if (this.touch) {
       // Phones: go fullscreen and landscape where the browser allows it.
       try {
@@ -240,8 +254,25 @@ export class Game {
       this.world,
     );
 
+    this.hours = (this.hours + (dt * this.timeScale) / 60) % 24;
+    const sky = this.world.env.setTime(this.hours);
+    // Slightly more exposure at night, so the lamp-lit streets stay readable.
+    this.renderer.toneMappingExposure = 0.65 + sky.night * 0.35;
+    this.world.updateNightLights(this.camera.position, sky.night);
+    setHeadlights(sky.night);
+    {
+      const car = this.player.vehicle;
+      if (car && sky.night > 0.05) {
+        const fx = Math.sin(car.heading),
+          fz = Math.cos(car.heading);
+        this.headlamp.position.set(car.x + fx * 2.3, car.y + 0.8, car.z + fz * 2.3);
+        this.headlamp.target.position.set(car.x + fx * 16, car.y - 0.5, car.z + fz * 16);
+        this.headlamp.intensity = 90 * sky.night;
+      } else this.headlamp.intensity = 0;
+    }
     this.world.update(dt, this.time, this.player.pos, this.camera);
     this.world.breakables.update(dt, this.vehicles);
+    this.world.parkedCars.update(dt, this.vehicles);
     this.world.screens.update(
       dt,
       this.renderer,
@@ -253,13 +284,26 @@ export class Game {
       this.world.zoneAt(this.player.pos.x, this.player.pos.z),
     );
     this.audio.update(v);
+    // Footsteps on whatever the player walks on.
+    if (!v && this.player.steps !== this.lastSteps) {
+      this.lastSteps = this.player.steps;
+      const st = this.player.state;
+      if (st === 'walk' || st === 'run' || st === 'wade')
+        this.audio.footstep(st === 'wade' ? 'water' : this.world.surfaceAt(this.player.pos.x, this.player.pos.z), st === 'run');
+    }
+    if (!!v !== this.wasDriving) {
+      this.wasDriving = !!v;
+      document.body.classList.toggle('radio-on', !!v);
+      if (v) this.radio.enterVehicle();
+      else this.radio.exitVehicle();
+    }
 
     const zone = this.world.zoneAt(this.player.pos.x, this.player.pos.z);
     const near = this.interaction.nearest();
     const action = this.touch ? 'Toca <b>ROBAR</b>' : 'Pulsa <b>F</b> / <b>E</b> para robar';
     const prompt = near ? `${action}: <b>${near.spec.label}</b>` : null;
     this.touch?.setDriving(!!v);
-    this.hud.update(dt, zone, this.player.state, v, prompt, this.input.locked || !this.running || !!this.touch);
+    this.hud.update(dt, zone, this.player.state, v, prompt, this.input.locked || !this.running || !!this.touch, this.hours);
     this.minimap.draw(this.player.pos.x, this.player.pos.z, this.player.facing, this.followCam.yaw, this.vehicles, v);
     this.input.endFrame();
   }
@@ -268,7 +312,17 @@ export class Game {
     const a = this.actions;
     if (a.pressed('use')) this.interaction.toggle();
     if (a.pressed('help')) this.hud.toggleHelp();
-    if (a.pressed('mute')) this.hud.flash(this.audio.toggleMute() ? 'Sonido: OFF' : 'Sonido: ON');
+    if (a.pressed('mute')) {
+      const muted = this.audio.toggleMute();
+      this.radio.setMuted(muted);
+      this.hud.flash(muted ? 'Sonido: OFF' : 'Sonido: ON');
+    }
+    if (a.pressed('timeSkip')) {
+      this.hours = (Math.floor(this.hours) + 1) % 24;
+      this.hud.flash(`${String(Math.floor(this.hours)).padStart(2, '0')}:00`);
+    }
+    if (a.pressed('radioNext')) this.radio.next();
+    if (a.pressed('radioPrev')) this.radio.prev();
     if (a.pressed('respawn')) this.respawn(true);
   }
 
