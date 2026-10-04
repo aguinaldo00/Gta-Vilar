@@ -27,7 +27,8 @@ import polygonClipping, { type MultiPolygon as ClipMulti } from 'polygon-clippin
 interface Corrections {
   shops?: Record<string, { at?: [number, number]; name?: string; w?: number; street?: string }>;
   furniture?: { k: string; x: number; z: number; a: number; t?: string; replaces?: [number, number] }[];
-  barriers?: { p: number[]; k: string; h?: number }[];
+  barriers?: { p: number[]; k: string; h?: number; cut?: boolean; hedge?: number }[];
+  barrierKinds?: { near: [number, number]; k: string; h?: number }[];
 }
 const corrections: Corrections = (() => {
   try {
@@ -446,6 +447,7 @@ interface BuildingOut {
   /** Outline whose volume is described by parts. */ hp?: 1;
   /** This is a part. */ part?: 1;
   /** Hidden wall indices (edge i joins vertex i and i+1). */ hid?: number[];
+  /** Rest of an outline its parts leave uncovered (kept by the bake only where the LiDAR sees a roof). */ fill?: 1;
 }
 const buildings: BuildingOut[] = [];
 const buildingCentroids: Pt[] = [];
@@ -606,6 +608,8 @@ let filledOutlines = 0,
     return r;
   };
   for (const [outline, parts] of byParent) {
+    // Landmarks with their own model (Santa Marina, the Ayuntamiento...) are built from their parts as they are.
+    if (['church', 'townhall', 'torre'].includes(outline.t)) continue;
     const outer = [ringOf(outline.o), ...(outline.h ?? []).map(ringOf)];
     let rest: ClipMulti;
     try {
@@ -622,7 +626,7 @@ let filledOutlines = 0,
         perim += Math.hypot(ring[(i + 1) % ring.length][0] - ring[i][0], ring[(i + 1) % ring.length][1] - ring[i][1]);
       // Leftover slivers along shared walls are not buildings.
       if (area < 8 || area / perim < 0.8) continue;
-      const out: BuildingOut = { o: flat(ring), t: outline.t, lv: outline.lv ?? Math.max(...parts.map((p) => p.top)), part: 1 };
+      const out: BuildingOut = { o: flat(ring), t: outline.t, lv: outline.lv ?? Math.max(...parts.map((p) => p.top)), part: 1, fill: 1 };
       if (poly.length > 1) out.h = poly.slice(1).map((h) => flat(h.slice(0, -1) as Pt[]));
       if (outline.ht) out.ht = outline.ht;
       if (outline.mat) out.mat = outline.mat;
@@ -884,9 +888,9 @@ const BARRIER_KIND: Record<string, string> = {
   hedge: 'hedge',
 };
 const GATES = new Set(['gate', 'sliding_gate', 'swing_gate', 'lift_gate', 'entrance']);
-const barriers: { p: number[]; k: string; h?: number; fix?: 1 }[] = [];
+const barriers: { p: number[]; k: string; h?: number; fix?: 1; hedge?: number }[] = [];
 const bollards: number[] = [];
-for (const b of corrections.barriers ?? []) barriers.push({ ...b, fix: 1 });
+for (const { cut, ...b } of corrections.barriers ?? []) barriers.push(cut ? b : { ...b, fix: 1 });
 for (const [id, w] of ways) {
   const kind = BARRIER_KIND[w.tags.barrier ?? ''];
   if (!kind || w.tags.building) continue;
@@ -923,6 +927,17 @@ for (const [id, w] of ways) {
       barriers.push({ p: flat(simplify(part, 0.2)), k: kind, ...(height ? { h: height } : {}) });
     }
 }
+// Kind of a mapped barrier checked against photos (OSM only says "fence").
+for (const fix of corrections.barrierKinds ?? []) {
+  for (const b of barriers) {
+    if (b.fix) continue;
+    let near = false;
+    for (let i = 0; i < b.p.length; i += 2) if (Math.hypot(b.p[i] - fix.near[0], b.p[i + 1] - fix.near[1]) < 3) near = true;
+    if (!near) continue;
+    b.k = fix.k;
+    if (fix.h) b.h = fix.h;
+  }
+}
 for (const n of nodes.values()) {
   if (n.tags?.barrier !== 'bollard') continue;
   const p = project(n.lat, n.lon);
@@ -958,8 +973,12 @@ for (const [id, n] of nodes) {
   const t = n.tags;
   if (t.natural === 'tree' && t.leaf_type === 'needleleaved') pines.push(q(p[0]), q(p[1]));
   else if (t.natural === 'tree') trees.push(q(p[0]), q(p[1]));
-  else if (t.highway === 'street_lamp') lamps.push(q(p[0]), q(p[1]));
-  else if (t.amenity === 'bench' && !t.historic) benches.push(q(p[0]), q(p[1]));
+  else if (t.highway === 'street_lamp') {
+    // Some lamps are mapped once per lantern: one post per 2.5 m.
+    let dup = false;
+    for (let i = 0; i < lamps.length && !dup; i += 2) dup = Math.hypot(lamps[i] - p[0], lamps[i + 1] - p[1]) < 2.5;
+    if (!dup) lamps.push(q(p[0]), q(p[1]));
+  } else if (t.amenity === 'bench' && !t.historic) benches.push(q(p[0]), q(p[1]));
   else if (t.highway === 'crossing' && t.crossing !== 'no') {
     const a = roadAngleAt(id);
     if (a !== null) crossings.push(q(p[0]), q(p[1]), Math.round(a * 1000) / 1000);
@@ -1172,7 +1191,8 @@ function shopCategory(tags: Tags): { c: string; label: string } | null {
 function shortName(t: Tags, fallback: string): string {
   if (t.amenity === 'police') return 'Casa Cuartel Guardia Civil';
   if (t.inscription) return t.inscription;
-  let n = (t.short_name ?? t.name ?? fallback).trim();
+  // A closed business keeps the name it had (old_name), e.g. Pan Casero Bercedo.
+  let n = (t.short_name ?? t.name ?? t.old_name ?? fallback).trim();
   n = n.replace(/ de Villarcayo( de Merindad de Castilla la Vieja)?$/i, '').replace(/ de Merindad de Castilla la Vieja$/i, '');
   while (n.length > 30 && n.lastIndexOf(' de ') > 10) n = n.slice(0, n.lastIndexOf(' de '));
   return n;
@@ -1466,6 +1486,8 @@ interface PendingShop {
 const pending: PendingShop[] = [];
 /** Free-standing kiosks (newspapers, the ONCE lottery booth): built as kiosks, not as shop fronts. */
 const kiosks: { x: number; z: number; t: string }[] = [];
+const liveNames = new Set<string>();
+for (const n of nodes.values()) if (n.tags?.name && (n.tags.shop || n.tags.amenity)) liveNames.add(n.tags.name);
 for (const n of nodes.values()) {
   if (!n.tags) continue;
   const fix = n.tags.name ? corrections.shops?.[n.tags.name] : undefined;
@@ -1477,6 +1499,8 @@ for (const n of nodes.values()) {
   }
   // The street a corrected shop really opens onto (a corner bank's postal address can be the side street).
   if (fix?.street !== undefined) tags = { ...tags, 'addr:street': fix.street };
+  // A business that moved (Mercería la Goya) leaves its old premises: no sign at both addresses.
+  if (!tags.name && tags.old_name && liveNames.has(tags.old_name)) continue;
   const isKiosk = tags.shop === 'kiosk' || (tags.shop === 'lottery' && /ONCE/.test(tags.brand ?? tags.name ?? ''));
   if (isKiosk && inB(p) && buildingsAt(p).size === 0) {
     kiosks.push({ x: q(p[0]), z: q(p[1]), t: tags.name ?? (tags.shop === 'lottery' ? 'ONCE' : 'Prensa') });

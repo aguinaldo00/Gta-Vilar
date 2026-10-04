@@ -27,8 +27,8 @@ from skimage.morphology import disk, skeletonize
 
 from walls import trace_paths
 
-MIN_LENGTH = 6.0
-MIN_H, MAX_H = 0.7, 6.0
+MIN_LENGTH = 8.0
+MIN_H, MAX_H = 1.0, 5.0
 URBAN = 40  # m from a building
 VEHICLE = {"motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service"}
 
@@ -81,12 +81,16 @@ def bake_hedges(m, dtm, veg, lowtop, ortho, building_mask, grid):
 
     img = Image.new("L", (W, H), 0)
     d = ImageDraw.Draw(img)
+    # Every street, path and bridge deck, the river and the streams.
     for r in m["roads"]:
-        if r["k"] in VEHICLE and not r.get("b"):
+        p = r["p"]
+        d.line([(p[i] - minX, p[i + 1] - minZ) for i in range(0, len(p), 2)], fill=1, width=int(r["w"]) + (6 if r.get("b") else 1))
+    for key in ("rivers", "streams"):
+        for r in m.get(key, []):
             p = r["p"]
-            d.line([(p[i] - minX, p[i + 1] - minZ) for i in range(0, len(p), 2)], fill=1, width=int(r["w"]) + 1)
+            d.line([(p[i] - minX, p[i + 1] - minZ) for i in range(0, len(p), 2)], fill=1, width=int(r.get("w", 4)) + 10)
     for a in m["areas"]:
-        if a["k"] in ("water", "pool", "farmland", "forest"):
+        if a["k"] in ("water", "pool", "farmland", "forest", "parking", "pedestrian", "pitch", "meadow", "scrub"):
             o = a["o"]
             d.polygon([(o[i] - minX, o[i + 1] - minZ) for i in range(0, len(o), 2)], fill=1)
     for b in m.get("barriers", []):
@@ -133,7 +137,7 @@ def bake_hedges(m, dtm, veg, lowtop, ortho, building_mask, grid):
     return out
 
 
-def classify_by_ortho(m, sample):
+def classify_by_ortho(m, sample, lowtop=None, grid=None):
     """
     Walls and fences found in the low points that are really hedges: PNOA files
     both as low vegetation, but in the orthophoto a clipped hedge is a line of
@@ -144,7 +148,9 @@ def classify_by_ortho(m, sample):
         return 0
     changed = 0
     for b in m["barriers"]:
-        if b.get("src") != "lidar" or b["k"] not in ("wall", "fence"):
+        # LiDAR walls and fences, and OSM fences (a hedge often grows along the mapped fence).
+        osm_fence = not b.get("src") and b["k"] == "fence" and not b.get("fix")
+        if not (osm_fence or (b.get("src") == "lidar" and b["k"] in ("wall", "fence"))):
             continue
         p = b["p"]
         xs, zs = [], []
@@ -154,14 +160,65 @@ def classify_by_ortho(m, sample):
             for k in range(n):
                 xs.append(ax + (bx - ax) * k / n)
                 zs.append(az + (bz - az) * k / n)
-        rgb = sample(xs, zs).astype(np.float32)
-        if len(rgb) < 6:
+        if len(xs) < 6:
             continue
-        r, g, bl = rgb[:, 0], rgb[:, 1], rgb[:, 2]
-        lum = 0.3 * r + 0.59 * g + 0.11 * bl
-        foliage = (g - r > 6) & (g >= bl) & (lum < 105)
-        if foliage.mean() > 0.55:
+        # The LiDAR line and the photo can be a metre apart (the photo is not a true
+        # orthophoto): the best of the line and its parallels 0.6 and 1.2 m either side.
+        x0, z0, x1, z1 = p[0], p[1], p[-2], p[-1]
+        L = float(np.hypot(x1 - x0, z1 - z0)) or 1.0
+        nx, nz = -(z1 - z0) / L, (x1 - x0) / L
+        best = 0.0
+        for o in (0.0, 0.6, -0.6, 1.2, -1.2):
+            rgb = sample([x + nx * o for x in xs], [z + nz * o for z in zs]).astype(np.float32)
+            if len(rgb) < 6:
+                continue
+            r, g, bl = rgb[:, 0], rgb[:, 1], rgb[:, 2]
+            lum = 0.3 * r + 0.59 * g + 0.11 * bl
+            best = max(best, float(((g - r > 6) & (g >= bl) & (lum < 105)).mean()))
+        h = b.get("h", 1.5)
+        if osm_fence:
+            if lowtop is None:
+                continue
+            minX, minZ, W, H = grid
+            cols = np.clip((np.array(xs) - minX).astype(int), 0, W - 1)
+            rows = np.clip((np.array(zs) - minZ).astype(int), 0, H - 1)
+            tops = np.maximum.reduce([lowtop[np.clip(rows + dr, 0, H - 1), np.clip(cols + dc, 0, W - 1)] for dr in (-1, 0, 1) for dc in (-1, 0, 1)])
+            h = float(np.median(tops))
+            if h < 1.0:
+                continue  # a bare fence with low planting
+        if best > 0.6 and h >= 0.8:
             b["k"] = "hedge"
-            b["t"] = 0.9
+            b["t"] = 1.0
+            b["h"] = round(min(h, 3.5), 2)
             changed += 1
     return changed
+
+
+def prune_barriers(m):
+    """
+    Last check on every barrier found in the LiDAR or the photo: nothing on a
+    bridge deck, in the river channel or along a carriageway (railings, parked
+    vans and riverside shrubs looked like walls and hedges there).
+    """
+    from shapely.geometry import LineString
+    from shapely.strtree import STRtree
+
+    def line(p):
+        return LineString(list(zip(p[0::2], p[1::2])))
+
+    zones = [line(r["p"]).buffer(r["w"] / 2 + 1.0) for r in m["roads"] if r.get("b") and len(r["p"]) >= 4]
+    zones += [line(r["p"]).buffer(r.get("w", 16) / 2) for r in m.get("rivers", []) if len(r["p"]) >= 4]
+    carriage = [line(r["p"]).buffer(r["w"] / 2 - 0.3) for r in m["roads"] if r["k"] in VEHICLE and r["k"] != "service" and len(r["p"]) >= 4]
+    tz, tc = STRtree(zones), STRtree(carriage)
+    keep, dropped = [], 0
+    for b in m["barriers"]:
+        if not (b.get("src") == "lidar" or b.get("t")):
+            keep.append(b)
+            continue
+        ln = line(b["p"])
+        if any(zones[i].intersects(ln) for i in tz.query(ln)) or any(carriage[i].intersection(ln).length > 1.5 for i in tc.query(ln)):
+            dropped += 1
+            continue
+        keep.append(b)
+    m["barriers"] = keep
+    return dropped

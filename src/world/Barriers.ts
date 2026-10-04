@@ -8,8 +8,8 @@ import { VEHICLE_ROADS } from './Roads';
 import { fenceMaterial } from './Sports';
 
 /** Default heights when neither OSM nor the LiDAR gives one. */
-const DEFAULT_H: Record<string, number> = { wall: 1.6, retaining_wall: 1.2, fence: 1.8, hedge: 1.5, railing: 0.9 };
-const THICK: Record<string, number> = { wall: 0.3, retaining_wall: 0.45, fence: 0.25, hedge: 0.9, railing: 0.08 };
+const DEFAULT_H: Record<string, number> = { wall: 1.6, retaining_wall: 1.2, fence: 1.8, hedge: 1.5, railing: 0.9, verja: 1.7 };
+const THICK: Record<string, number> = { wall: 0.3, retaining_wall: 0.45, fence: 0.25, hedge: 0.9, railing: 0.08, verja: 0.35 };
 /** Masonry base under railings and wire fences. */
 const PLINTH = 0.45;
 /** Size of one wire-mesh diamond, m. */
@@ -21,6 +21,8 @@ const STEP_BODY = 2.2;
 const WALL_TINTS = ['#ebe5d6', '#d9caa8', '#c9bba0', '#e2d9c6'].map((c) => new THREE.Color(c));
 const CONCRETE = new THREE.Color('#b9b4aa');
 const RAILING = new THREE.Color('#1e2224');
+const STONE = new THREE.Color('#d8cdb4');
+const WHITE = new THREE.Color('#ffffff');
 /** Clipped hedge greens: privet, laurel, arizónica (cypress), box. */
 const HEDGES = ['#4f7d39', '#457035', '#5c8842', '#3e6a46', '#6a8d47'].map((c) => new THREE.Color(c));
 /** Height of the masonry wall under a hedge along a street ("muro con seto"). */
@@ -83,6 +85,27 @@ function hedgeMaterial(): THREE.MeshStandardMaterial {
   normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, map, normalMap, roughness: 0.95, metalness: 0 });
   m.name = 'hedges';
+  m.userData.castShadow = true;
+  m.userData.receiveShadow = true;
+  return m;
+}
+
+/** Wrought-iron bars (alpha-tested, double-sided): one tile per 0.6 m wide, 1 m tall. */
+function barsMaterial(): THREE.MeshStandardMaterial {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const g = c.getContext('2d')!;
+  g.clearRect(0, 0, 64, 64);
+  g.fillStyle = '#1b1e20';
+  for (let i = 0; i < 4; i++) g.fillRect(i * 16 + 6, 0, 4, 64);
+  g.fillRect(0, 0, 64, 5);
+  g.fillRect(0, 56, 64, 5);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  const m = new THREE.MeshStandardMaterial({ map: t, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.3 });
+  m.name = 'ironBars';
   m.userData.castShadow = true;
   m.userData.receiveShadow = true;
   return m;
@@ -172,11 +195,11 @@ function prism(
 export function buildBarriers(ctx: BuildContext): void {
   const { terrain, collision } = ctx;
   // One set of meshes per batcher chunk, so distant walls are culled with their chunk.
-  const chunks = new Map<string, { masonry: Mesh3; hedges: Mesh3; mesh: Mesh3 }>();
+  const chunks = new Map<string, { masonry: Mesh3; hedges: Mesh3; mesh: Mesh3; bars: Mesh3 }>();
   const at = (x: number, z: number) => {
     const key = `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
     let c = chunks.get(key);
-    if (!c) chunks.set(key, (c = { masonry: new Mesh3(), hedges: new Mesh3(), mesh: new Mesh3() }));
+    if (!c) chunks.set(key, (c = { masonry: new Mesh3(), hedges: new Mesh3(), mesh: new Mesh3(), bars: new Mesh3() }));
     return c;
   };
   const fence = fenceMaterial();
@@ -213,7 +236,7 @@ export function buildBarriers(ctx: BuildContext): void {
         // Footing below the ground on both ends; tops follow the slope.
         const f0 = Math.min(g0, g1) - 0.3,
           f1 = f0;
-        const { masonry, hedges, mesh } = at((x0 + x1) / 2, (z0 + z1) / 2);
+        const { masonry, hedges, mesh, bars } = at((x0 + x1) / 2, (z0 + z1) / 2);
         // End faces only where the run starts and stops (pieces in between are joined).
         const caps: [boolean, boolean] = [i === 1 && k === 0, i === pts.length - 1 && k === n - 1];
         if (b.src === 'step' && b.top !== undefined) {
@@ -229,6 +252,67 @@ export function buildBarriers(ctx: BuildContext): void {
             rot: Math.atan2(-(z1 - z0), x1 - x0),
             bottom: f0,
             top,
+            mask: Layer.Solid,
+            absolute: true,
+          });
+          continue;
+        }
+        if (b.k === 'verja') {
+          // Stone plinth, stone pillars every ~3 m and wrought-iron bars, with a clipped
+          // hedge growing behind it on one side (the park edge at Las Acacias, garden fences).
+          const plinth = 0.5;
+          const stoneTint = STONE;
+          prism(masonry, x0, z0, x1, z1, 0.35, f0, f1, g0 + plinth, g1 + plinth, stoneTint, 1.5, caps);
+          const segLen = len / n;
+          bars.quad(
+            [x0, g0 + plinth, z0],
+            [x1, g1 + plinth, z1],
+            [x1, g1 + h, z1],
+            [x0, g0 + h, z0],
+            [0, 0],
+            [segLen / 0.6, 0],
+            [segLen / 0.6, h - plinth],
+            [0, h - plinth],
+            [-(z1 - z0), 0, x1 - x0],
+            WHITE,
+          );
+          const pillars = Math.max(1, Math.round(segLen / 3));
+          for (let j = 0; j <= pillars; j++) {
+            if (j === 0 && k > 0) continue;
+            const px = x0 + ((x1 - x0) * j) / pillars,
+              pz = z0 + ((z1 - z0) * j) / pillars,
+              py = g0 + ((g1 - g0) * j) / pillars;
+            const ux = ((x1 - x0) / segLen) * 0.25,
+              uz = ((z1 - z0) / segLen) * 0.25;
+            prism(masonry, px - ux, pz - uz, px + ux, pz + uz, 0.5, py - 0.3, py - 0.3, py + h + 0.15, py + h + 0.15, stoneTint, 1.5);
+            prism(
+              masonry,
+              px - ux * 1.25,
+              pz - uz * 1.25,
+              px + ux * 1.25,
+              pz + uz * 1.25,
+              0.62,
+              py + h + 0.15,
+              py + h + 0.15,
+              py + h + 0.27,
+              py + h + 0.27,
+              CONCRETE,
+              1.5,
+            );
+          }
+          if (b.hedge) {
+            // Hedge 0.7 m behind the bars, a little lower than the pillars.
+            const nx = (-(z1 - z0) / segLen) * 0.75 * -b.hedge,
+              nz = ((x1 - x0) / segLen) * 0.75 * -b.hedge;
+            const ht0 = g0 + h - 0.2 + bump(x0, z0),
+              ht1 = g1 + h - 0.2 + bump(x1, z1);
+            prism(hedges, x0 + nx, z0 + nz, x1 + nx, z1 + nz, 0.9, f0, f1, ht0 - 0.15, ht1 - 0.15, green, 1.2, caps);
+            prism(hedges, x0 + nx, z0 + nz, x1 + nx, z1 + nz, 0.72, ht0 - 0.2, ht1 - 0.2, ht0, ht1, green, 1.2, caps);
+          }
+          collision.addBox((x0 + x1) / 2, (z0 + z1) / 2, Math.hypot(x1 - x0, z1 - z0), 0.4, {
+            rot: Math.atan2(-(z1 - z0), x1 - x0),
+            bottom: f0,
+            top: Math.max(g0, g1) + h,
             mask: Layer.Solid,
             absolute: true,
           });
@@ -327,7 +411,9 @@ export function buildBarriers(ctx: BuildContext): void {
     ctx.batch.add(post, ctx.mats.tint('#3a3a3a'), x, y + 0.45, z);
     collision.addCircle(x, z, 0.15, { bottom: y - 0.5, top: y + 0.9, mask: Layer.Bodies, absolute: true });
   }
-  for (const { masonry, hedges, mesh } of chunks.values()) {
+  const barsMat = barsMaterial();
+  for (const { masonry, hedges, mesh, bars } of chunks.values()) {
+    if (!bars.empty) ctx.batch.addWorld(bars.geometry(), barsMat);
     if (!masonry.empty) ctx.batch.addWorld(masonry.geometry(), ctx.mats.stoneVC);
     if (!hedges.empty) ctx.batch.addWorld(hedges.geometry(), hedgeMat);
     if (!mesh.empty) ctx.batch.addWorld(mesh.geometry(), fence);

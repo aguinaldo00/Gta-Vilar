@@ -12,7 +12,7 @@ import { flag, Unit } from './props';
  * trail map, information, DEA, S-13 pedestrian crossing, R-303 no left turn,
  * P-15a speed bump.
  */
-const SIGN_CELLS = ['stop', 'give_way', 'map', 'board', 'aed', 'S-13', 'R-303', 'P-15a'] as const;
+const SIGN_CELLS = ['stop', 'give_way', 'map', 'board', 'aed', 'S-13', 'R-303', 'P-15a', 'R-101'] as const;
 type SignCell = (typeof SIGN_CELLS)[number];
 
 function signAtlas(): THREE.CanvasTexture {
@@ -188,6 +188,20 @@ function signAtlas(): THREE.CanvasTexture {
     g.beginPath();
     g.ellipse(x0 + C / 2, 92, 16, 12, 0, Math.PI, 0);
     g.fill();
+  }
+  // R-101 no entry: red disc with a white bar.
+  {
+    const x0 = at('R-101');
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(x0 + C / 2, C / 2, 62, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#c8102e';
+    g.beginPath();
+    g.arc(x0 + C / 2, C / 2, 58, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.fillRect(x0 + 22, C / 2 - 11, C - 44, 22);
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -450,7 +464,11 @@ export function buildStreetFurniture(ctx: BuildContext): void {
       case 'flagpole': {
         const y = terrain.heightAt(f.x, f.z);
         lb.add(Unit.cyl, mats.stone, 0, 0.25, 0, 0, 0.7, 0.5, 0.7);
-        flag(ctx, 'es', f.x, y + 0.5, f.z, 11.5, f.a, 0, 2.2);
+        // "ES" (the plaza's national flag, high and large) or "EU:small" (the row in front of the Ayuntamiento).
+        const [code, size] = (f.t ?? 'ES').split(':');
+        const kind = code === 'EU' ? 'eu' : code === 'CYL' ? 'cyl' : 'es';
+        const tall = size !== 'small';
+        flag(ctx, kind, f.x, y + 0.5, f.z, tall ? 11.5 : 7.5, f.a, 0, tall ? 2.2 : 1.1);
         collision.addCircle(f.x, f.z, 0.35, { top: 12, mask: Layer.Solid });
         break;
       }
@@ -467,6 +485,43 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         collision.addCircle(f.x, f.z, 0.45, { top: 2, mask: Layer.Solid });
         break;
       }
+      case 'lamp4': {
+        // Cast-iron lamp post with four lanterns and the loudspeakers of the Ayuntamiento.
+        const iron = mats.iron;
+        lb.add(Unit.cyl, iron, 0, 0.4, 0, 0, 0.36, 0.8, 0.36);
+        lb.add(Unit.cyl, iron, 0, 2.6, 0, 0, 0.16, 4.4, 0.16);
+        for (let i = 0; i < 4; i++) {
+          const a = (i * Math.PI) / 2 + Math.PI / 4;
+          const lx = Math.sin(a) * 0.45,
+            lz = Math.cos(a) * 0.45;
+          lb.add(Unit.box, iron, lx / 2, 4.55, lz / 2, a, 0.06, 0.06, 0.5);
+          lb.add(Unit.cyl, mats.lampGlass, lx, 4.8, lz, 0, 0.26, 0.42, 0.26);
+          lb.add(Unit.cone, iron, lx, 5.1, lz, 0, 0.34, 0.2, 0.34);
+        }
+        for (const a of [0.6, -0.9])
+          lb.add(Unit.cone, mats.tint('#c9ccc4'), Math.sin(a) * 0.25, 3.9, Math.cos(a) * 0.25, a, 0.3, 0.5, 0.3, Math.PI / 2);
+        collision.addCircle(f.x, f.z, 0.2, { top: 5, mask: Layer.Solid });
+        break;
+      }
+      case 'treebox':
+        // Stone planter box with a low iron railing round the tree (Plaza Mayor, Ayuntamiento).
+        lb.add(B, mats.stone, 0, 0.3, 0, 0, 2.0, 0.6, 2.0);
+        lb.add(B, mats.dirt, 0, 0.61, 0, 0, 1.7, 0.02, 1.7);
+        for (const [x, z, w, d] of [
+          [0, 0.85, 1.8, 0.04],
+          [0, -0.85, 1.8, 0.04],
+          [0.85, 0, 0.04, 1.8],
+          [-0.85, 0, 0.04, 1.8],
+        ])
+          lb.add(B, mats.iron, x, 0.95, z, 0, w, 0.04, d);
+        collision.addBox(f.x, f.z, 2.0, 2.0, { rot: f.a, top: 0.6, mask: Layer.Bodies });
+        break;
+      case 'shrub':
+        // Round clipped shrub in a stone planter.
+        lb.add(B, mats.stone, 0, 0.25, 0, 0, 1.0, 0.5, 1.0);
+        lb.add(Unit.sphere, mats.hedge, 0, 1.05, 0, 0, 1.5, 1.2, 1.5);
+        collision.addCircle(f.x, f.z, 0.6, { top: 1.6, mask: Layer.Bodies });
+        break;
       case 'billboard':
         break; // Screens.ts (posters and the digital screen)
       case 'pole':

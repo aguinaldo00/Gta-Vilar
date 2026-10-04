@@ -32,7 +32,7 @@ from skimage import measure
 
 from heightpng import write_height_png
 from steps import bake_steps
-from hedges import bake_hedges, classify_by_ortho, ortho_mosaic
+from hedges import bake_hedges, classify_by_ortho, ortho_mosaic, prune_barriers
 from roofs import ortho_sampler
 from roofs import bake_roofs, fix_hidden_walls
 from walls import bake_barriers, open_crossings, total_length
@@ -181,6 +181,14 @@ def remove_demolished(m, dtm, roof, surface):
             keep.append(b)
             continue
         sl = (slice(r0, r0 + mask.shape[0]), slice(c0, c0 + mask.shape[1]))
+        if b.get("fill"):
+            # The uncovered rest of an outline (osm-to-map) stays only where the LiDAR sees roof on
+            # most of it: elsewhere it is a yard or a passage the cadastre parts leave open.
+            if np.isfinite(roof[sl][mask]).mean() < 0.6:
+                gone += 1
+                continue
+            keep.append(b)
+            continue
         s = surface[sl][mask]
         if np.isfinite(s).mean() < 0.95 or np.isfinite(roof[sl][mask]).any():
             keep.append(b)
@@ -458,7 +466,10 @@ def main(map_path, lidar_path, mdt_path):
         footprint | np.isfinite(roof),
         (minX, minZ, W, H),
     )
-    n_green = classify_by_ortho(m, ortho_sampler(m, os.path.join(os.path.dirname(map_path), "ortho")))
+    n_green = classify_by_ortho(
+        m, ortho_sampler(m, os.path.join(os.path.dirname(map_path), "ortho")), low_points_top(m, walls_npz), (minX, minZ, W, H)
+    )
+    n_pruned = prune_barriers(m)
     n_steps = bake_steps(m, dtm, footprint | np.isfinite(roof), H0, (minX, minZ, W, H))
     open_crossings(m)
     n_cars = detect_cars(m, walls_npz, footprint | np.isfinite(roof)) if walls_npz is not None else 0
@@ -480,7 +491,7 @@ def main(map_path, lidar_path, mdt_path):
     print(f"datum H0 = {H0:.2f} m; relief {grid.min():.1f} .. {grid.max():.1f} m; streets smoothed over {street_share * 100:.1f}% of the map")
     print(f"OSM buildings the LiDAR shows as bare ground (removed): {demolished}")
     print(f"buildings measured by LiDAR: {measured}; added from LiDAR: {added}; trees from LiDAR: {trees}")
-    print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges; {len(hedges)} hedges from the canopy; {n_green} walls/fences that the orthophoto shows green turned into hedges")
+    print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges; {len(hedges)} hedges from the canopy; {n_green} walls/fences that the orthophoto shows green turned into hedges; {n_pruned} dropped on bridges, the river or carriageways")
     print(f"parked cars seen by the LiDAR: {n_cars}")
     print(f"facades: {f_matched} footprints matched to the cadastre, {f_photo} coloured from its facade photo")
     print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}; buildings opened over passages: {passages}")
