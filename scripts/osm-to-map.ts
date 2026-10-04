@@ -29,6 +29,7 @@ interface Corrections {
   furniture?: { k: string; x: number; z: number; a: number; t?: string; replaces?: [number, number] }[];
   barriers?: { p: number[]; k: string; h?: number; cut?: boolean; hedge?: number }[];
   barrierKinds?: { near: [number, number]; k: string; h?: number }[];
+  extraShops?: { n: string; c: string; x: number; z: number; a: number; w: number }[];
 }
 const corrections: Corrections = (() => {
   try {
@@ -1521,6 +1522,7 @@ for (const n of nodes.values()) {
   }
   placeShop(p, tags, fix?.w);
 }
+for (const e of corrections.extraShops ?? []) shops.push({ x: e.x, z: e.z, a: e.a, w: e.w, c: e.c, n: e.n });
 for (const p of polygons) {
   if (p.tags.amenity === 'place_of_worship' || p.tags.amenity === 'townhall' || p.tags.amenity === 'school') continue;
   if (!shopCategory(p.tags) || Math.abs(signedArea(p.outer)) >= 6000) continue;

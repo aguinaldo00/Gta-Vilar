@@ -50,6 +50,12 @@
     ],
     "timeSkip": [
       "KeyT"
+    ],
+    "radioPower": [
+      "KeyX"
+    ],
+    "weatherNext": [
+      "KeyY"
     ]
   }
 }

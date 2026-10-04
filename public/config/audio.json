@@ -1,0 +1,76 @@
+{
+  "_doc": "Sonidos del juego. Sustituye las rutas por tus grabaciones (mp3, ogg o webm, relativas a public/). Un archivo que aún no exista no rompe nada: suena en silencio. Zonas: 'circle' (x, z, r en metros del mapa; la Plaza Mayor es 0,0), 'river' (distancia al Río Nela) u 'outskirts' (fuera del casco). Capas: loop (ambiente continuo), music (capa musical), stingers (sonidos sueltos cada 'every' segundos [mín, máx]). 'night' sustituye el loop de noche. 'priority' decide qué zona manda donde se solapan; 'fade' son los segundos del fundido al entrar o salir.",
+  "menu": { "music": "assets/audio/menu/theme.mp3", "volume": 0.8 },
+  "zones": [
+    {
+      "id": "plaza",
+      "name": "Plaza Mayor",
+      "shape": { "type": "circle", "x": -18, "z": 12, "r": 75 },
+      "priority": 3,
+      "fade": 2.5,
+      "loop": { "src": "assets/audio/ambient/plaza.mp3", "volume": 0.7 },
+      "night": { "src": "assets/audio/ambient/plaza_night.mp3", "volume": 0.6 },
+      "music": { "src": "assets/audio/music/plaza.mp3", "volume": 0.35 },
+      "stingers": [
+        { "src": "assets/audio/stingers/campanas.mp3", "every": [90, 240], "volume": 0.6 },
+        { "src": "assets/audio/stingers/palomas.mp3", "every": [30, 80], "volume": 0.5 }
+      ]
+    },
+    {
+      "id": "rio",
+      "name": "Río Nela",
+      "shape": { "type": "river", "d": 45 },
+      "priority": 2,
+      "fade": 3,
+      "loop": { "src": "assets/audio/ambient/rio_nela.mp3", "volume": 0.8 },
+      "music": { "src": "assets/audio/music/rio.mp3", "volume": 0.3 },
+      "stingers": [
+        { "src": "assets/audio/stingers/patos.mp3", "every": [40, 120], "volume": 0.5 },
+        { "src": "assets/audio/stingers/pajaros.mp3", "every": [20, 60], "volume": 0.4 }
+      ]
+    },
+    {
+      "id": "bares",
+      "name": "Zona de bares",
+      "shape": { "type": "circle", "x": -110, "z": 40, "r": 55 },
+      "priority": 4,
+      "fade": 2,
+      "loop": { "src": "assets/audio/ambient/bares.mp3", "volume": 0.75 },
+      "night": { "src": "assets/audio/ambient/bares_noche.mp3", "volume": 0.85 },
+      "music": { "src": "assets/audio/music/bares.mp3", "volume": 0.4 },
+      "stingers": [
+        { "src": "assets/audio/stingers/vasos.mp3", "every": [15, 45], "volume": 0.5 },
+        { "src": "assets/audio/stingers/risas.mp3", "every": [25, 70], "volume": 0.5 }
+      ]
+    },
+    {
+      "id": "afueras",
+      "name": "Afueras",
+      "shape": { "type": "outskirts", "r": 600 },
+      "priority": 1,
+      "fade": 4,
+      "loop": { "src": "assets/audio/ambient/afueras.mp3", "volume": 0.7 },
+      "night": { "src": "assets/audio/ambient/afueras_noche.mp3", "volume": 0.7 },
+      "music": { "src": "assets/audio/music/afueras.mp3", "volume": 0.3 },
+      "stingers": [
+        { "src": "assets/audio/stingers/cencerros.mp3", "every": [45, 150], "volume": 0.4 },
+        { "src": "assets/audio/stingers/perro_lejano.mp3", "every": [60, 180], "volume": 0.35 }
+      ]
+    }
+  ],
+  "weather": {
+    "rainLight": { "src": "assets/audio/weather/lluvia.mp3", "volume": 0.7 },
+    "rainHeavy": { "src": "assets/audio/weather/lluvia_fuerte.mp3", "volume": 0.9 },
+    "wind": { "src": "assets/audio/weather/viento.mp3", "volume": 0.5 },
+    "thunder": ["assets/audio/weather/trueno_1.mp3", "assets/audio/weather/trueno_2.mp3"]
+  },
+  "voices": {
+    "_doc": "Reacciones de los peatones. Varias variantes por reacción: se elige una al azar.",
+    "susto": ["assets/audio/voices/susto_1.mp3", "assets/audio/voices/susto_2.mp3", "assets/audio/voices/susto_3.mp3"],
+    "cuidado": ["assets/audio/voices/cuidado_1.mp3", "assets/audio/voices/cuidado_2.mp3"],
+    "insulto": ["assets/audio/voices/insulto_1.mp3", "assets/audio/voices/insulto_2.mp3", "assets/audio/voices/insulto_3.mp3"],
+    "dolor": ["assets/audio/voices/dolor_1.mp3", "assets/audio/voices/dolor_2.mp3"],
+    "panico": ["assets/audio/voices/panico_1.mp3", "assets/audio/voices/panico_2.mp3"],
+    "saludo": ["assets/audio/voices/saludo_1.mp3", "assets/audio/voices/saludo_2.mp3"]
+  }
+}

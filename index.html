@@ -77,6 +77,12 @@
         font: 700 22px/26px Arial, sans-serif; cursor: pointer; padding: 0;
       }
       #radio .r-arrow:hover { background: rgba(255,255,255,.2); }
+      #radio .r-power {
+        width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,.75); background: rgba(0,0,0,.35); color: #9fe39f;
+        font: 700 15px/24px Arial, sans-serif; cursor: pointer; padding: 0; margin-left: -4px;
+      }
+      #radio.off .r-power { color: #e07a6a; }
+      #radio.off .r-card { opacity: .55; }
       #radio .r-play {
         display: none; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px; white-space: nowrap;
         background: #fff; color: #000; border: 0; padding: 6px 16px; font: 700 14px Arial, sans-serif; letter-spacing: 1px; cursor: pointer;
@@ -178,8 +184,8 @@
         <div><b>F / E</b> Robar / salir del vehículo</div>
         <div><b>Ratón</b> Girar la cámara</div>
         <div><b>R</b> Volver a la Plaza Mayor</div>
-        <div><b>Q / Z / rueda</b> Cambiar emisora (en el coche)</div>
-        <div><b>T</b> Adelantar una hora</div>
+        <div><b>Q / Z / rueda</b> Cambiar emisora · <b>X</b> apagar radio</div>
+        <div><b>T</b> Adelantar una hora · <b>Y</b> cambiar el clima</div>
         <div><b>M</b> Sonido · <b>H</b> Ayuda</div>
       </div>
       <div id="help-tip" class="outlined">H — controles</div>

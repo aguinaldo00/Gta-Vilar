@@ -452,6 +452,15 @@ def main(map_path, lidar_path, mdt_path):
     demolished = remove_demolished(m, dtm, roof, lidar_on_grid(m, lid, "dsm"))
     footprint, measured = measure_buildings(m, dtm, roof, H0, covered)
     added = trace_new_buildings(m, dtm, roof, footprint, H0)
+    # Traced "buildings" that photos show are canopies or terraces (data/corrections.json).
+    corr_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(lidar_path)))), "data", "corrections.json")
+    if os.path.exists(corr_path):
+        from shapely.geometry import Point as _Pt
+        drop = [_Pt(x, z) for x, z in json.load(open(corr_path)).get("removeTraced", [])]
+        if drop:
+            before = len(m["buildings"])
+            m["buildings"] = [b for b in m["buildings"] if not (b.get("src") == "lidar" and any(Polygon(list(zip(b["o"][0::2], b["o"][1::2]))).buffer(0).contains(p) for p in drop))]
+            added -= before - len(m["buildings"])
     # A traced building's low LiDAR edge is often a yard roof or an annex: a pitched roof
     # rises at most ~4 m above its eaves (Plaza Mayor 2, by the kebab, came out one storey high).
     for b in m["buildings"]:

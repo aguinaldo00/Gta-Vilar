@@ -37,6 +37,14 @@ export class RadioSystem {
   private hls: InstanceType<HlsCtor> | null = null;
   private loadToken = 0;
   private lastWheel = 0;
+  /**
+   * Live streams cannot be reached from this page (a content security policy,
+   * as on the published claude.ai artifact, or no network): the dial then only
+   * holds the generated local stations, which always play.
+   */
+  private streamsBlocked = false;
+  /** Switched off with the power button for this ride (back on in the next car). */
+  private poweredOff = false;
 
   constructor(private readonly panel: RadioPanel) {
     this.audio.preload = 'none';
@@ -49,6 +57,10 @@ export class RadioSystem {
     }
     panel.onNext = () => this.next();
     panel.onPrev = () => this.prev();
+    panel.onPower = () => this.togglePower();
+    document.addEventListener('securitypolicyviolation', (e) => {
+      if (/media|connect/.test(e.effectiveDirective) && /^https?:/.test(e.blockedURI)) this.streamsBlocked = true;
+    });
     panel.onPlay = () => {
       this.init();
       this.panel.needsGesture(false);
@@ -72,8 +84,31 @@ export class RadioSystem {
     return this.stations[this.index];
   }
 
+  /**
+   * Checks once whether live streams are reachable from this page: a blocked
+   * request (content security policy) fails at once, while a reachable one
+   * answers with headers (the body is then dropped).
+   */
+  private probe(): void {
+    if (this.probed) return;
+    this.probed = true;
+    const url = STATIONS.find((s) => s.streams)?.streams?.[0].url;
+    if (!url) return;
+    const ctl = new AbortController();
+    const t0 = performance.now();
+    fetch(url, { mode: 'no-cors', signal: ctl.signal })
+      .then(() => ctl.abort())
+      .catch(() => {
+        if (performance.now() - t0 < 3000 && !ctl.signal.aborted) this.streamsBlocked = true;
+      });
+    window.setTimeout(() => ctl.abort(), 8000);
+  }
+
+  private probed = false;
+
   /** Call from a user gesture (the start button): creates the audio graph for static and the local stations. */
   init(): void {
+    this.probe();
     if (this.ctx) {
       void this.ctx.resume();
       return;
@@ -101,10 +136,43 @@ export class RadioSystem {
     src.start();
   }
 
+  /** The station is playable here (a live one only while streams are reachable). */
+  private playable(i: number): boolean {
+    const st = this.stations[i];
+    return st.id !== 'off' && (!!st.synth || !this.streamsBlocked);
+  }
+
+  /** Next playable station from i in direction step (i itself if playable). */
+  private seek(i: number, step: 1 | -1): number {
+    const n = this.stations.length;
+    for (let k = 0; k < n; k++) {
+      const j = (((i + k * step) % n) + n) % n;
+      if (this.playable(j)) return j;
+    }
+    return i;
+  }
+
   enterVehicle(): void {
     if (this.inVehicle) return;
     this.inVehicle = true;
-    this.tune(this.index, true);
+    this.poweredOff = false;
+    // Switches itself on with the car, on the last station listened to.
+    void this.ctx?.resume();
+    this.tune(this.seek(this.current.id === 'off' ? 0 : this.index, 1), true);
+  }
+
+  /** Power button: off for the rest of this ride, or back on. */
+  togglePower(): void {
+    if (!this.inVehicle) return;
+    this.poweredOff = !this.poweredOff;
+    if (this.poweredOff) {
+      this.stopAll();
+      this.panel.show(RADIO_OFF, false);
+      this.panel.power(false);
+    } else {
+      this.init();
+      this.tune(this.seek(this.index, 1), false);
+    }
   }
 
   exitVehicle(): void {
@@ -115,11 +183,15 @@ export class RadioSystem {
   }
 
   next(): void {
-    if (this.inVehicle) this.tune((this.index + 1) % this.stations.length, false);
+    if (!this.inVehicle) return;
+    this.poweredOff = false;
+    this.tune(this.seek(this.index + 1, 1), false);
   }
 
   prev(): void {
-    if (this.inVehicle) this.tune((this.index - 1 + this.stations.length) % this.stations.length, false);
+    if (!this.inVehicle) return;
+    this.poweredOff = false;
+    this.tune(this.seek(this.index - 1, -1), false);
   }
 
   setMuted(m: boolean): void {
@@ -138,6 +210,7 @@ export class RadioSystem {
     }
     this.stopAll();
     this.panel.show(st, entering);
+    this.panel.power(st.id !== 'off');
     if (st.id === 'off') return;
     this.burst(0.45);
     const token = ++this.loadToken;
@@ -194,7 +267,10 @@ export class RadioSystem {
     this.hiss(true);
     for (const src of sources) {
       if (token !== this.loadToken) return;
+      const t0 = performance.now();
       const result = await this.tryStream(src, token);
+      // Refused at once (not a slow server): the page may not load outside media.
+      if (result === 'fail' && performance.now() - t0 < 1500) this.streamsBlocked = this.streamsBlocked || this.blockedOnce++ >= 1;
       if (token !== this.loadToken) return;
       if (result === 'ok') {
         this.hiss(false);
@@ -207,8 +283,15 @@ export class RadioSystem {
         return;
       }
     }
-    this.panel.status('Sin señal');
+    if (token !== this.loadToken) return;
+    // No signal: hop to the next station that plays, so the radio never stays silent.
+    this.panel.status(this.streamsBlocked ? 'Emisión en directo no disponible aquí' : 'Sin señal');
+    window.setTimeout(() => {
+      if (token === this.loadToken && this.inVehicle && !this.poweredOff) this.tune(this.seek(this.index + 1, 1), false);
+    }, 1400);
   }
+
+  private blockedOnce = 0;
 
   private async tryStream(src: StreamSource, token: number): Promise<'ok' | 'fail' | 'gesture'> {
     const a = this.audio;

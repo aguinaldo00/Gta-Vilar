@@ -518,6 +518,45 @@ export function buildStreetFurniture(ctx: BuildContext): void {
           lb.add(B, mats.iron, x, 0.95, z, 0, w, 0.04, d);
         collision.addBox(f.x, f.z, 2.0, 2.0, { rot: f.a, top: 0.6, mask: Layer.Bodies });
         break;
+      case 'taxi': {
+        // Villarcayo's taxi waiting at its rank: white saloon, roof sign, green light.
+        const white = mats.tint('#f2f2ee'),
+          glass = mats.glass,
+          tyre = mats.tint('#1b1b1b');
+        lb.add(B, white, 0, 0.62, 0, 0, 1.78, 0.55, 4.5);
+        lb.add(B, white, 0, 1.12, -0.2, 0, 1.66, 0.48, 2.3);
+        lb.add(B, glass, 0, 1.12, -0.2, 0, 1.7, 0.38, 2.36);
+        for (const sz of [-1, 1]) lb.add(B, tyre, 0, 0.32, sz * 1.5, 0, 1.76, 0.62, 0.62);
+        lb.add(B, mats.tint('#1f6f3a'), 0, 0.72, 0, 0, 1.8, 0.08, 4.3);
+        lb.add(B, mats.glow('#f4f4f4'), 0, 1.46, -0.1, 0, 0.7, 0.18, 0.2);
+        lb.add(B, mats.glow('#2fd16a'), 0.32, 1.48, 0.02, 0, 0.12, 0.1, 0.06);
+        lb.add(B, mats.glow('#ffe9c0'), 0, 0.72, 2.255, 0, 1.4, 0.1, 0.02);
+        collision.addBox(f.x, f.z, 1.8, 4.5, { rot: f.a, top: 1.5, mask: Layer.Solid });
+        break;
+      }
+      case 'terrace': {
+        // Covered bar terrace: a light flat roof on slim posts, glass screens on the sides.
+        const [tw, td] = (f.t ?? '8x6').split('x').map(Number);
+        const post = mats.tint('#3a3d40');
+        lb.add(B, mats.tint('#ecebe6'), 0, 2.75, 0, 0, tw, 0.18, td);
+        for (const [px, pz] of [
+          [-tw / 2 + 0.2, -td / 2 + 0.2],
+          [tw / 2 - 0.2, -td / 2 + 0.2],
+          [-tw / 2 + 0.2, td / 2 - 0.2],
+          [tw / 2 - 0.2, td / 2 - 0.2],
+        ])
+          lb.add(B, post, px, 1.35, pz, 0, 0.1, 2.7, 0.1);
+        const pane = mats.tint('#9fb0ba');
+        lb.add(B, pane, 0, 0.6, -td / 2 + 0.2, 0, tw - 0.4, 1.2, 0.04);
+        lb.add(B, pane, -tw / 2 + 0.2, 0.6, 0, 0, 0.04, 1.2, td - 0.4);
+        for (let i = 0; i < 4; i++) {
+          const x = -tw / 2 + 1.6 + i * ((tw - 3.2) / 3);
+          lb.add(Unit.cyl, mats.tint('#cfcfcf'), x, 0.72, 0, 0, 0.7, 0.04, 0.7);
+          lb.add(Unit.cyl, post, x, 0.36, 0, 0, 0.06, 0.72, 0.06);
+        }
+        collision.addBox(f.x, f.z, tw, 0.2, { rot: f.a, top: 1.2, mask: Layer.Player });
+        break;
+      }
       case 'stonebench': {
         // Long low block of light stone (the benches round the Ayuntamiento's square).
         const L = Number.parseFloat(f.t ?? '3') || 3;

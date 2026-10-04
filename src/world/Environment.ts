@@ -35,6 +35,7 @@ export class Environment {
   private readonly stars: THREE.Points;
   /** Direction the shadow-casting light comes from (the sun by day, the moon at night). */
   private readonly lightDir = SUN_DIR.clone();
+  private readonly fogBase: number;
   /** Current time of day (see setTime). */
   state: SunState = sunState(17.5);
 
@@ -95,6 +96,7 @@ export class Environment {
     pmrem.dispose();
 
     scene.background = null;
+    this.fogBase = quality.fogDensity;
     scene.fog = new THREE.FogExp2(HAZE, quality.fogDensity);
     this.hemi = new THREE.HemisphereLight('#cfe0f0', '#7a6a50', 0.1);
     scene.add(this.hemi);
@@ -159,6 +161,40 @@ export class Environment {
     this.stars.visible = night > 0.02;
     NIGHT.value = night;
     return st;
+  }
+
+  /**
+   * Weather on top of the time of day (call after setTime): clouds dim and
+   * soften the sun and grey the sky, fog closes the view, rain darkens it;
+   * a lightning flash lights everything for an instant.
+   */
+  applyWeather(w: { cloud: number; rain: number; fog: number }, flash = 0): void {
+    const { day, night } = this.state;
+    const u = this.sky.material.uniforms;
+    if (u.cloudCoverage) {
+      u.cloudCoverage.value = 0.25 + w.cloud * 0.7;
+      u.cloudDensity.value = 0.45 + w.cloud * 0.5;
+    }
+    const overcast = Math.max(w.cloud * 0.85, w.fog * 0.6) + w.rain * 0.15;
+    u.skyGain.value *= 1 - overcast * 0.45;
+    u.skyGain.value += flash * 0.6;
+    this.sun.intensity *= 1 - Math.min(0.85, overcast * 0.9);
+    this.farSun.intensity *= 1 - Math.min(0.8, overcast * 0.85);
+    // Diffuse light under clouds: a flatter, greyer ambient.
+    const grey = new THREE.Color('#aeb6bd');
+    this.hemi.color.lerp(grey, overcast * day * 0.7);
+    this.hemi.intensity += overcast * day * 0.25 + flash * 2.5;
+    this.bgHemi.color.lerp(grey, overcast * day * 0.7);
+    // Haze and fog: denser and greyer; at night it stays dark.
+    const fog = this.scene.fog as THREE.FogExp2;
+    fog.density = this.fogBase * (1 + w.fog * 9 + w.rain * 2 + w.cloud * 0.4);
+    fog.color.lerp(mixColor('#9da6ab', '#1a222c', night), Math.max(w.fog, overcast * 0.7));
+    const bg = this.bgScene.fog as THREE.Fog;
+    bg.color.copy(fog.color);
+    bg.near = 600 * (1 - w.fog * 0.95);
+    bg.far = 11000 * (1 - w.fog * 0.94 - w.rain * 0.4);
+    (this.stars.material as THREE.PointsMaterial).opacity *= 1 - w.cloud;
+    (this.bgScene.background as THREE.Color).lerp(fog.color, Math.max(w.fog, w.cloud * 0.6) * (1 - day));
   }
 
   /** Height of the distant valley floor (so it meets the edge of the map). */

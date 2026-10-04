@@ -1,6 +1,9 @@
 import * as THREE from 'three';
+import { AmbientZones } from './audio/AmbientZones';
+import { AudioMix } from './audio/AudioMix';
 import { GameAudio } from './audio/GameAudio';
 import { RadioSystem } from './audio/Radio';
+import { WeatherAudio } from './audio/WeatherAudio';
 import { FollowCamera } from './camera/FollowCamera';
 import type { Config } from './config/Config';
 import { EventBus } from './core/EventBus';
@@ -22,7 +25,9 @@ import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 import { RadioPanel } from './ui/RadioPanel';
 import { TouchControls } from './ui/TouchControls';
+import { ClimateSystem, WEATHER_LABEL, WEATHERS, type Weather } from './world/Climate';
 import type { MapData } from './world/mapData';
+import { RainFX } from './world/RainFX';
 import { World } from './world/World';
 
 declare global {
@@ -61,9 +66,25 @@ export class Game {
   readonly radio = new RadioSystem(new RadioPanel(document.getElementById('hud') ?? document.body));
   private wasDriving = false;
   private lastSteps = 0;
+  /** Sounds configuration (public/config/audio.json), once loaded. */
+  audioConf: { menu?: { music: string; volume?: number }; voices?: Record<string, string[] | string> } | null = null;
   private pedestrians: Pedestrians | null = null;
-  /** Time of day in hours: starts at the real local time and runs a game minute per second (a day in 24 minutes). */
-  hours = new Date().getHours() + new Date().getMinutes() / 60;
+  /** Time of day and weather (global: `__game.climate`). */
+  readonly climate: ClimateSystem;
+  private readonly rain: RainFX;
+  private ambient: AmbientZones | null = null;
+  private weatherAudio: WeatherAudio | null = null;
+  /** Overall level of the world's ambience (0 in the menu, fading in with the world). */
+  ambienceGain = 0;
+
+  /** Time of day in hours (kept for tests and the console; see climate). */
+  get hours(): number {
+    return this.climate.hours;
+  }
+
+  set hours(h: number) {
+    this.climate.setTime(h);
+  }
   /** Game minutes per real second. */
   timeScale = 1;
   private readonly headlamp = new THREE.SpotLight('#fff1d6', 0, 50, 0.6, 0.55, 1.3);
@@ -99,6 +120,31 @@ export class Game {
     this.world = new World(map, this.scene, this.renderer, this.physics, quality);
     this.physics.setTerrain(this.world.heightGrid(2));
     this.pipeline = new Pipeline(this.renderer, this.scene, this.camera, this.world.env, quality.postFX);
+    // Clock from the local time (or ?hora=21.5&clima=lluvia in the URL, for testing).
+    const q = new URLSearchParams(location.search);
+    const now = new Date();
+    const hourParam = Number.parseFloat(q.get('hora') ?? '');
+    const weatherParam = q.get('clima') as Weather | null;
+    this.climate = new ClimateSystem(this.world.env, {
+      dayMinutes: AudioMix.settings.dayMinutes,
+      hours: Number.isFinite(hourParam) ? hourParam : now.getHours() + now.getMinutes() / 60,
+      weather: weatherParam && WEATHERS.includes(weatherParam) ? weatherParam : 'despejado',
+      dynamic: !weatherParam,
+    });
+    AudioMix.onChange(() => {
+      this.climate.dayMinutes = AudioMix.settings.dayMinutes;
+    });
+    this.rain = new RainFX(this.scene, (x, z) => this.world.heightAt(x, z), isTouch ? 2500 : 7000);
+    this.rain.collectWetMaterials(this.scene);
+    void fetch('config/audio.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((conf) => {
+        if (!conf) return;
+        this.ambient = new AmbientZones(conf.zones ?? [], { riverDistance: (x, z) => this.world.terrain.riverDistance(x, z).d });
+        this.weatherAudio = new WeatherAudio(conf.weather ?? {});
+        this.audioConf = conf;
+      })
+      .catch(() => undefined);
     this.skids = new SkidMarks(this.scene);
     this.followCam = new FollowCamera(this.camera);
     this.minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement, map);
@@ -256,12 +302,16 @@ export class Game {
       this.world,
     );
 
-    this.hours = (this.hours + (dt * this.timeScale) / 60) % 24;
-    const sky = this.world.env.setTime(this.hours);
+    this.climate.update(dt * this.timeScale, this.camera.position);
+    const sky = { night: this.climate.lightsOn };
     // Slightly more exposure at night, so the lamp-lit streets stay readable.
-    this.renderer.toneMappingExposure = 0.65 + sky.night * 0.35;
+    this.renderer.toneMappingExposure = 0.65 + this.climate.night * 0.35 - this.climate.params.cloud * 0.04;
     this.world.updateNightLights(this.camera.position, sky.night);
     setHeadlights(sky.night);
+    this.rain.update(dt, this.camera.position, this.climate.params.rain, this.climate.wetness, 1 + this.climate.params.storm);
+    const inCar = !!this.player.vehicle;
+    this.ambient?.update(dt, this.camera.position.x, this.camera.position.z, this.climate.night, this.ambienceGain * (inCar ? 0.35 : 1));
+    this.weatherAudio?.update(dt, this.climate, this.ambienceGain, inCar);
     {
       const car = this.player.vehicle;
       if (car && sky.night > 0.05) {
@@ -326,6 +376,8 @@ export class Game {
       this.hours = (Math.floor(this.hours) + 1) % 24;
       this.hud.flash(`${String(Math.floor(this.hours)).padStart(2, '0')}:00`);
     }
+    if (a.pressed('weatherNext')) this.hud.flash(WEATHER_LABEL[this.climate.cycleWeather()]);
+    if (a.pressed('radioPower')) this.radio.togglePower();
     if (a.pressed('radioNext')) this.radio.next();
     if (a.pressed('radioPrev')) this.radio.prev();
     if (a.pressed('respawn')) this.respawn(true);

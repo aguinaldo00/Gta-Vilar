@@ -85,9 +85,21 @@ function grassMask(map: MapData, size: number): THREE.CanvasTexture {
     g.fill('evenodd');
   }
   g.fillStyle = '#000';
+  g.strokeStyle = '#000';
+  g.lineJoin = 'round';
+  // Buildings and a 3 m apron around them: the paving at the foot of walls and arcades.
+  g.lineWidth = 6;
   for (const b of map.buildings) {
     g.beginPath();
     poly(b.o);
+    g.fill();
+    if (!b.part || b.hp) g.stroke();
+  }
+  // Paved civic squares that OSM does not map as areas (the Ayuntamiento's).
+  for (const p of map.pois) {
+    if (p.k !== 'townhall') continue;
+    g.beginPath();
+    g.arc(p.x, p.z, 30, 0, Math.PI * 2);
     g.fill();
   }
   g.strokeStyle = '#000';

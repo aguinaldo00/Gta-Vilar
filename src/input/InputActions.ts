@@ -17,7 +17,9 @@ export type Action =
   | 'respawn'
   | 'radioNext'
   | 'radioPrev'
-  | 'timeSkip';
+  | 'timeSkip'
+  | 'radioPower'
+  | 'weatherNext';
 
 /**
  * Game-facing input: named actions and axes, independent of the device.

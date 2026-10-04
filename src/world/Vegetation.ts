@@ -168,15 +168,9 @@ const ORNATE_LAMP = (): THREE.BufferGeometry => {
   return coloured(parts);
 };
 
-/**
- * Plaza Mayor street furniture: flower planters, litter bins and iron
- * bollards along the edges that meet a street.
- */
+/** Plaza Mayor: iron bollards along the edges that meet a street. */
 function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
-  const { mats, batch, roads } = ctx;
-  const planter = mats.stone,
-    flowers = [mats.tint('#c0392b'), mats.tint('#e5b31a'), mats.tint('#8e44ad')],
-    green = mats.hedge;
+  const { mats, roads } = ctx;
   for (const ring of plazas) {
     for (let i = 0; i < ring.length; i++) {
       const [ax, az] = ring[i],
@@ -205,39 +199,7 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
         ctx.collision.addCircle(x, z, 0.12, { top: 0.9, mask: Layer.Player });
       }
     }
-    // Planters and bins around the inner edge.
-    const b = ringBounds(ring);
-    for (let k = 0; k < 40; k++) {
-      const x = b.minX + hash01(k, 1.3) * (b.maxX - b.minX),
-        z = b.minZ + hash01(k, 7.9) * (b.maxZ - b.minZ);
-      if (!pointInRing(x, z, ring)) continue;
-      const near = roads.nearest(x, z, 6, (rd) => VEHICLE_ROADS.has(rd.k));
-      if (near && near.d < 2) continue;
-      if (ctx.map.pois.some((p) => Math.hypot(p.x - x, p.z - z) < (p.k === 'bandstand' ? 9 : 6))) continue;
-      let tree = false;
-      for (let t = 0; t < ctx.map.trees.length; t += 2) if (Math.hypot(ctx.map.trees[t] - x, ctx.map.trees[t + 1] - z) < 2.5) tree = true;
-      if (tree) continue;
-      const gy = ctx.terrain.heightAt(x, z);
-      if (k % 3 === 0) {
-        batch.add(Unit.cyl, mats.tint('#2f4a3a'), x, gy + 0.45, z, 0, 0.45, 0.9, 0.45);
-        continue;
-      }
-      batch.add(Unit.box, planter, x, gy + 0.35, z, hash01(k) * 3, 1.4, 0.7, 1.4);
-      batch.add(Unit.blob, green, x, gy + 0.85, z, 0, 0.6, 0.35, 0.6);
-      for (let f = 0; f < 4; f++)
-        batch.add(
-          Unit.blob,
-          flowers[(k + f) % 3],
-          x + (hash01(k, f) - 0.5) * 0.9,
-          gy + 1.0,
-          z + (hash01(f, k) - 0.5) * 0.9,
-          0,
-          0.18,
-          0.15,
-          0.18,
-        );
-      ctx.collision.addBox(x, z, 1.4, 1.4, { rot: hash01(k) * 3, top: 0.7, mask: Layer.Bodies });
-    }
+    // Planters and bins are only the mapped ones (StreetFurniture): none are invented here.
   }
 }
 

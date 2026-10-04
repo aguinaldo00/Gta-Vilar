@@ -1,5 +1,5 @@
 {
- "_note": "Corrections checked against street-level photos (May 2025). Shops: keyed by the OSM name; 'at' moves the shop's point (local x, z), 'name' renames it, 'c' sets the category, 'w' its frontage in metres. Furniture: items missing from OSM, same format as map.furniture. Barriers: extra railings and walls. A furniture item with 'replaces': [x, z] moves the OSM item of the same kind found within 2 m of that point. barrierKinds: OSM barriers with a vertex within 3 m of 'near' take that kind (and height). A barrier with 'cut': true is opened where paths cross it; 'hedge': 1|-1 grows a hedge on its left/right side (verja). A shop with 'front': [x, z, a, w] is placed exactly there (for buildings OSM lacks).",
+ "_note": "Corrections checked against street-level photos (May 2025). Shops: keyed by the OSM name; 'at' moves the shop's point (local x, z), 'name' renames it, 'c' sets the category, 'w' its frontage in metres. Furniture: items missing from OSM, same format as map.furniture. Barriers: extra railings and walls. A furniture item with 'replaces': [x, z] moves the OSM item of the same kind found within 2 m of that point. barrierKinds: OSM barriers with a vertex within 3 m of 'near' take that kind (and height). A barrier with 'cut': true is opened where paths cross it; 'hedge': 1|-1 grows a hedge on its left/right side (verja). A shop with 'front': [x, z, a, w] is placed exactly there (for buildings OSM lacks). extraShops: fronts for places that are not shops in OSM (x, z, a, w). removeTraced: points inside LiDAR-traced 'buildings' that are really canopies or terraces (dropped by the bake).",
  "shops": {
   "Calé": {
    "name": "Carnicerías Hijos del Calé",
@@ -53,6 +53,22 @@
     -60.0,
     2.432,
     5.0
+   ]
+  },
+  "Bama": {
+   "front": [
+    10.65,
+    38.55,
+    -1.86,
+    6.0
+   ]
+  },
+  "Manduca": {
+   "front": [
+    7.8,
+    47.9,
+    -1.88,
+    6.5
    ]
   }
  },
@@ -111,24 +127,6 @@
    "t": "R-101"
   },
   {
-   "k": "treebox",
-   "x": -7,
-   "z": 3,
-   "a": -0.308
-  },
-  {
-   "k": "treebox",
-   "x": -1,
-   "z": 5,
-   "a": -0.308
-  },
-  {
-   "k": "treebox",
-   "x": 6,
-   "z": 7,
-   "a": -0.308
-  },
-  {
    "k": "shrub",
    "x": -73.8,
    "z": 28.3,
@@ -175,17 +173,42 @@
   },
   {
    "k": "stonebench",
-   "x": -7.2,
-   "z": -1.15,
-   "a": -0.308,
-   "t": "7.0"
+   "x": -8.6,
+   "z": -4.0,
+   "a": -1.72,
+   "t": "5.5"
   },
   {
    "k": "stonebench",
-   "x": 2.32,
-   "z": 1.88,
-   "a": -0.308,
-   "t": "5.0"
+   "x": -4.2,
+   "z": 5.0,
+   "a": -0.3,
+   "t": "4.5"
+  },
+  {
+   "k": "treebox",
+   "x": -1,
+   "z": 5,
+   "a": -0.308
+  },
+  {
+   "k": "treebox",
+   "x": 6,
+   "z": 7,
+   "a": -0.308
+  },
+  {
+   "k": "taxi",
+   "x": 16.4,
+   "z": 3.5,
+   "a": 3.05
+  },
+  {
+   "k": "terrace",
+   "x": -25.1,
+   "z": 63.0,
+   "a": 2.59,
+   "t": "9.4x8.6"
   }
  ],
  "barriers": [
@@ -239,5 +262,29 @@
    "k": "railing",
    "h": 1.0
   }
+ ],
+ "extraShops": [
+  {
+   "n": "Archivo Histórico de las Merindades",
+   "c": "civic",
+   "x": 3.1,
+   "z": 55.2,
+   "a": 2.69,
+   "w": 7.5
+  },
+  {
+   "n": "Oficina de Turismo",
+   "c": "civic",
+   "x": 5.05,
+   "z": 61.5,
+   "a": 1.11,
+   "w": 4.5
+  }
+ ],
+ "removeTraced": [
+  [
+   -25.1,
+   63.0
+  ]
  ]
 }

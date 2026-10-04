@@ -14,6 +14,7 @@ export class RadioPanel {
   onNext: () => void = () => {};
   onPrev: () => void = () => {};
   onPlay: () => void = () => {};
+  onPower: () => void = () => {};
   private readonly root: HTMLDivElement;
   private readonly card: HTMLDivElement;
   private readonly logo: HTMLDivElement;
@@ -38,6 +39,7 @@ export class RadioPanel {
         <div class="r-state"></div>
       </div>
       <button class="r-arrow r-next" aria-label="Siguiente emisora">›</button>
+      <button class="r-power" aria-label="Apagar o encender la radio" title="Apagar / encender la radio">⏻</button>
       <button class="r-play">▶ Encender radio</button>`;
     parent.appendChild(this.root);
     const q = <T extends HTMLElement>(s: string) => this.root.querySelector(s) as T;
@@ -53,6 +55,7 @@ export class RadioPanel {
     q('.r-next').addEventListener('click', () => this.onNext());
     q('.r-prev').addEventListener('click', () => this.onPrev());
     this.play.addEventListener('click', () => this.onPlay());
+    q('.r-power').addEventListener('click', () => this.onPower());
     fetch(new URL('radio/logos.json', document.baseURI))
       .then((r) => (r.ok ? r.json() : []))
       .then((ids: string[]) => {
@@ -80,6 +83,11 @@ export class RadioPanel {
     );
     window.clearTimeout(this.settleTimer);
     this.settleTimer = window.setTimeout(() => this.root.classList.add('settled'), SHOW_TIME * 1000);
+  }
+
+  /** Power button lit while the radio plays. */
+  power(on: boolean): void {
+    this.root.classList.toggle('off', !on);
   }
 
   hide(): void {
