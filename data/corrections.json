@@ -78,6 +78,14 @@
         -0.635,
         3.0
       ]
+    },
+    "Uni-dos Foncal": {
+      "front": [
+        -188.6,
+        161.5,
+        1.03,
+        3.5
+      ]
     }
   },
   "furniture": [
@@ -219,11 +227,11 @@
       "t": "9.4x8.6"
     },
     {
-      "_": "Contenedores del Uni-Dos: en la calzada junto al bordillo, delante de los pilares (foto), no en la boca del pasaje",
+      "_": "Contenedores del Uni-Dos: en el carril junto al bordillo antes de los pilares, viniendo de Calle de Bilbao (foto)",
       "k": "container",
-      "x": -187.12,
-      "z": 161.91,
-      "a": 2.454,
+      "x": -183.29,
+      "z": 156.13,
+      "a": 2.578,
       "replaces": [
         -186.0,
         158.3
@@ -231,9 +239,9 @@
     },
     {
       "k": "container",
-      "x": -187.82,
-      "z": 162.88,
-      "a": 2.454,
+      "x": -182.64,
+      "z": 155.11,
+      "a": 2.578,
       "replaces": [
         -186.9,
         159.7
@@ -241,9 +249,9 @@
     },
     {
       "k": "container",
-      "x": -188.52,
-      "z": 163.86,
-      "a": 2.454,
+      "x": -182.0,
+      "z": 154.1,
+      "a": 2.578,
       "replaces": [
         -187.8,
         160.9
@@ -351,6 +359,91 @@
         234.3,
         -197.2,
         248.2
+      ]
+    },
+    {
+      "_": "Las Acacias / El Soto: seto entre el Paseo el Soto y la hierba, con entradas (usuario)",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        -210.41,
+        -29.86,
+        -182.19,
+        -60.22
+      ]
+    },
+    {
+      "_": "Las Acacias: seto del Paseo el Soto",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        -180.48,
+        -62.05,
+        -153.11,
+        -91.49
+      ]
+    },
+    {
+      "_": "Las Acacias: seto del Paseo el Soto",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        -151.41,
+        -93.33,
+        -124.04,
+        -122.77
+      ]
+    },
+    {
+      "_": "Las Acacias: seto del Paseo el Soto",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        -122.33,
+        -124.6,
+        -94.11,
+        -154.96
+      ]
+    },
+    {
+      "_": "Las Acacias / El Soto: murete de piedra menuda entre la hierba y la acera de Calle el Soto (usuario)",
+      "k": "wall",
+      "h": 0.55,
+      "c": "#a59c8e",
+      "p": [
+        -203.3,
+        -26.3,
+        -160.5,
+        -28.3,
+        -134.3,
+        -34.61
+      ]
+    },
+    {
+      "_": "Las Acacias / El Soto: seto donde no hay murete, hasta Calle Santander, con entrada (usuario)",
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        -130.3,
+        -35.57,
+        -122.3,
+        -37.5,
+        -115,
+        -41.5,
+        -110.0,
+        -46.3
+      ]
+    },
+    {
+      "k": "hedge",
+      "h": 1.2,
+      "p": [
+        -107.8,
+        -48.4,
+        -105.4,
+        -50.7,
+        -76.6,
+        -91.5
       ]
     }
   ],
@@ -531,6 +624,17 @@
         32.8,
         -193.8
       ]
+    }
+  ],
+  "passages": [
+    {
+      "_": "Entrada al patio del Uni-Dos desde Laín Calvo: pasan coches (fotos), OSM la da como acera de 2 m",
+      "near": [
+        -192,
+        155.2
+      ],
+      "tp": 3.4,
+      "w": 4.6
     }
   ]
 }

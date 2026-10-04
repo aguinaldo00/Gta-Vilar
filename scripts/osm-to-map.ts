@@ -31,6 +31,8 @@ interface Corrections {
   barrierKinds?: { near: [number, number]; k: string; h?: number; c?: string }[];
   /** Openings checked on photos that OSM lacks (cut like barrier=gate). */
   gates?: { at: [number, number] }[];
+  /** Ways under a building checked on photos: clear height and width (a footway that cars use). */
+  passages?: { near: [number, number]; tp?: number; w?: number }[];
   extraShops?: { n: string; c: string; x: number; z: number; a: number; w: number }[];
 }
 const corrections: Corrections = (() => {
@@ -855,6 +857,25 @@ for (const [id, w] of ways) {
     if (side) r.sw = side;
     roads.push(r);
   }
+}
+
+// Passages checked on photos: the Uni-Dos entry from Calle Laín Calvo is a vehicle way
+// into the yard, though OSM maps it as a 2 m footway.
+for (const fix of corrections.passages ?? []) {
+  let best: RoadOut | null = null,
+    bestD = 1.5;
+  for (const r of roads) {
+    for (let i = 2; i < r.p.length; i += 2) {
+      const d = segDist(fix.near, [r.p[i - 2], r.p[i - 1]], [r.p[i], r.p[i + 1]]);
+      if (d < bestD) {
+        bestD = d;
+        best = r;
+      }
+    }
+  }
+  if (!best) continue;
+  if (fix.tp) best.tp = fix.tp;
+  if (fix.w) best.w = fix.w;
 }
 
 // ---------------------------------------------------------------- water

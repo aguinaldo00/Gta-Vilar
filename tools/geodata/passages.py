@@ -19,6 +19,7 @@ split in two:
 """
 
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
+from shapely.ops import substring
 
 from roofs import footprint_polygon
 
@@ -26,9 +27,10 @@ KEEP = ("t", "n", "mat", "gy", "fs", "fc", "gal", "year", "use", "cref")
 SIDEWALK_W = 2.2  # as src/world/Roads.ts
 PILLAR_STEP = 4.0
 MIN_CLEAR = 2.4
+EXTEND = 10.0
 
 
-def open_passages(m):
+def open_passages(m, ground_at=None):
     corridors = []
     kerbs = []  # (line, half-width to the kerb) of passages with sidewalks
     for r in m["roads"]:
@@ -43,6 +45,28 @@ def open_passages(m):
         corridors.append((line.buffer(half + side + 0.3, cap_style=2), r["tp"]))
         if side:
             kerbs.append((line, r["w"] / 2 + 0.35))
+    # The ways joined to a passage carry on under the same building for a few metres (the
+    # end of Calle Santander inside its block, the footway past the Uni-Dos tunnel): the
+    # first EXTEND metres of each of them belong to the corridor too.
+    ends = []
+    for r in m["roads"]:
+        if r.get("tp"):
+            p = r["p"]
+            ends += [(Point(p[0], p[1]), r["tp"]), (Point(p[-2], p[-1]), r["tp"])]
+    for r in m["roads"]:
+        if r.get("tp") or len(r["p"]) < 4:
+            continue
+        p = r["p"]
+        line = LineString([(p[i], p[i + 1]) for i in range(0, len(p), 2)])
+        for e, tp in ends:
+            if line.distance(e) > 0.5:
+                continue
+            d0 = line.project(e)
+            piece = substring(line, max(0.0, d0 - EXTEND), min(line.length, d0 + EXTEND))
+            if piece.length < 0.5:
+                continue
+            half = max(r["w"] / 2, 2.0) if r["k"] in ("footway", "pedestrian", "path") else r["w"] / 2
+            corridors.append((piece.buffer(half + 0.3, cap_style=2), tp))
     if not corridors:
         return 0
     added, lifted, dropped = [], 0, []
@@ -57,13 +81,33 @@ def open_passages(m):
         if not hits:
             continue
         clear = min(h for _, h in hits)
+        # On a slope (the passage from Calle el Soto climbs to Calle Santander) the clear height
+        # counts from the highest ground of the way under the building, not from the building's
+        # own (lowest) ground.
+        rise = 0.0
+        if ground_at is not None:
+            under = foot.intersection(hits[0][0].union(*[c for c, _ in hits[1:]]) if len(hits) > 1 else hits[0][0])
+            x0, z0, x1, z1 = under.bounds if not under.is_empty else (0, 0, 0, 0)
+            highest = None
+            x = x0
+            while x <= x1:
+                z = z0
+                while z <= z1:
+                    if under.contains(Point(x, z)):
+                        g = ground_at(x, z)
+                        highest = g if highest is None else max(highest, g)
+                    z += 1.0
+                x += 1.0
+            if highest is not None:
+                rise = max(0.0, highest - b["gy"])
+        clear += rise
         wall_top = b.get("eave", b.get("top", b["gy"] + 6)) - b["gy"]
         low = False
         if wall_top < clear + 2.0:
             # A low building over the way: as much clearance as its walls leave (at least 2 m of
             # building above), or the way simply cuts through it.
             clear = wall_top - 2.0
-            low = clear < MIN_CLEAR
+            low = clear - rise < MIN_CLEAR
         if low:
             dropped.append(b)
         else:
@@ -88,6 +132,9 @@ def open_passages(m):
         rest = foot
         for c, _ in hits:
             rest = rest.difference(c)
+        # Cutting the corridor out can leave zero-width spikes and slivers (a 2 m spike of
+        # ground floor across the Calle Santander passage was an invisible wall): open them away.
+        rest = rest.buffer(-0.12, join_style=2).buffer(0.12, join_style=2)
         pieces = list(rest.geoms) if isinstance(rest, MultiPolygon) else [rest] if isinstance(rest, Polygon) else []
         for piece in pieces:
             if piece.area < 2.0:
