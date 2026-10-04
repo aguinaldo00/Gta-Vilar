@@ -1311,6 +1311,8 @@ interface ShopOut {
   n: string;
 }
 const shops: ShopOut[] = [];
+/** Widest front of an ordinary shop, bar or office (the big stores may take up to MAX_FRONT). */
+const SMALL_FRONT = 8;
 const shopStats = { onAddressStreet: 0, otherStreet: 0, noStreetNear: 0, ownBuilding: 0, neighbourBuilding: 0, cornerFronts: 0 };
 // Building footprints on a grid, to tell walls that look onto a street from courtyard and party walls.
 // Arcades (soportales: parts raised above the ground) and canopies are open at street level.
@@ -1411,7 +1413,7 @@ function placeShop(p: Pt, t: Tags, frontage?: number): void {
         const facing = street ? facingStreet(m) : '';
         const streetScore = !street || !facing ? 0 : facing === street ? -10 : 12;
         const score =
-          d + (open ? 0 : 30) + (w.len < 4 ? 6 : 0) + Math.max(0, gap) * 0.3 + (own.size && !own.has(w.bi) ? 15 : 0) + streetScore;
+          d + (open ? 0 : 30) + (w.len < 3 ? 6 : 0) + Math.max(0, gap) * 0.3 + (own.size && !own.has(w.bi) ? 15 : 0) + streetScore;
         if (score <= 45) cands.push({ w, s: score, t: tt });
       }
     }
@@ -1432,7 +1434,20 @@ function placeShop(p: Pt, t: Tags, frontage?: number): void {
           looksOntoStreet(c.w),
         ]),
     );
-  pending.push({ w: cands[0].w, t: cands[0].t, s: cands[0].s, cands: cands.slice(0, 5), c: cat.c, n: label, frontage, street, own });
+  const big = ['supermarket', 'department_store', 'doityourself', 'hardware', 'furniture', 'car', 'garden_centre', 'trade'].includes(
+    t.shop ?? '',
+  );
+  pending.push({
+    w: cands[0].w,
+    t: cands[0].t,
+    s: cands[0].s,
+    cands: cands.slice(0, 5),
+    c: cat.c,
+    n: label,
+    frontage: frontage ?? (big ? undefined : SMALL_FRONT),
+    street,
+    own,
+  });
 }
 
 interface PendingShop {

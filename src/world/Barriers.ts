@@ -4,6 +4,7 @@ import { CHUNK } from './Batcher';
 import { Mesh3 } from './Buildings';
 import type { BuildContext } from './context';
 import { hash01, toPts } from './geo';
+import { VEHICLE_ROADS } from './Roads';
 import { fenceMaterial } from './Sports';
 
 /** Default heights when neither OSM nor the LiDAR gives one. */
@@ -20,7 +21,75 @@ const STEP_BODY = 2.2;
 const WALL_TINTS = ['#ebe5d6', '#d9caa8', '#c9bba0', '#e2d9c6'].map((c) => new THREE.Color(c));
 const CONCRETE = new THREE.Color('#b9b4aa');
 const RAILING = new THREE.Color('#1e2224');
-const HEDGE = new THREE.Color('#3f6a30');
+/** Clipped hedge greens: privet, laurel, arizónica (cypress), box. */
+const HEDGES = ['#4f7d39', '#457035', '#5c8842', '#3e6a46', '#6a8d47'].map((c) => new THREE.Color(c));
+/** Height of the masonry wall under a hedge along a street ("muro con seto"). */
+const HEDGE_WALL = 0.6;
+
+/** Tileable leaf texture (grey, tinted by the vertex colour) and its normal map, 1 tile per 1.2 m. */
+function hedgeMaterial(): THREE.MeshStandardMaterial {
+  const N = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#5a5a5a';
+  g.fillRect(0, 0, N, N);
+  let seed = 7;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let i = 0; i < 3200; i++) {
+    const x = rnd() * N,
+      y = rnd() * N,
+      r = 2 + rnd() * 4;
+    const v = Math.round(130 + rnd() * 125);
+    g.fillStyle = `rgb(${v},${v},${v})`;
+    for (const [dx, dy] of [
+      [0, 0],
+      [N, 0],
+      [0, N],
+      [-N, 0],
+      [0, -N],
+    ]) {
+      g.beginPath();
+      g.ellipse(x + dx, y + dy, r, r * 0.6, rnd() * Math.PI, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  // Normal map from the leaf heights (Sobel on the luminance).
+  const src = g.getImageData(0, 0, N, N).data;
+  const nc = document.createElement('canvas');
+  nc.width = nc.height = N;
+  const ng = nc.getContext('2d')!;
+  const out = ng.createImageData(N, N);
+  const L = (x: number, y: number) => src[(((y + N) % N) * N + ((x + N) % N)) * 4] / 255;
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const dx = (L(x + 1, y) - L(x - 1, y)) * 2.5,
+        dy = (L(x, y + 1) - L(x, y - 1)) * 2.5;
+      const len = Math.hypot(dx, dy, 1);
+      const k = (y * N + x) * 4;
+      out.data[k] = (-dx / len) * 127 + 128;
+      out.data[k + 1] = (dy / len) * 127 + 128;
+      out.data[k + 2] = (1 / len) * 127 + 128;
+      out.data[k + 3] = 255;
+    }
+  ng.putImageData(out, 0, 0);
+  const normalMap = new THREE.CanvasTexture(nc);
+  normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map, normalMap, roughness: 0.95, metalness: 0 });
+  m.name = 'hedges';
+  m.userData.castShadow = true;
+  m.userData.receiveShadow = true;
+  return m;
+}
+
+/** Smooth irregularity of a hedge top: the same at a point for both pieces that share it. */
+const bump = (x: number, z: number) => Math.sin(x * 1.7 + z * 0.9) * 0.05 + Math.sin(x * 0.43 - z * 1.3) * 0.06;
 
 /**
  * Prism along a wall piece from (x0, z0) to (x1, z1), `t` thick, standing on
@@ -111,6 +180,7 @@ export function buildBarriers(ctx: BuildContext): void {
     return c;
   };
   const fence = fenceMaterial();
+  const hedgeMat = hedgeMaterial();
   // Coping stones only on the high-detail level (they double the triangles of a wall).
   const coping = ctx.quality.detail === 1;
   let idx = 0;
@@ -120,6 +190,13 @@ export function buildBarriers(ctx: BuildContext): void {
     const h = b.h ?? DEFAULT_H[b.k] ?? 1.5;
     const t = THICK[b.k] ?? 0.3;
     const tint = b.k === 'retaining_wall' ? CONCRETE : WALL_TINTS[Math.floor(hash01(idx) * WALL_TINTS.length)];
+    const green = HEDGES[Math.floor(hash01(idx * 3 + 1) * HEDGES.length)];
+    // A tall hedge along a street usually grows on a low garden wall.
+    let onWall = false;
+    if (b.k === 'hedge' && h >= 1.3 && pts.length >= 2) {
+      const mid = pts[Math.floor(pts.length / 2)];
+      onWall = ctx.roads.nearest(mid[0], mid[1], 3.5, (r) => VEHICLE_ROADS.has(r.k) || r.k === 'pedestrian' || r.k === 'footway') !== null;
+    }
     for (let i = 1; i < pts.length; i++) {
       const [ax, az] = pts[i - 1],
         [bx, bz] = pts[i];
@@ -180,7 +257,35 @@ export function buildBarriers(ctx: BuildContext): void {
           continue;
         }
         if (b.k === 'hedge') {
-          prism(hedges, x0, z0, x1, z1, t, f0, f1, g0 + h, g1 + h, HEDGE, 1, caps);
+          // Clipped hedge: a leafy body with a rounded, slightly uneven top, on a low
+          // wall where it lines a street.
+          const tt = Math.max(0.7, Math.min(2.5, b.t ?? t));
+          const base = onWall ? HEDGE_WALL : 0;
+          if (onWall) {
+            prism(masonry, x0, z0, x1, z1, tt + 0.12, f0, f1, g0 + base, g1 + base, tint, 1.5, caps);
+            if (coping)
+              prism(
+                masonry,
+                x0,
+                z0,
+                x1,
+                z1,
+                tt + 0.2,
+                g0 + base - 0.02,
+                g1 + base - 0.02,
+                g0 + base + 0.07,
+                g1 + base + 0.07,
+                CONCRETE,
+                1.5,
+                caps,
+              );
+          }
+          const top0 = g0 + h + bump(x0, z0),
+            top1 = g1 + h + bump(x1, z1);
+          const hb = onWall ? g0 + base + 0.05 : f0;
+          const hb1 = onWall ? g1 + base + 0.05 : f1;
+          prism(hedges, x0, z0, x1, z1, tt, hb, hb1, top0 - 0.18, top1 - 0.18, green, 1.2, caps);
+          prism(hedges, x0, z0, x1, z1, tt * 0.8, top0 - 0.22, top1 - 0.22, top0, top1, green, 1.2, caps);
         } else if (b.k === 'fence') {
           const p = Math.min(PLINTH, h * 0.4);
           prism(masonry, x0, z0, x1, z1, t, f0, f1, g0 + p, g1 + p, tint, 1.5, caps);
@@ -224,7 +329,7 @@ export function buildBarriers(ctx: BuildContext): void {
   }
   for (const { masonry, hedges, mesh } of chunks.values()) {
     if (!masonry.empty) ctx.batch.addWorld(masonry.geometry(), ctx.mats.stoneVC);
-    if (!hedges.empty) ctx.batch.addWorld(hedges.geometry(), ctx.mats.propsVC);
+    if (!hedges.empty) ctx.batch.addWorld(hedges.geometry(), hedgeMat);
     if (!mesh.empty) ctx.batch.addWorld(mesh.geometry(), fence);
   }
 }

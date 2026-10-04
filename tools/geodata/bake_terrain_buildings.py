@@ -32,6 +32,8 @@ from skimage import measure
 
 from heightpng import write_height_png
 from steps import bake_steps
+from hedges import bake_hedges, classify_by_ortho, ortho_mosaic
+from roofs import ortho_sampler
 from roofs import bake_roofs, fix_hidden_walls
 from walls import bake_barriers, open_crossings, total_length
 from passages import open_passages
@@ -285,13 +287,20 @@ def trace_new_buildings(m, dtm, roof, footprint, H0):
     return len(added)
 
 
-def lidar_trees(m, dtm, H0):
+def lidar_trees(m, dtm, H0, hedges=()):
     """Individual trees from the LiDAR canopy (class 5): crown tops become [x, z, height, crown radius]."""
     minX, minZ, W, H = game_grid(m)
     veg = lidar_on_grid(m, LIDAR, "veg")
     chm = np.where(np.isfinite(veg), veg - dtm, 0).astype(np.float32)
     chm = ndimage.gaussian_filter(chm, 1.0)
     peaks = (chm == ndimage.maximum_filter(chm, size=7)) & (chm > 4)
+    # The tops of tall hedges are hedges, not trees.
+    img = Image.new("L", (W, H), 0)
+    d = ImageDraw.Draw(img)
+    for hd in hedges:
+        p = hd["p"]
+        d.line([(p[i] - minX, p[i + 1] - minZ) for i in range(0, len(p), 2)], fill=1, width=4)
+    peaks &= ~np.asarray(img, bool)
     # Crown radius: distance to where the canopy falls below half the tree height (capped).
     out = []
     rr, cc = np.nonzero(peaks)
@@ -400,6 +409,25 @@ def write_terrain(m, dtm, H0, out_png):
 LIDAR = None
 
 
+def low_points_top(m, walls_npz):
+    """Height above the ground of the low points (0.35-3.2 m) on the 1 m game grid (max of the 0.5 m cells)."""
+    minX, minZ, W, H = game_grid(m)
+    out = np.zeros((H, W), np.float32)
+    if walls_npz is None:
+        return out
+    E0, N0 = m["meta"]["utmOrigin"]["E"], m["meta"]["utmOrigin"]["N"]
+    cell = float(walls_npz["cell"])
+    k = int(round(1 / cell))
+    c0 = int(round((E0 + minX - float(walls_npz["x0"])) / cell))
+    r0 = int(round((float(walls_npz["y1"]) - (N0 - minZ)) / cell))
+    top = walls_npz["top"].astype(np.float32)
+    rs, cs = max(0, -r0), max(0, -c0)
+    re, ce = min(H * k, top.shape[0] - r0), min(W * k, top.shape[1] - c0)
+    sub = np.zeros((H * k, W * k), np.float32)
+    sub[rs:re, cs:ce] = np.nan_to_num(top[r0 + rs : r0 + re, c0 + cs : c0 + ce])
+    return sub.reshape(H, k, W, k).max(axis=(1, 3))
+
+
 def main(map_path, lidar_path, mdt_path):
     global LIDAR
     m, lid, mdt, mdt_geo = load_inputs(map_path, lidar_path, mdt_path)
@@ -421,10 +449,20 @@ def main(map_path, lidar_path, mdt_path):
     walls_path = os.path.join(os.path.dirname(lidar_path), "lidar_walls.npz")
     walls_npz = np.load(walls_path) if os.path.exists(walls_path) else None
     n_walls, n_cuts = bake_barriers(m, walls_npz, footprint | np.isfinite(roof))
+    hedges = bake_hedges(
+        m,
+        dtm,
+        lidar_on_grid(m, lid, "veg"),
+        low_points_top(m, walls_npz),
+        ortho_mosaic(m, os.path.join(os.path.dirname(map_path), "ortho"), (minX, minZ, W, H)),
+        footprint | np.isfinite(roof),
+        (minX, minZ, W, H),
+    )
+    n_green = classify_by_ortho(m, ortho_sampler(m, os.path.join(os.path.dirname(map_path), "ortho")))
     n_steps = bake_steps(m, dtm, footprint | np.isfinite(roof), H0, (minX, minZ, W, H))
     open_crossings(m)
     n_cars = detect_cars(m, walls_npz, footprint | np.isfinite(roof)) if walls_npz is not None else 0
-    trees = lidar_trees(m, dtm, H0)
+    trees = lidar_trees(m, dtm, H0, hedges)
     river_levels(m, dtm, H0)
     carve_water(m, dtm, H0)
     out_png = os.path.join(os.path.dirname(map_path), os.path.splitext(os.path.basename(map_path))[0] + ".terrain.png")
@@ -442,7 +480,7 @@ def main(map_path, lidar_path, mdt_path):
     print(f"datum H0 = {H0:.2f} m; relief {grid.min():.1f} .. {grid.max():.1f} m; streets smoothed over {street_share * 100:.1f}% of the map")
     print(f"OSM buildings the LiDAR shows as bare ground (removed): {demolished}")
     print(f"buildings measured by LiDAR: {measured}; added from LiDAR: {added}; trees from LiDAR: {trees}")
-    print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges")
+    print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges; {len(hedges)} hedges from the canopy; {n_green} walls/fences that the orthophoto shows green turned into hedges")
     print(f"parked cars seen by the LiDAR: {n_cars}")
     print(f"facades: {f_matched} footprints matched to the cadastre, {f_photo} coloured from its facade photo")
     print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}; buildings opened over passages: {passages}")

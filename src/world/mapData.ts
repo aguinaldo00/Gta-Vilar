@@ -174,6 +174,8 @@ export interface MapData {
     src?: 'lidar' | 'step';
     top?: number;
     up?: 1 | -1;
+    /** Hedge thickness, m. */
+    t?: number;
   }[];
   /** Street furniture at its mapped position (signs, containers, bins, poles, billboards...). */
   furniture?: MapFurniture[];
