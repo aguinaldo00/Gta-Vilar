@@ -45,8 +45,8 @@ const word = (
 export const STATIONS: Station[] = [
   {
     id: 'los40',
-    name: 'Los 40',
-    tagline: 'Éxitos',
+    name: 'Los 40 Principales',
+    tagline: 'Los 40 Principales · Éxitos',
     streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40.mp3' }],
     logo: svg(
       `<rect x="40" y="8" width="160" height="94" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 40, 22, { ls: 6 })}${word('40', 120, 92, 58)}`,
@@ -113,8 +113,8 @@ export const STATIONS: Station[] = [
     name: 'Europa FM',
     tagline: 'Música',
     streams: [
-      { url: 'https://atres-live.europafm.com/live/europafm/master.m3u8', hls: true },
       { url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/EFMAAC.aac' },
+      { url: 'https://atres-live.europafm.com/live/europafm/master.m3u8', hls: true },
     ],
     logo: svg(
       `${Array.from({ length: 10 }, (_, i) => {
@@ -127,10 +127,77 @@ export const STATIONS: Station[] = [
     id: 'rne',
     name: 'RNE',
     tagline: 'Radio Nacional',
-    streams: [{ url: 'https://rtvelivestream.rtve.es/rtvesec/rne/rne_r1_main.m3u8', hls: true }],
+    streams: [
+      { url: 'https://dispatcher.rndfnk.com/crtve/rne1/main/mp3/high' },
+      { url: 'https://rtvelivestream.rtve.es/rtvesec/rne/rne_r1_main.m3u8', hls: true },
+    ],
     logo: svg(
       `<rect x="44" y="14" width="152" height="82" rx="41" fill="none" stroke-width="6"/>${word('rne', 120, 76, 56, { weight: 900 })}`,
     ),
+  },
+  {
+    id: 'los40classic',
+    name: 'Los 40 Classic',
+    tagline: 'Éxitos de siempre',
+    streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40_CLASSIC.mp3' }],
+    logo: svg(
+      `<rect x="40" y="8" width="160" height="80" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 36, 18, { ls: 6 })}${word('40', 120, 80, 46)}${word('CLASSIC', 120, 106, 16, { ls: 6 })}`,
+      240,
+      112,
+    ),
+  },
+  {
+    id: 'los40dance',
+    name: 'Los 40 Dance',
+    tagline: 'Electrónica',
+    streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40_DANCE.mp3' }],
+    logo: svg(
+      `<rect x="40" y="8" width="160" height="80" rx="18" fill="none" stroke-width="6"/>${word('LOS', 120, 36, 18, { ls: 6 })}${word('40', 120, 80, 46)}${word('DANCE', 120, 106, 16, { ls: 8 })}`,
+      240,
+      112,
+    ),
+  },
+  {
+    id: 'cadena100',
+    name: 'Cadena 100',
+    tagline: 'Música',
+    streams: [
+      { url: 'https://flucast23-h-cloud.flumotion.com/cope/cadena100.mp3' },
+      { url: 'https://cadena100-cope.flumotion.com/playlist.m3u8', hls: true },
+    ],
+    logo: svg(
+      `${word('cadena', 120, 34, 22, { weight: 400, family: 'Georgia, serif', italic: true })}${word('100', 120, 96, 64, { ls: 2 })}`,
+    ),
+  },
+  {
+    id: 'megastar',
+    name: 'MegaStar FM',
+    tagline: 'Nuevos éxitos',
+    streams: [{ url: 'https://flucast23-h-cloud.flumotion.com/cope/megastar.mp3' }],
+    logo: svg(
+      `<path d="M120 10 L132 44 L168 44 L139 64 L150 98 L120 78 L90 98 L101 64 L72 44 L108 44 Z" fill="none" stroke-width="5"/>${word('MEGASTAR', 120, 108, 16, { ls: 4 })}`,
+      240,
+      112,
+    ),
+  },
+  {
+    id: 'marca',
+    name: 'Radio Marca',
+    tagline: 'Deportes',
+    streams: [{ url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOMARCA_NACIONAL.mp3' }],
+    logo: svg(
+      `<rect x="24" y="22" width="192" height="66" fill="none" stroke-width="5"/>${word('MARCA', 120, 74, 46, { italic: true, ls: 2 })}`,
+    ),
+  },
+  {
+    id: 'rne3',
+    name: 'Radio 3',
+    tagline: 'RNE · Alternativa',
+    streams: [
+      { url: 'https://dispatcher.rndfnk.com/crtve/rner3/main/mp3/high' },
+      { url: 'https://rtvelivestream.rtve.es/rtvesec/rne/rne_r3_main.m3u8', hls: true },
+    ],
+    logo: svg(`<circle cx="120" cy="55" r="42" fill="none" stroke-width="6"/>${word('3', 120, 80, 66)}`),
   },
   {
     id: 'merindades',

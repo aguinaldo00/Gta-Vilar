@@ -18,7 +18,8 @@
       html, body { margin: 0; height: 100%; overflow: hidden; background: #bcd6f2; font-family: 'Arial Narrow', Arial, sans-serif; }
       #app { position: fixed; inset: 0; }
       #app canvas { display: block; }
-      #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; }
+      /* Above the touch controls (z 5) so the radio buttons can be tapped; everything else in it lets touches through. */
+      #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; z-index: 6; }
       .outlined { text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 3px 6px rgba(0,0,0,.6); }
 
       #minimap { position: absolute; left: 24px; bottom: 24px; width: 200px; height: 200px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
@@ -60,8 +61,12 @@
         opacity: 0; transition: opacity .5s, transform .5s; pointer-events: none;
       }
       #radio.on { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+      /* Settled: smaller and translucent. Hover only restores the opacity: growing back under the
+         cursor moved the buttons away from it, so they could not be clicked. */
       #radio.on.settled { opacity: .82; transform: translateX(-50%) scale(.74); transform-origin: 50% 0; }
-      #radio.on.settled:hover { opacity: 1; transform: translateX(-50%); }
+      #radio.on.settled:hover { opacity: 1; }
+      #radio .r-keys { font: 400 11px Arial, sans-serif; color: #bdbdbd; letter-spacing: 1px; text-shadow: 0 1px 2px #000; margin-top: 2px; }
+      body.touch #radio .r-keys { display: none; }
       #radio .r-card { display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: opacity .18s; min-width: 260px; }
       #radio .r-card.fade { opacity: 0; }
       #radio .r-logo { width: 150px; height: 70px; color: #f4f4f4; filter: drop-shadow(0 0 1px #000) drop-shadow(0 2px 4px rgba(0,0,0,.9)); }
@@ -80,8 +85,8 @@
       }
       #radio .r-arrow:hover { background: rgba(255,255,255,.2); }
       #radio .r-power {
-        width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,.75); background: rgba(0,0,0,.35); color: #9fe39f;
-        font: 700 15px/24px Arial, sans-serif; cursor: pointer; padding: 0; margin-left: -4px;
+        width: 38px; height: 38px; border-radius: 50%; border: 2px solid rgba(255,255,255,.75); background: rgba(0,0,0,.45); color: #9fe39f;
+        font: 700 19px/32px Arial, sans-serif; cursor: pointer; padding: 0; margin-left: -4px;
       }
       #radio.off .r-power { color: #e07a6a; }
       #radio.off .r-card { opacity: .55; }

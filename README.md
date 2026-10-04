@@ -100,7 +100,16 @@ The data pipeline runs in two steps. The browser never parses OSM.
 
 ## Life in town
 
-- **Car radio (GTA IV style)**: on when you get into a vehicle; the station's logo and name show at the top centre (click it, use the ‹ › buttons, **Q / Z** or the mouse wheel to change). National stations play their live streams (Los 40, Cadena SER, COPE, Onda Cero, Kiss FM, Rock FM, Cadena Dial, Europa FM, RNE; HLS through hls.js, loaded on demand); Radio Merindades, Nela FM and Corregimiento Rock are made up and their music is generated live. The last station is remembered. Logos are original monochrome plates; to use official artwork, put `public/radio/<id>.svg` and list the id in `public/radio/logos.json` (shown in greyscale).
+- **Car radio (GTA IV style).** It switches on when you get into a vehicle, and the last station is remembered.
+  - **Panel:** the station's logo and name show at the top centre.
+  - **Changing station:** click the panel, use the ‹ › buttons, **Q / Z** or the mouse wheel.
+  - **Off and on:** **X**, a click of the mouse wheel (while driving the mouse is captured, so clicks cannot reach the panel), or the ⏻ button after **Esc** frees the mouse. "Radio apagada" is also on the dial.
+  - **Live national stations:** Los 40 Principales, Cadena SER, COPE, Onda Cero, Kiss FM, Rock FM, Cadena Dial, Europa FM, RNE, Los 40 Classic, Los 40 Dance, Cadena 100, MegaStar FM, Radio Marca and Radio 3.
+    - They play from their public MP3 streams; HLS goes through hls.js and is only a fallback.
+    - Stations are never hidden: one that cannot connect says "Sin señal".
+  - **Local stations:** Radio Merindades, Nela FM and Corregimiento Rock are made up, and their music is generated live.
+  - **Logos:** original monochrome plates. To use official artwork, put `public/radio/<id>.svg` and list the id in `public/radio/logos.json` (shown in greyscale).
+  - **Check:** `node tools/qa/radio.cjs`.
 - **Day and night**: the clock starts at your local time and runs a day in 24 minutes (**T** skips an hour). The sun follows Villarcayo's path (rise ~7:30, set ~20:30), with golden and blue hours, stars and moonlit shadows; street lamps glow and light the street around you, a share of windows light up, headlights come on.
 - **Footsteps** sound different on asphalt, paving, grass, gravel and water.
 - **Pedestrians** (`src/entities/PedestrianSystem.ts`, `PedestrianAI.ts`): a population of townspeople in the busy places (more near shops and the plaza), simulated near the camera, drawn with a pool of re-coloured bodies. They walk, stop, look at their phone, sit on the real benches, jump aside from a fast car, fly when hit (ragdoll) and get up angry; `__game.pedestrians.panicAt(x, z, r)` sends them running for shelter. Voice lines are hooks to the files in audio.json.

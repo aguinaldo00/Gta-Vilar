@@ -37,6 +37,7 @@ export class RadioPanel {
         <div class="r-name"></div>
         <div class="r-tag"></div>
         <div class="r-state"></div>
+        <div class="r-keys">X o clic de rueda: apagar · Q Z o rueda: cambiar</div>
       </div>
       <button class="r-arrow r-next" aria-label="Siguiente emisora">›</button>
       <button class="r-power" aria-label="Apagar o encender la radio" title="Apagar / encender la radio">⏻</button>
