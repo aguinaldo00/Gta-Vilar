@@ -14,7 +14,21 @@ export interface MapBuilding {
   part?: 1;
   /** Hidden wall indices (walls shared with an equal or taller part). */
   hid?: number[];
-  t: 'house' | 'block' | 'industrial' | 'small' | 'church' | 'tower' | 'torre' | 'townhall' | 'station' | 'canopy' | 'ruins' | 'greenhouse';
+  t:
+    | 'house'
+    | 'block'
+    | 'industrial'
+    | 'small'
+    | 'church'
+    | 'tower'
+    | 'torre'
+    | 'townhall'
+    | 'station'
+    | 'canopy'
+    | 'ruins'
+    | 'greenhouse'
+    /** Grandstand: stepped terraces under a roof, facing `face`. */
+    | 'stand';
   n?: string;
   mat?: string;
   /** Ground under the walls (local y, from the terrain model). */
@@ -39,6 +53,10 @@ export interface MapBuilding {
   year?: number;
   use?: string;
   cref?: string;
+  /** Checked fixes (data/corrections.json buildingFixes): roof colour, canopy / stand roof height above the ground, the point a stand faces. */
+  rc?: string;
+  ch?: number;
+  face?: [number, number];
 }
 
 /**
@@ -71,6 +89,12 @@ export interface MapArea {
   l?: 'n' | 'b';
   /** Water areas: surface level (local y). */
   wl?: number;
+  /** Frontones (data/corrections.json pitchFixes): a point by the frontis and one by the left wall (x, z, x, z). */
+  fr?: number[];
+  /** Wall colour, frontis height, left-wall heights by distance from the frontis ([from, to, height]). */
+  wall?: string;
+  fh?: number;
+  steps?: [number, number, number][];
 }
 
 /** Shop, bar or public service, on the street-facing wall of its building. */

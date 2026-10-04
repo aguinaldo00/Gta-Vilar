@@ -15,6 +15,7 @@ export class RadioPanel {
   onPrev: () => void = () => {};
   onPlay: () => void = () => {};
   onPower: () => void = () => {};
+  onExternal: () => void = () => {};
   private readonly root: HTMLDivElement;
   private readonly card: HTMLDivElement;
   private readonly logo: HTMLDivElement;
@@ -41,7 +42,8 @@ export class RadioPanel {
       </div>
       <button class="r-arrow r-next" aria-label="Siguiente emisora">›</button>
       <button class="r-power" aria-label="Apagar o encender la radio" title="Apagar / encender la radio">⏻</button>
-      <button class="r-play">▶ Encender radio</button>`;
+      <button class="r-play">▶ Encender radio</button>
+      <button class="r-ext">▶ Escuchar en otra ventana</button>`;
     parent.appendChild(this.root);
     const q = <T extends HTMLElement>(s: string) => this.root.querySelector(s) as T;
     this.card = q('.r-card');
@@ -57,6 +59,7 @@ export class RadioPanel {
     q('.r-prev').addEventListener('click', () => this.onPrev());
     this.play.addEventListener('click', () => this.onPlay());
     q('.r-power').addEventListener('click', () => this.onPower());
+    q('.r-ext').addEventListener('click', () => this.onExternal());
     fetch(new URL('radio/logos.json', document.baseURI))
       .then((r) => (r.ok ? r.json() : []))
       .then((ids: string[]) => {
@@ -94,6 +97,7 @@ export class RadioPanel {
   hide(): void {
     this.root.classList.remove('on', 'settled');
     this.needsGesture(false);
+    this.offerExternal(false);
     window.clearTimeout(this.settleTimer);
   }
 
@@ -103,5 +107,10 @@ export class RadioPanel {
 
   needsGesture(on: boolean): void {
     this.root.classList.toggle('gesture', on);
+  }
+
+  /** Offer to play the live station in a window of its own (where the page cannot load it). */
+  offerExternal(on: boolean): void {
+    this.root.classList.toggle('ext', on);
   }
 }

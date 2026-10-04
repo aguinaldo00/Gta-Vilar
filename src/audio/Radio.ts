@@ -45,6 +45,14 @@ export class RadioSystem {
    */
   private streamsBlocked = false;
   private speechTimer = 0;
+  /**
+   * Live stations play in a small window of their own: the page that hosts the
+   * game (the claude.ai viewer) refuses audio from other sites, a window opened
+   * by the player does not. Chosen once with the panel's button, then Q / Z,
+   * X and getting out drive that window.
+   */
+  private external = false;
+  private popup: Window | null = null;
   /** Switched off with the power button for this ride (back on in the next car). */
   private poweredOff = false;
 
@@ -65,6 +73,10 @@ export class RadioSystem {
     panel.onNext = () => this.next();
     panel.onPrev = () => this.prev();
     panel.onPower = () => this.togglePower();
+    panel.onExternal = () => {
+      this.external = true;
+      this.tune(this.index, false);
+    };
     document.addEventListener('securitypolicyviolation', (e) => {
       // Only <audio> loads count (media-src); hls.js and fetch go through connect-src, which MP3 streams do not need.
       if (/media-src|default-src/.test(e.effectiveDirective) && /^https?:/.test(e.blockedURI)) this.streamsBlocked = true;
@@ -201,7 +213,7 @@ export class RadioSystem {
     } catch {
       // Not remembered this time.
     }
-    this.stopAll();
+    this.stopAll(this.external && !!st.streams);
     this.panel.show(st, entering);
     this.panel.power(st.id !== 'off');
     if (st.id === 'off') return;
@@ -211,11 +223,30 @@ export class RadioSystem {
       this.init();
       this.synth?.start(st.synth);
       if (st.ident && !this.muted) this.announce(st.ident);
-    } else if (st.streams) void this.playStream(st.streams, token);
+    } else if (st.streams) {
+      if (this.external) this.openExternal(st.streams);
+      else void this.playStream(st.streams, token);
+    }
   }
 
-  private stopAll(): void {
+  /** The station's MP3 stream in a window of its own (the browser's own player). */
+  private openExternal(sources: StreamSource[]): void {
+    const url = (sources.find((s) => !s.hls) ?? sources[0]).url;
+    this.popup = window.open(url, 'villarcayo-radio', 'popup,width=420,height=160');
+    const text = this.popup ? 'Sonando en la ventana de la radio' : 'Permite las ventanas emergentes para oír la radio en directo';
+    // After the panel has swapped to the station (it clears the line).
+    window.setTimeout(() => this.panel.status(text), 250);
+    if (this.popup) window.focus();
+  }
+
+  /** Stops what plays; `keepPopup` when the radio's window will just load the next station. */
+  private stopAll(keepPopup = false): void {
     this.loadToken++;
+    this.panel.offerExternal(false);
+    if (!keepPopup) {
+      if (this.popup && !this.popup.closed) this.popup.close();
+      this.popup = null;
+    }
     this.synth?.stop();
     if (this.hls) {
       this.hls.destroy();
@@ -275,13 +306,11 @@ export class RadioSystem {
       }
     }
     if (token !== this.loadToken) return;
-    // No signal: stay on the station (the player chose it) and say so; Q / Z move on.
+    // No signal: stay on the station (the player chose it) and offer its own window, where the
+    // page's restrictions do not apply; Q / Z move on.
     this.hiss(false);
-    this.panel.status(
-      this.streamsBlocked
-        ? 'Este visor bloquea la radio en directo · ábrelo con npm run dev o en su web'
-        : 'Sin señal · Q / Z para cambiar',
-    );
+    this.panel.status(this.streamsBlocked ? 'Esta página no deja cargar la radio en directo' : 'Sin señal · Q / Z para cambiar');
+    this.panel.offerExternal(true);
   }
 
   private async tryStream(src: StreamSource, token: number): Promise<'ok' | 'fail' | 'gesture'> {

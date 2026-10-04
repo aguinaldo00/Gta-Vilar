@@ -164,7 +164,10 @@ function roofColor(r: MapRoof): THREE.Color {
  */
 export function buildRoofs(ctx: BuildContext): { hipped: number; flat: number; fallback: number } {
   const stats = { hipped: 0, flat: 0, fallback: 0 };
-  for (const r of ctx.map.roofs ?? []) {
+  // Grandstands draw their own roof (sloping over the terraces).
+  const own = new Set(ctx.map.buildings.filter((b) => b.t === 'stand' && b.rf !== undefined).map((b) => b.rf));
+  for (const [ri, r] of (ctx.map.roofs ?? []).entries()) {
+    if (own.has(ri)) continue;
     const tiles = new Mesh3();
     const flat = new Mesh3();
     let outer = toPts(r.o);

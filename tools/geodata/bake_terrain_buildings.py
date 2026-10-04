@@ -436,6 +436,40 @@ def low_points_top(m, walls_npz):
     return sub.reshape(H, k, W, k).max(axis=(1, 3))
 
 
+
+def apply_fixes(m, corr):
+    """Photo- and LiDAR-checked fixes from data/corrections.json: building type, roof colour
+    and canopy height (`buildingFixes`), and which end of a court the frontis stands on
+    (`pitchFixes`). Each one names a point inside the footprint it changes."""
+    from shapely.geometry import Point as _Pt
+
+    def inside(o, at):
+        return Polygon(list(zip(o[0::2], o[1::2]))).buffer(0).contains(_Pt(*at))
+
+    nb = na = 0
+    for f in corr.get("buildingFixes", []):
+        hits = [b for b in m["buildings"] if inside(b["o"], f["at"])]
+        if not hits:
+            print(f"buildingFixes: nothing at {f['at']}")
+            continue
+        b = min(hits, key=lambda b: Polygon(list(zip(b["o"][0::2], b["o"][1::2]))).area)
+        for k in ("t", "rc", "ch", "face"):
+            if k in f:
+                b[k] = f[k]
+        nb += 1
+    for f in corr.get("pitchFixes", []):
+        hits = [a for a in m["areas"] if a.get("k") == "pitch" and inside(a["o"], f["at"])]
+        if not hits:
+            print(f"pitchFixes: nothing at {f['at']}")
+            continue
+        a = min(hits, key=lambda a: Polygon(list(zip(a["o"][0::2], a["o"][1::2]))).area)
+        a["fr"] = f["front"] + f["left"]
+        for k in ("wall", "fh", "steps"):
+            if k in f:
+                a[k] = f[k]
+        na += 1
+    return nb, na
+
 def main(map_path, lidar_path, mdt_path):
     global LIDAR
     m, lid, mdt, mdt_geo = load_inputs(map_path, lidar_path, mdt_path)
@@ -495,6 +529,9 @@ def main(map_path, lidar_path, mdt_path):
     n_roofs, n_foot, roof_stats = bake_roofs(m, dtm, roof, H0, os.path.join(os.path.dirname(map_path), "ortho"))
     shown = fix_hidden_walls(m)
     passages = open_passages(m)
+    if os.path.exists(corr_path):
+        n_bfix, n_pfix = apply_fixes(m, json.load(open(corr_path)))
+        print(f"fixes: {n_bfix} buildings, {n_pfix} pitches")
     m["meta"]["sources"] = [
         "OpenStreetMap contributors (ODbL 1.0)",
         "PNOA-LiDAR 2025 © Instituto Geográfico Nacional / Junta de Castilla y León (CC BY 4.0)",

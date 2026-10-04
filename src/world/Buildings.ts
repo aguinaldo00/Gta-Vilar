@@ -8,6 +8,7 @@ import { centroid, hash01, type Pt, signedArea, toPts, triangulate } from './geo
 import { FLOOR_H } from './Materials';
 import type { MapBuilding } from './mapData';
 import { VEHICLE_ROADS } from './Roads';
+import { grandstand } from './Stands';
 
 /** Landmarks get dedicated models instead of a generic extrusion. */
 const CUSTOM = new Set(['townhall', 'torre']);
@@ -367,7 +368,16 @@ export function buildBuildings(ctx: BuildContext): void {
     const rnd = hash01(idx);
 
     if (b.t === 'canopy') {
-      canopy(ctx, outer, ground, Math.min(h - ground, 6) > 1.5 ? Math.min(h - ground, 6) : 3.2);
+      // Measured roofs over courts can be tall (the covered frontón, 13.9 m): a checked height wins over the cap.
+      // Under a roof baked from the LiDAR (the Bolera Nela's pitched roof) only the pillars, up to its eaves.
+      // Checked roofs (b.rc) get posts every ~6 m along the sides; other canopies keep them at the corners.
+      const every = b.rc ? 6 : Number.POSITIVE_INFINITY;
+      if (roofRef) pillars(ctx, outer, ground, Math.max(2.5, roofRef.e - ground), every);
+      else canopy(ctx, outer, ground, b.ch ?? (Math.min(h - ground, 6) > 1.5 ? Math.min(h - ground, 6) : 3.2), b.rc, every);
+      continue;
+    }
+    if (b.t === 'stand') {
+      grandstand(ctx, outer, ground, b.ch ?? Math.max(3, h - ground), b.face, b.rc);
       continue;
     }
     const industrial = b.t === 'industrial';
@@ -504,11 +514,24 @@ function flatRoof(m: Mesh3, outer: Pt[], holes: Pt[][], h: number, color: THREE.
 }
 
 /** Open shelter (building=roof): a slab on posts at the corners. */
-function canopy(ctx: BuildContext, ring: Pt[], ground: number, h: number): void {
+function canopy(ctx: BuildContext, ring: Pt[], ground: number, h: number, colour = '#9a958c', every = Number.POSITIVE_INFINITY): void {
   const roof = new Mesh3();
-  flatRoof(roof, ring, [], ground + h, new THREE.Color('#9a958c'));
-  ctx.batch.addWorld(roof.geometry(), ctx.mats.roofVC);
-  for (const [x, z] of ring) {
+  flatRoof(roof, ring, [], ground + h, new THREE.Color(colour));
+  // A checked colour is sheet metal seen from above as in the photo: plain paint, not the tile texture.
+  ctx.batch.addWorld(roof.geometry(), every === Number.POSITIVE_INFINITY ? ctx.mats.roofVC : ctx.mats.tint(colour));
+  pillars(ctx, ring, ground, h, every);
+}
+
+/** Posts at the corners of a roof, and every `every` metres along the sides. */
+function pillars(ctx: BuildContext, ring: Pt[], ground: number, h: number, every: number): void {
+  const pts: Pt[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, az] = ring[i],
+      [bx, bz] = ring[(i + 1) % ring.length];
+    const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / every));
+    for (let k = 0; k < n; k++) pts.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
+  }
+  for (const [x, z] of pts) {
     ctx.batch.add(new THREE.BoxGeometry(0.25, h + 1, 0.25), ctx.mats.iron, x, ground + (h - 1) / 2, z);
     ctx.collision.addCircle(x, z, 0.2, { bottom: ground - 1, top: ground + h, mask: Layer.Solid, absolute: true });
   }

@@ -158,9 +158,9 @@ function courtAtlas(): THREE.CanvasTexture {
   cell(
     6,
     () => {
-      for (let k = 0; k < 900; k++) {
+      for (let k = 0; k < 4000; k++) {
         g.fillStyle = `rgba(${120 + Math.random() * 60},${100 + Math.random() * 40},${70 + Math.random() * 30},0.35)`;
-        g.fillRect(6 * 0 + (2 % 4) * S + Math.random() * S, S + Math.random() * S, 3, 3);
+        g.fillRect(Math.random() * S, Math.random() * S, 3, 3); // (the cell is already translated)
       }
     },
     '#c8a874',
@@ -348,41 +348,134 @@ function tennisNet(ctx: BuildContext, c: Court, w: number, net: THREE.Material):
   c.lb.add(Unit.box, ctx.mats.tint('#f4f4f0'), 0, 0.95, 0, 0, 0.03, 0.06, w);
 }
 
-/** Frontón: tall front wall and a side wall along the left of the cancha. */
-function fronton(ctx: BuildContext, c: Court): void {
-  const wall = ctx.mats.tint('#d6d0c4');
-  const H = 9,
-    T = 0.8;
+/**
+ * Frontón: the frontis across one end and the left wall along one side, the
+ * other side and the back open. Which end and which side come from the
+ * LiDAR when the map has them (`fr`, data/corrections.json pitchFixes);
+ * walls painted as the real ones (`wall`), with the white lines of the game:
+ * falta line over the chapa at the foot of the frontis, the top line, and the
+ * numbered cuadros every 3.5 m along the left wall.
+ */
+function fronton(ctx: BuildContext, c0: Court, a: MapArea): void {
+  let c = c0;
+  let side = -1;
+  if (a.fr && a.fr.length >= 4) {
+    const near = (lx: number, lz: number, px: number, pz: number) => {
+      const [wx, wz] = c.lb.point(lx, lz);
+      return Math.hypot(wx - px, wz - pz);
+    };
+    // The frontis goes at local -L/2: turn the court round if it is at the other end.
+    if (near(c.L / 2, 0, a.fr[0], a.fr[1]) < near(-c.L / 2, 0, a.fr[0], a.fr[1])) {
+      const rot = c.rot + Math.PI;
+      c = { ...c, rot, lb: new LocalBatch(ctx.batch, c.cx, ctx.terrain.heightAt(c.cx, c.cz), c.cz, rot) };
+    }
+    side = near(0, c.W / 2, a.fr[2], a.fr[3]) < near(0, -c.W / 2, a.fr[2], a.fr[3]) ? 1 : -1;
+  }
+  const wall = ctx.mats.tint(a.wall ?? '#3d7a57');
+  const white = ctx.mats.tint('#f2f2ee');
+  const chapa = ctx.mats.tint('#8e9296');
+  const H = a.fh ?? 9,
+    T = 0.6;
   const fx = -c.L / 2 - T / 2;
-  c.lb.add(Unit.box, wall, fx, H / 2, 0, 0, T, H, c.W + T);
-  c.lb.add(Unit.box, ctx.mats.tint('#c43b2e'), fx + T / 2 + 0.02, 0.9, 0, 0, 0.03, 0.08, c.W); // chapa line
-  const sl = c.L * 0.75;
-  c.lb.add(Unit.box, wall, fx + sl / 2, H * 0.4, -c.W / 2 - T / 2, 0, sl, H * 0.8, T);
-  for (let k = 1; k < 7; k++)
-    c.lb.add(Unit.box, ctx.mats.tint('#f4f4f0'), -c.L / 2 + (k * c.L) / 7, 1.5, -c.W / 2 + 0.02, 0, 0.06, 3, 0.03);
+  // Frontis.
+  c.lb.add(Unit.box, wall, fx, H / 2 - 0.3, 0, 0, T, H + 0.6, c.W + T);
+  const face = fx + T / 2 + 0.02;
+  c.lb.add(Unit.box, chapa, face, 0.4, 0, 0, 0.03, 0.8, c.W); // chapa (metal sheet at the foot)
+  c.lb.add(Unit.box, white, face + 0.005, 0.85, 0, 0, 0.03, 0.08, c.W); // falta
+  c.lb.add(Unit.box, white, face + 0.005, H - 0.6, 0, 0, 0.03, 0.08, c.W); // top
+  c.lb.add(Unit.box, white, face + 0.005, H / 2, side * (c.W / 2 - 0.05), 0, 0.03, H - 0.4, 0.08); // corner line
   const [wx, wz] = c.lb.point(fx, 0);
   ctx.collision.addBox(wx, wz, T, c.W + T, { rot: c.rot, top: H });
-  const [sx, sz] = c.lb.point(fx + sl / 2, -c.W / 2 - T / 2);
-  ctx.collision.addBox(sx, sz, sl, T, { rot: c.rot, top: H * 0.8 });
+  // Left wall: full length unless the LiDAR shows it stepping down away from the frontis.
+  const steps = a.steps ?? [[0, c.L, H]];
+  const sz = side * (c.W / 2 + T / 2);
+  for (const [d0, d1, h] of steps) {
+    const x0 = -c.L / 2 + d0,
+      x1 = Math.min(c.L / 2, -c.L / 2 + d1);
+    if (x1 <= x0 + 0.2) continue;
+    const len = x1 - x0,
+      mx = (x0 + x1) / 2;
+    c.lb.add(Unit.box, wall, mx, h / 2 - 0.3, sz, 0, len, h + 0.6, T);
+    c.lb.add(Unit.box, white, mx, h - 0.6, sz - side * (T / 2 + 0.02), 0, len, 0.08, 0.03);
+    const [lx, lz] = c.lb.point(mx, sz);
+    ctx.collision.addBox(lx, lz, len, T, { rot: c.rot, top: h });
+  }
+  const leftH = (d: number) => steps.find(([d0, d1]) => d >= d0 && d < d1)?.[2] ?? 0;
+  // Cuadros: vertical lines every 3.5 m from the frontis, as tall as the wall there.
+  for (let d = 3.5; d < c.L - 0.5; d += 3.5) {
+    const h = leftH(d);
+    if (h <= 0) continue;
+    c.lb.add(Unit.box, white, -c.L / 2 + d, (h - 0.4) / 2, sz - side * (T / 2 + 0.02), 0, 0.08, h - 0.4, 0.03);
+  }
 }
 
-/** Bolera: sand floor with a wooden curb, the nine bolos and the throwing plank. */
-function bolera(ctx: BuildContext, c: Court): void {
-  const wood = ctx.mats.tint('#7a5534');
-  for (const z of [-c.W / 2, c.W / 2]) c.lb.add(Unit.box, wood, 0, 0.15, z, 0, c.L, 0.3, 0.12);
-  for (const x of [-c.L / 2, c.L / 2]) c.lb.add(Unit.box, wood, x, 0.15, 0, 0, 0.12, 0.3, c.W);
-  const bx = c.L / 2 - Math.min(6, c.L * 0.25);
+/** Bolo (bolo palma): turned wood, waisted, about 45 cm. */
+function bolo(lb: LocalBatch, wood: THREE.Material, x: number, z: number, scale = 1): void {
+  lb.add(Unit.cyl, wood, x, 0.12 * scale, z, 0, 0.1 * scale, 0.24 * scale, 0.1 * scale);
+  lb.add(Unit.cyl, wood, x, 0.3 * scale, z, 0, 0.07 * scale, 0.14 * scale, 0.07 * scale);
+  lb.add(Unit.sphere, wood, x, 0.4 * scale, z, 0, 0.09 * scale, 0.1 * scale, 0.09 * scale);
+}
+
+/**
+ * Bolera de bolo palma (the Cantabrian game played across Las Merindades),
+ * under its roof: a clay floor, wooden boards along both sides, the castro
+ * with the nine bolos on their iron plates and the small emboque beside
+ * them, the white tiro lines (14 to 22 m from the castro) and the raya de
+ * birle, the wooden board at the far end that stops the balls, benches for
+ * the people watching, a slate scoreboard and the rack of bolas at the tiro.
+ */
+function bolera(ctx: BuildContext, c: Court, mat: THREE.Material): void {
+  const { mats } = ctx;
+  const wood = mats.tint('#7a5534');
+  const boloWood = mats.tint('#e0c08a');
+  const ball = mats.tint('#5a3a22');
+  const white = mats.tint('#f2efe6');
+  const iron = mats.tint('#3a3d40');
+  // Clay floor (the photo of the roof covers it in the orthophoto).
+  surface(ctx, c, 6, mat, 0.04);
+  // Side boards, open at the tiro end.
+  for (const z of [-c.W / 2, c.W / 2]) {
+    c.lb.add(Unit.box, wood, 1.5, 0.5, z, 0, c.L - 3, 1.0, 0.08);
+    for (let x = -c.L / 2 + 3; x <= c.L / 2; x += 2.5) c.lb.add(Unit.box, wood, x, 0.55, z, 0, 0.12, 1.1, 0.12);
+    const [wx, wz] = c.lb.point(1.5, z);
+    ctx.collision.addBox(wx, wz, c.L - 3, 0.12, { rot: c.rot, top: 1.0, mask: Layer.Bodies });
+  }
+  // Back board that stops the balls.
+  c.lb.add(Unit.box, wood, c.L / 2 - 0.1, 0.6, 0, 0, 0.15, 1.2, c.W);
+  const [bx0, bz0] = c.lb.point(c.L / 2 - 0.1, 0);
+  ctx.collision.addBox(bx0, bz0, 0.15, c.W, { rot: c.rot, top: 1.2, mask: Layer.Bodies });
+  // Castro: the nine bolos in three rows, 1.25 m apart, on iron plates; the emboque to the side.
+  const cx = Math.min(c.L / 2 - 7, -c.L / 2 + 23);
+  c.lb.add(Unit.box, mats.tint('#b48c5c'), cx, 0.05, 0, 0, 3.6, 0.04, 3.6);
   for (let i = -1; i <= 1; i++)
     for (let j = -1; j <= 1; j++) {
-      c.lb.add(Unit.cyl, ctx.mats.tint('#e2c48e'), bx + i * 0.6, 0.25, j * 0.6, 0, 0.11, 0.5, 0.11);
-      c.lb.add(Unit.sphere, ctx.mats.tint('#e2c48e'), bx + i * 0.6, 0.52, j * 0.6, 0, 0.12, 0.12, 0.12);
+      c.lb.add(Unit.cyl, iron, cx + i * 1.25, 0.075, j * 1.25, 0, 0.16, 0.01, 0.16);
+      bolo(c.lb, boloWood, cx + i * 1.25, j * 1.25);
     }
-  c.lb.add(Unit.box, wood, -c.L / 2 + 2.5, 0.08, 0, 0, 0.5, 0.16, 1.6);
-  for (const [x, z] of [
-    [-c.L / 2 + 2.6, 1.2],
-    [-c.L / 2 + 2.9, 1.4],
-  ])
-    c.lb.add(Unit.sphere, ctx.mats.tint('#5a3a22'), x, 0.11, z, 0, 0.22, 0.22, 0.22);
+  bolo(c.lb, boloWood, cx + 1.25, -c.W / 2 + 1.2, 0.5);
+  // Raya de birle behind the castro, and the tiro lines in front of it.
+  c.lb.add(Unit.box, white, cx + 2.4, 0.07, 0, 0, 0.06, 0.01, c.W - 0.4);
+  for (const d of [14, 16, 18, 20, 22]) {
+    const x = cx - d;
+    if (x < -c.L / 2 + 0.5) continue;
+    c.lb.add(Unit.box, white, x, 0.07, 0, 0, 0.06, 0.01, 2.2);
+  }
+  // The tiro: a wooden plank to step on, the rack with the bolas.
+  const tx = -c.L / 2 + 1.2;
+  c.lb.add(Unit.box, wood, tx, 0.06, 0, 0, 0.5, 0.06, 1.4);
+  c.lb.add(Unit.box, wood, tx - 0.4, 0.35, c.W / 2 - 0.9, 0, 0.4, 0.06, 1.4);
+  for (let k = 0; k < 4; k++) c.lb.add(Unit.sphere, ball, tx - 0.4, 0.5, c.W / 2 - 1.45 + k * 0.36, 0, 0.18, 0.18, 0.18);
+  // Benches for the people watching, along the side wall of the roof.
+  for (let x = -c.L / 2 + 3; x < c.L / 2 - 2; x += 4) {
+    c.lb.add(Unit.box, wood, x + 1.5, 0.45, -c.W / 2 - 0.55, 0, 3, 0.06, 0.4);
+    for (const dx of [0.3, 2.7]) c.lb.add(Unit.box, iron, x + dx, 0.22, -c.W / 2 - 0.55, 0, 0.06, 0.44, 0.35);
+  }
+  // Slate scoreboard on posts beside the castro.
+  const sx = cx + 1.0,
+    sz = c.W / 2 + 0.5;
+  c.lb.add(Unit.box, mats.tint('#2a2d2c'), sx, 1.6, sz, 0, 1.6, 1.0, 0.05);
+  c.lb.add(Unit.box, white, sx, 2.05, sz - 0.03, 0, 1.3, 0.04, 0.01);
+  for (const dx of [-0.75, 0.75]) c.lb.add(Unit.box, wood, sx + dx, 1.05, sz, 0, 0.08, 2.1, 0.08);
 }
 
 function borderCurb(ctx: BuildContext, c: Court): void {
@@ -438,10 +531,10 @@ function buildPitch(ctx: BuildContext, a: MapArea, mats: { court: THREE.Material
       break;
     }
     case 'pelota':
-      fronton(ctx, c);
+      fronton(ctx, c, a);
       break;
     case 'skittles':
-      bolera(ctx, c);
+      bolera(ctx, c, mats.court);
       break;
     case 'boules':
       borderCurb(ctx, c);

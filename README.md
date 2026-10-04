@@ -109,6 +109,13 @@ The data pipeline runs in two steps. The browser never parses OSM.
     - Stations are never hidden: one that cannot connect says "Sin señal".
   - **Local stations:** Radio Merindades, Nela FM and Corregimiento Rock are made up, and their music is generated live.
   - **Logos:** original monochrome plates. To use official artwork, put `public/radio/<id>.svg` and list the id in `public/radio/logos.json` (shown in greyscale).
+  - **Where outside audio is refused** (the claude.ai viewer refuses audio from other sites), a station that cannot connect offers **"Escuchar en otra ventana"**.
+    - The live station then plays in a small window of its own.
+    - Q / Z, X and getting out of the car keep driving it.
+    - `node tools/qa/radio-blocked.cjs` checks this.
+  - **To hear the radio inside the game**, play it from GitHub Pages (`.github/workflows/pages.yml`). Turn it on once:
+    - Settings → Pages → Source: "GitHub Actions";
+    - Settings → Environments → github-pages, allowing this branch.
   - **Check:** `node tools/qa/radio.cjs`.
 - **Day and night**: the clock starts at your local time and runs a day in 24 minutes (**T** skips an hour). The sun follows Villarcayo's path (rise ~7:30, set ~20:30), with golden and blue hours, stars and moonlit shadows; street lamps glow and light the street around you, a share of windows light up, headlights come on.
 - **Footsteps** sound different on asphalt, paving, grass, gravel and water.
