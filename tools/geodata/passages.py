@@ -37,7 +37,10 @@ def open_passages(m):
         p = r["p"]
         line = LineString([(p[i], p[i + 1]) for i in range(0, len(p), 2)])
         side = SIDEWALK_W if r.get("sw") else 0.0
-        corridors.append((line.buffer(r["w"] / 2 + side + 0.3, cap_style=2), r["tp"]))
+        # Footways under a building are mapped as a 2 m line; the real openings (the
+        # Uni-Dos entry from Calle Laín Calvo) are a good 4 m wide.
+        half = max(r["w"] / 2, 2.0) if r["k"] in ("footway", "pedestrian", "path") else r["w"] / 2
+        corridors.append((line.buffer(half + side + 0.3, cap_style=2), r["tp"]))
         if side:
             kerbs.append((line, r["w"] / 2 + 0.35))
     if not corridors:

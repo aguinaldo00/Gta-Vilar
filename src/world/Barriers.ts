@@ -265,18 +265,23 @@ export function buildBarriers(ctx: BuildContext): void {
           const stoneTint = STONE;
           prism(masonry, x0, z0, x1, z1, 0.35, f0, f1, g0 + plinth, g1 + plinth, stoneTint, 1.5, caps);
           const segLen = len / n;
-          bars.quad(
-            [x0, g0 + plinth, z0],
-            [x1, g1 + plinth, z1],
-            [x1, g1 + h, z1],
-            [x0, g0 + h, z0],
-            [0, 0],
-            [segLen / 0.6, 0],
-            [segLen / 0.6, h - plinth],
-            [0, h - plinth],
-            [-(z1 - z0), 0, x1 - x0],
-            WHITE,
-          );
+          // A colour checked on photos makes it a cast balustrade (the white concrete
+          // celosía of the chalet garden in Calle Laín Calvo) instead of iron bars.
+          if (b.c)
+            prism(masonry, x0, z0, x1, z1, 0.14, g0 + plinth, g1 + plinth, g0 + h - 0.06, g1 + h - 0.06, new THREE.Color(b.c), 0.6, caps);
+          else
+            bars.quad(
+              [x0, g0 + plinth, z0],
+              [x1, g1 + plinth, z1],
+              [x1, g1 + h, z1],
+              [x0, g0 + h, z0],
+              [0, 0],
+              [segLen / 0.6, 0],
+              [segLen / 0.6, h - plinth],
+              [0, h - plinth],
+              [-(z1 - z0), 0, x1 - x0],
+              WHITE,
+            );
           const pillars = Math.max(1, Math.round(segLen / 3));
           for (let j = 0; j <= pillars; j++) {
             if (j === 0 && k > 0) continue;

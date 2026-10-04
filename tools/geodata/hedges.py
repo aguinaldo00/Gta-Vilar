@@ -210,12 +210,18 @@ def prune_barriers(m):
     zones += [line(r["p"]).buffer(r.get("w", 16) / 2) for r in m.get("rivers", []) if len(r["p"]) >= 4]
     carriage = [line(r["p"]).buffer(r["w"] / 2 - 0.3) for r in m["roads"] if r["k"] in VEHICLE and r["k"] != "service" and len(r["p"]) >= 4]
     tz, tc = STRtree(zones), STRtree(carriage)
+    # Fences checked on photos (data/corrections.json, `fix`): the LiDAR's own reading of the
+    # same line (often a "hedge" where trees lean over it) is not drawn a second time.
+    fixed = [line(b["p"]).buffer(1.5) for b in m["barriers"] if b.get("fix") and len(b["p"]) >= 4]
     keep, dropped = [], 0
     for b in m["barriers"]:
         if not (b.get("src") == "lidar" or b.get("t")):
             keep.append(b)
             continue
         ln = line(b["p"])
+        if ln.length > 0 and any(f.intersection(ln).length > 0.6 * ln.length for f in fixed):
+            dropped += 1
+            continue
         if any(zones[i].intersects(ln) for i in tz.query(ln)) or any(carriage[i].intersection(ln).length > 1.5 for i in tc.query(ln)):
             dropped += 1
             continue

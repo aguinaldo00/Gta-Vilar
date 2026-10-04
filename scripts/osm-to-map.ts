@@ -1791,13 +1791,23 @@ for (const [nid, n] of nodes) {
   }
 }
 for (const k of kiosks) furniture.push({ k: 'kiosk', x: k.x, z: k.z, a: Math.round(roadAngleNear([k.x, k.z]) * 1000) / 1000, t: k.t });
-for (const { replaces, ...f } of corrections.furniture ?? []) {
-  if (replaces) {
-    const i = furniture.findIndex((g) => g.k === f.k && Math.hypot(g.x - replaces[0], g.z - replaces[1]) < 2);
-    if (i >= 0) furniture.splice(i, 1);
-  }
-  furniture.push(f);
+// Checked furniture: first take out every piece a correction replaces (the closest one within 2 m),
+// then add the corrected ones, so a correction never removes another correction's piece.
+const furnitureFixes = corrections.furniture ?? [];
+for (const { replaces, k } of furnitureFixes) {
+  if (!replaces) continue;
+  let best = -1,
+    bestD = 2;
+  furniture.forEach((g, i) => {
+    const d = Math.hypot(g.x - replaces[0], g.z - replaces[1]);
+    if (g.k === k && d < bestD) {
+      best = i;
+      bestD = d;
+    }
+  });
+  if (best >= 0) furniture.splice(best, 1);
 }
+for (const { replaces, ...f } of furnitureFixes) furniture.push(f);
 // Overhead power lines, pole to pole.
 const powerlines: { p: number[]; k: string }[] = [];
 for (const [id, w] of ways) {

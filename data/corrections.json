@@ -217,6 +217,37 @@
       "z": 63.0,
       "a": 2.59,
       "t": "9.4x8.6"
+    },
+    {
+      "_": "Contenedores del Uni-Dos: en la calzada junto al bordillo, delante de los pilares (foto), no en la boca del pasaje",
+      "k": "container",
+      "x": -187.12,
+      "z": 161.91,
+      "a": 2.454,
+      "replaces": [
+        -186.0,
+        158.3
+      ]
+    },
+    {
+      "k": "container",
+      "x": -187.82,
+      "z": 162.88,
+      "a": 2.454,
+      "replaces": [
+        -186.9,
+        159.7
+      ]
+    },
+    {
+      "k": "container",
+      "x": -188.52,
+      "z": 163.86,
+      "a": 2.454,
+      "replaces": [
+        -187.8,
+        160.9
+      ]
     }
   ],
   "barriers": [
@@ -294,6 +325,32 @@
         -132.64,
         7.02,
         -107.04
+      ]
+    },
+    {
+      "_": "Chalet de la esquina Laín Calvo / Valcárcel: zócalo de piedra con celosía blanca (fotos); cancela junto a la casa",
+      "k": "verja",
+      "h": 1.25,
+      "c": "#eceae2",
+      "p": [
+        -211.3,
+        202.6,
+        -217.0,
+        209.5,
+        -205.8,
+        230.7
+      ]
+    },
+    {
+      "_": "Chalet: sigue por Valcárcel tras la entrada de coches",
+      "k": "verja",
+      "h": 1.25,
+      "c": "#eceae2",
+      "p": [
+        -203.8,
+        234.3,
+        -197.2,
+        248.2
       ]
     }
   ],
