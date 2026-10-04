@@ -27,6 +27,17 @@ const RESTITUTION = 0.25;
  * grip bleeds off the lateral part. Low grip (handbrake, sharp turns at speed)
  * lets the heading rotate faster than the velocity follows → drifting.
  */
+/** Tyre grip and rolling resistance by surface (dry). */
+const SURFACE: Record<string, { grip: number; rolling: number; paved: boolean }> = {
+  asphalt: { grip: 1, rolling: 1, paved: true },
+  pavement: { grip: 0.92, rolling: 1.1, paved: true },
+  gravel: { grip: 0.62, rolling: 2.4, paved: false },
+  grass: { grip: 0.5, rolling: 3.4, paved: false },
+  water: { grip: 0.35, rolling: 6, paved: false },
+};
+/** Aerodynamic drag coefficient per unit mass (1/m): ~0.4 m/s² at 100 km/h. */
+const AIR_DRAG = 0.00055;
+
 export class Vehicle {
   readonly spec: VehicleSpec;
   readonly rig: VehicleRig;
@@ -50,6 +61,8 @@ export class Vehicle {
   driven = false;
 
   readonly radius: number;
+  /** Grip of the surface under the tyres (1 dry asphalt), for the HUD and sounds. */
+  surfaceGrip = 1;
   readonly offsets: number[];
   private accelLong = 0;
   private pitch = 0;
@@ -103,21 +116,36 @@ export class Vehicle {
     const prevVF = vF;
     this.throttle = c.throttle;
 
+    // What the tyres stand on: grip and rolling resistance by surface, less grip in the wet.
+    const surf = SURFACE[world.surfaceAt(this.x, this.z)] ?? SURFACE.asphalt;
+    const wet = surf.paved ? world.wetness : world.wetness * 0.5;
+    const mu = surf.grip * (1 - wet * 0.32);
+    this.surfaceGrip = mu;
+    // Traction: the engine cannot push harder than the tyres hold (wheelspin on grass or ice).
+    const accel = s.accel * Math.min(1, mu * 1.15);
+    const brake = s.brake * (0.35 + 0.65 * mu);
+
     // Longitudinal: engine, brakes, reverse, rolling resistance.
     this.braking = false;
     if (c.throttle > 0) {
       if (vF < -0.5) {
-        vF = approach(vF, 0, s.brake * dt);
+        vF = approach(vF, 0, brake * dt);
         this.braking = true;
-      } else vF += s.accel * c.throttle * Math.max(0, 1 - vF / s.maxSpeed) * dt;
+      } else vF += accel * c.throttle * Math.max(0, 1 - vF / s.maxSpeed) * dt;
     } else if (c.throttle < 0) {
       if (vF > 0.5) {
-        vF = approach(vF, 0, s.brake * dt);
+        vF = approach(vF, 0, brake * dt);
         this.braking = true;
-      } else vF -= s.accel * 0.7 * -c.throttle * Math.max(0, 1 + vF / s.maxReverse) * dt;
-    } else vF = approach(vF, 0, s.rolling * dt);
+      } else vF -= accel * 0.7 * -c.throttle * Math.max(0, 1 + vF / s.maxReverse) * dt;
+    } else vF = approach(vF, 0, s.rolling * surf.rolling * dt);
+    // Rolling resistance of soft ground even under power, and air drag (grows with speed squared).
+    if (c.throttle !== 0) vF = approach(vF, 0, s.rolling * (surf.rolling - 1) * dt);
+    vF -= AIR_DRAG * vF * Math.abs(vF) * dt;
+    // Gravity along the slope: cars roll down hills and climb them slower.
+    const slope = (world.heightAt(this.x + fx * 1.5, this.z + fz * 1.5) - world.heightAt(this.x - fx * 1.5, this.z - fz * 1.5)) / 3;
+    vF -= 9.81 * clamp(slope, -0.4, 0.4) * dt * (c.handbrake || (c.throttle === 0 && Math.abs(vF) < 0.4 && Math.abs(slope) < 0.08) ? 0 : 1);
     if (c.handbrake) {
-      vF = approach(vF, 0, s.brake * 0.45 * dt);
+      vF = approach(vF, 0, brake * 0.45 * dt);
       this.braking = this.braking || Math.abs(vF) > 0.5;
     }
 
@@ -130,10 +158,12 @@ export class Vehicle {
     this.yawRate = damp(this.yawRate, targetYaw, c.handbrake ? 4 : 8, dt);
 
     // Lateral grip: handbrake or a hard turn at speed lets the tail slide out.
-    let grip = s.grip;
-    const sharpTurn = Math.abs(this.steer) > 0.7 && Math.abs(vF) > s.maxSpeed * 0.5;
-    if (c.handbrake) grip = s.driftGrip;
-    else if (sharpTurn) grip = lerp(s.grip, s.driftGrip, 0.6);
+    let grip = s.grip * mu;
+    const sharpTurn = Math.abs(this.steer) > 0.7 && Math.abs(vF) > s.maxSpeed * 0.5 * Math.sqrt(mu);
+    if (c.handbrake) grip = s.driftGrip * Math.max(0.5, mu);
+    else if (sharpTurn) grip = lerp(grip, s.driftGrip, 0.6);
+    // Weight transfer: hard braking or hard acceleration unloads one axle and the car slides more easily.
+    grip *= 1 - 0.3 * clamp(Math.abs(this.accelLong) / 18, 0, 1) * clamp(Math.abs(this.steer), 0, 1);
     vL *= Math.exp(-grip * dt);
     // Sliding sideways scrubs speed.
     vF = approach(vF, 0, Math.abs(vL) * 0.25 * dt);

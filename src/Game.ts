@@ -405,6 +405,7 @@ export class Game {
     else if (this.mode === 'intro') this.arrivalShot();
 
     // The menu holds its dusk; the clock runs once in the world.
+    this.world.wetness = this.climate.wetness;
     this.climate.update(this.mode === 'menu' ? 0 : dt * this.timeScale, this.camera.position);
     const sky = { night: this.climate.lightsOn };
     // Slightly more exposure at night, so the lamp-lit streets stay readable.

@@ -7,6 +7,9 @@ import type { Quality } from './World';
 
 /** Late-afternoon sun from the south-west: long, warm shadows. */
 const SUN_DIR = new THREE.Vector3(-0.55, 0.42, 0.62).normalize();
+/** The town's fog (density, draw distance) for the landscape around it; follows the weather. */
+const TOWN_FOG = { value: new THREE.Vector2(0.0011, 620) };
+
 /** Atmospheric haze colour shared by the fog, the far mountains and the horizon. */
 export const HAZE = new THREE.Color('#c9d3d8');
 
@@ -38,6 +41,7 @@ export class Environment {
   private readonly fogBase: number;
   /** Current time of day (see setTime). */
   state: SunState = sunState(17.5);
+  private readonly dome: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
 
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer, rng: Rng, quality: Quality, map?: MapData) {
     this.scene = scene;
@@ -63,7 +67,45 @@ export class Environment {
     this.sky.material.blending = THREE.AdditiveBlending;
     this.sky.material.depthWrite = false;
     this.bgScene.background = new THREE.Color('#000000');
-    this.bgScene.add(this.sky);
+    // Under the scattering sky: a gradient dome (zenith, horizon, a glow towards the
+    // sun) that carries the twilight, the night and the grey of an overcast day.
+    this.dome = new THREE.Mesh(
+      new THREE.SphereGeometry(9000, 32, 16),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        fog: false,
+        uniforms: {
+          zenith: { value: new THREE.Color() },
+          horizon: { value: new THREE.Color() },
+          glow: { value: new THREE.Color() },
+          sunDir: { value: new THREE.Vector3(0, 1, 0) },
+        },
+        vertexShader: `varying vec3 vDir;
+void main() {
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vDir = wp.xyz - cameraPosition;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+        fragmentShader: `uniform vec3 zenith; uniform vec3 horizon; uniform vec3 glow; uniform vec3 sunDir;
+varying vec3 vDir;
+void main() {
+  vec3 d = normalize(vDir);
+  float up = clamp(d.y, 0.0, 1.0);
+  vec3 col = mix(horizon, zenith, pow(up, 0.45));
+  vec2 hs = normalize(sunDir.xz + 1e-4);
+  float toward = max(dot(normalize(d.xz + 1e-4), hs), 0.0);
+  col += glow * pow(toward, 3.0) * exp(-up * 6.0);
+  gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+      }),
+    );
+    this.dome.renderOrder = -2;
+    this.dome.frustumCulled = false;
+    this.sky.renderOrder = -1;
+    this.bgScene.add(this.dome, this.sky);
     const real = map ? buildSurroundings(map, quality.detail === 1 ? 4 : 8, quality) : null;
     // The real hills of Las Merindades when the map has them; a stylised ring of mountains otherwise.
     this.bgScene.add(real ?? buildMountains(rng));
@@ -157,7 +199,14 @@ export class Environment {
     (this.stars.material as THREE.PointsMaterial).opacity = night * 0.9;
     // Blue hour: strongest half-way into the night, fading to a dark night blue.
     const twilight = Math.min(1, night * (1 - night) * 4);
-    (this.bgScene.background as THREE.Color).copy(mixColor('#000000', '#0a1220', night)).lerp(new THREE.Color('#2b4a78'), twilight * 0.85);
+    const du = this.dome.material.uniforms;
+    // Zenith: nothing by day (the scattering sky is the blue), blue hour, deep night blue.
+    (du.zenith.value as THREE.Color).copy(mixColor('#000000', '#070d1a', night)).lerp(new THREE.Color('#1d3766'), twilight * 0.9);
+    // Horizon: a little warm haze by day, lilac at the blue hour, the town's light glow at night.
+    (du.horizon.value as THREE.Color).copy(mixColor('#0c0b0a', '#141826', night)).lerp(new THREE.Color('#5b5476'), twilight * 0.8);
+    // The afterglow over where the sun went down (and the dawn before it rises).
+    (du.glow.value as THREE.Color).set('#d0652e').multiplyScalar(Math.max(twilight, golden * 0.5) * 0.9);
+    (du.sunDir.value as THREE.Vector3).copy(st.sun);
     this.stars.visible = night > 0.02;
     NIGHT.value = night;
     return st;
@@ -189,14 +238,21 @@ export class Environment {
     const fog = this.scene.fog as THREE.FogExp2;
     // Thick valley fog closes the view to a few tens of metres.
     fog.density = this.fogBase * (1 + w.cloud * 0.6 + w.rain * 3) + w.fog * 0.028;
+    TOWN_FOG.value.x = fog.density;
     fog.color.lerp(mixColor('#9da6ab', '#1a222c', night), Math.max(w.fog, overcast * 0.7));
     const bg = this.bgScene.fog as THREE.Fog;
     bg.color.copy(fog.color);
-    bg.near = 600 * (1 - w.fog * 0.95);
-    bg.far = 11000 * (1 - w.fog * 0.94 - w.rain * 0.4);
+    // The far landscape fades into the same haze as the town (else the edge of the town fog reads as a white band).
+    bg.near = 600 * (1 - w.fog * 0.95) * (1 - w.cloud * 0.5);
+    bg.far = 11000 * (1 - w.fog * 0.94 - w.rain * 0.4) * (1 - w.cloud * 0.45);
     (this.stars.material as THREE.PointsMaterial).opacity *= 1 - w.cloud;
     // An overcast sky is a grey dome (the scattering sky only adds a little light on top).
-    (this.bgScene.background as THREE.Color).lerp(fog.color, Math.max(w.fog, overcast * 0.9));
+    const du = this.dome.material.uniforms;
+    const greyK = Math.max(w.fog, overcast * 0.9);
+    // A grey dome under clouds: lighter at the horizon, a touch darker overhead.
+    (du.horizon.value as THREE.Color).lerp(fog.color, greyK);
+    (du.zenith.value as THREE.Color).lerp(fog.color.clone().multiplyScalar(0.82), greyK);
+    (du.glow.value as THREE.Color).multiplyScalar(1 - greyK * 0.85);
   }
 
   /** Height of the distant valley floor (so it meets the edge of the map). */
@@ -361,7 +417,8 @@ function buildSurroundings(map: MapData, step: number, quality: Quality): THREE.
   // a seam. Use the town's exponential fog up to the draw distance and keep it
   // there until the long-range linear haze catches up.
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.townFog = { value: new THREE.Vector2(quality.fogDensity, quality.drawDistance) };
+    TOWN_FOG.value.set(quality.fogDensity, quality.drawDistance);
+    shader.uniforms.townFog = TOWN_FOG;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <fog_pars_fragment>', '#include <fog_pars_fragment>\nuniform vec2 townFog;')
       .replace(

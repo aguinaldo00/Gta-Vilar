@@ -61,6 +61,8 @@ export class World {
   /** The Ayuntamiento's digital screen and the billboards (add slides with screens.add). */
   readonly screens: DigitalScreens;
   /** Signs, lamp posts and bollards that cars knock over (update with the vehicles each frame). */
+  /** Ground wetness 0–1 (set from the climate each frame): less tyre grip. */
+  wetness = 0;
   readonly breakables = new Breakables();
   /** Parked cars from the LiDAR, which a driven car can shove. */
   parkedCars!: ParkedCars;

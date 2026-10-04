@@ -106,17 +106,86 @@ export function sidewalkTexture(): THREE.CanvasTexture {
   });
 }
 
+/**
+ * Asphalt (one tile ≈ 4 m): a dark bitumen base with aggregate at three
+ * scales (fine sand, gravel, the odd lighter stone), soft weathering blotches,
+ * sealed cracks (glossy black lines) and a couple of repair patches. The tile
+ * repeats seamlessly: everything is drawn wrapped around the edges.
+ */
 export function asphaltTexture(): THREE.CanvasTexture {
   const rng = new Rng(51);
-  return canvasTexture(256, 256, (g, w, h) => {
-    g.fillStyle = '#4a4b4e';
+  const S = 512;
+  return canvasTexture(S, S, (g, w, h) => {
+    const wrap = (fn: (ox: number, oy: number) => void) => {
+      for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) fn(ox, oy);
+    };
+    g.fillStyle = '#57585c';
     g.fillRect(0, 0, w, h);
-    speckle(g, w, h, rng, 6000, ['#3d3e41', '#56575a', '#5f6063', '#333437'], 2);
-    for (let i = 0; i < 6; i++) {
-      g.fillStyle = 'rgba(30,30,32,0.25)';
+    // Weathering: large soft lighter and darker areas (oil, sun-bleached binder).
+    for (let i = 0; i < 26; i++) {
+      const x = rng.range(0, w),
+        y = rng.range(0, h),
+        r = rng.range(30, 120);
+      const light = rng.chance(0.5);
+      wrap((ox, oy) => {
+        const grd = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+        grd.addColorStop(0, light ? 'rgba(120,120,118,0.10)' : 'rgba(20,20,22,0.14)');
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grd;
+        g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+      });
+    }
+    // Aggregate: sand, gravel and the odd pale stone catching the light.
+    speckle(g, w, h, rng, 26000, ['#4c4d50', '#626366', '#696a6d', '#414245', '#5c5d61'], 1.4);
+    speckle(g, w, h, rng, 5200, ['#707174', '#7c7c7e', '#4a4b4e', '#3c3d40'], 2.6);
+    for (let i = 0; i < 900; i++) {
+      const x = rng.range(0, w),
+        y = rng.range(0, h),
+        r = rng.range(1, 2.6);
+      g.fillStyle = rng.pick(['#8d8c88', '#9c9992', '#81807c', '#aca89e']);
       g.beginPath();
-      g.ellipse(rng.range(0, w), rng.range(0, h), rng.range(10, 40), rng.range(5, 20), rng.range(0, 3), 0, Math.PI * 2);
+      g.ellipse(x, y, r, r * rng.range(0.6, 1), rng.range(0, 3), 0, Math.PI * 2);
       g.fill();
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      g.fillRect(x - r * 0.2, y + r * 0.6, r * 1.2, 0.8);
+    }
+    // Repair patches: slightly darker, crisper rectangles of newer asphalt.
+    for (let i = 0; i < 2; i++) {
+      const x = rng.range(0, w),
+        y = rng.range(0, h),
+        pw = rng.range(50, 120),
+        ph = rng.range(40, 90);
+      wrap((ox, oy) => {
+        g.fillStyle = 'rgba(28,28,31,0.35)';
+        g.fillRect(x + ox, y + oy, pw, ph);
+        g.strokeStyle = 'rgba(15,15,17,0.6)';
+        g.lineWidth = 1.5;
+        g.strokeRect(x + ox, y + oy, pw, ph);
+      });
+    }
+    // Sealed cracks: thin wandering bitumen lines.
+    g.lineCap = 'round';
+    for (let i = 0; i < 7; i++) {
+      let x = rng.range(0, w),
+        y = rng.range(0, h);
+      let a = rng.range(0, Math.PI * 2);
+      const pts: [number, number][] = [[x, y]];
+      for (let k = 0; k < 18; k++) {
+        a += rng.range(-0.6, 0.6);
+        x += Math.cos(a) * 7;
+        y += Math.sin(a) * 7;
+        pts.push([x, y]);
+      }
+      wrap((ox, oy) => {
+        g.strokeStyle = 'rgba(16,16,18,0.75)';
+        g.lineWidth = rng.range(1.5, 3);
+        g.beginPath();
+        pts.forEach(([px, py], j) => {
+          if (j) g.lineTo(px + ox, py + oy);
+          else g.moveTo(px + ox, py + oy);
+        });
+        g.stroke();
+      });
     }
   });
 }

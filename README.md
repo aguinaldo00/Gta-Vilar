@@ -106,6 +106,31 @@ The data pipeline runs in two steps. The browser never parses OSM.
 - **Pedestrians** (`src/entities/PedestrianSystem.ts`, `PedestrianAI.ts`): a population of townspeople in the busy places (more near shops and the plaza), simulated near the camera, drawn with a pool of re-coloured bodies. They walk, stop, look at their phone, sit on the real benches, jump aside from a fast car, fly when hit (ragdoll) and get up angry; `__game.pedestrians.panicAt(x, z, r)` sends them running for shelter. Voice lines are hooks to the files in audio.json.
 - **Parked cars** (from the LiDAR) can be shoved by a driven car; **signs, lamp posts and bollards** fall over when hit.
 
+## Driving physics
+
+- **Grip depends on the surface** under the car:
+  - asphalt;
+  - pavement;
+  - gravel;
+  - grass;
+  - water.
+- **The wet loses about a third of the grip.** Rain wets the road through `world.wetness`.
+- **Grip limits the car:**
+  - the engine cannot push harder than the tyres hold;
+  - braking scales with grip;
+  - the tail slides out more easily under hard acceleration while steering (weight transfer).
+- **Speed is also shaped by** air drag and gravity along the slope.
+- **Reference figures** (sedan): 0–50 km/h in about 1.8 s; braking from 50 to 0 in about 8 m dry and 10 m wet.
+  - Measure them with `node tools/qa/drive.cjs` against `vite preview`.
+
+## Visual checks and autonomous work
+
+- `tools/qa/look.cjs` takes screenshots from fixed viewpoints at any hour and weather.
+- `.claude/skills/villarcayo-autopilot/SKILL.md` is the working loop for continuing the project unattended:
+  - the rules (real data only, attribution, rain left for later);
+  - the backlog;
+  - the mistakes not to repeat.
+
 ## Graphics and quality levels
 
 The look is inspired by modern open-world games (warm low sun, hazy distance, wind in the grass), within what a browser can do:

@@ -237,7 +237,7 @@ export class Materials {
  * chosen cell (with explicit gradients so mipmapping stays seam-free).
  */
 function roadAtlasMaterial(tiles: (THREE.Texture | null)[]): Lambert {
-  const C = 256;
+  const C = 512;
   const canvas = document.createElement('canvas');
   canvas.width = C * 4;
   canvas.height = C * 2;
@@ -259,17 +259,40 @@ function roadAtlasMaterial(tiles: (THREE.Texture | null)[]): Lambert {
   m.userData.attributes = ['atlasCell'];
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float atlasCell;\nvarying float vCell;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\n  vCell = atlasCell;');
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vCell;').replace(
-      '#include <map_fragment>',
-      `float cellI = floor(vCell + 0.5);
+      .replace('#include <common>', '#include <common>\nattribute float atlasCell;\nvarying float vCell;\nvarying vec2 vWorldXZ;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n  vCell = atlasCell;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n  vWorldXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying float vCell;
+varying vec2 vWorldXZ;
+float rh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(rh(i), rh(i + vec2(1, 0)), f.x), mix(rh(i + vec2(0, 1)), rh(i + vec2(1, 1)), f.x), f.y);
+}`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        `float cellI = floor(vCell + 0.5);
   vec2 cell = vec2(mod(cellI, 4.0), floor(cellI / 4.0));
   vec2 scale = vec2(0.25, 0.5) * 0.96;
   vec2 auv = (cell + 0.02) * vec2(0.25, 0.5) + fract(vMapUv) * scale;
   vec4 sampledDiffuseColor = textureGrad(map, auv, dFdx(vMapUv) * scale, dFdy(vMapUv) * scale);
+  // Anti-tiling: a second, rotated and larger sample of the same tile, blended by a world-space noise,
+  // and slow brightness variation (worn and fresher stretches, damp shade).
+  vec2 ruv = mat2(0.8, -0.6, 0.6, 0.8) * vMapUv * 0.37 + 0.31;
+  vec2 auv2 = (cell + 0.02) * vec2(0.25, 0.5) + fract(ruv) * scale;
+  vec4 second = textureGrad(map, auv2, dFdx(ruv) * scale, dFdy(ruv) * scale);
+  float n1 = vnoise(vWorldXZ * 0.09);
+  float n2 = vnoise(vWorldXZ * 0.021 + 7.3);
+  sampledDiffuseColor = mix(sampledDiffuseColor, second, smoothstep(0.35, 0.65, n1) * 0.55);
+  sampledDiffuseColor.rgb *= 0.9 + 0.2 * n2 + 0.06 * (n1 - 0.5);
   diffuseColor *= sampledDiffuseColor;`,
-    );
+      );
   };
   return m;
 }

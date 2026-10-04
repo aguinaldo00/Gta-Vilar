@@ -19,16 +19,31 @@ const GALERIA_STYLE = FACADE_STYLES.indexOf('galeria');
 const BAY_WIDTH = [2.9, 2.8, 3.1, 3.2, 3.4, 3.8, 4.2, 5.0, 2.6];
 
 /**
- * Wall colour from a facade photo: the photos are mostly taken under an overcast
- * sky, so lift the lightness and give back some saturation.
+ * Wall colour from a facade photo, harmonised to the town's palette. The photos
+ * are mostly taken under an overcast sky (grey, dark, cold) and each one under
+ * a different light, so the raw colours clash. Lift them, then keep them within
+ * what Castilian render and stone look like: warm hues (cream, ochre, sand,
+ * terracotta) pulled together, saturation and lightness in a narrow band. A
+ * clearly painted facade (blue, green) keeps its hue, muted.
  */
 function photoColour(hex: number): THREE.Color {
   const c = new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
   const hsl = { h: 0, s: 0, l: 0 };
   c.getHSL(hsl, THREE.SRGBColorSpace);
-  return c.setHSL(hsl.h, Math.min(1, hsl.s * 1.35), Math.min(0.92, hsl.l * 1.12 + 0.06), THREE.SRGBColorSpace);
+  let { h, s, l } = hsl;
+  s *= 1.3;
+  l = l * 1.1 + 0.08;
+  // Warm hues (red to yellow): towards the ochre at h ≈ 0.09, more so for greys.
+  const warm = h < 0.2 || h > 0.95;
+  if (warm || s < 0.12) {
+    const dh = ((0.09 - h + 1.5) % 1) - 0.5;
+    h = (h + dh * (s < 0.12 ? 0.85 : 0.45) + 1) % 1;
+    s = Math.min(0.34, Math.max(0.1, s));
+  } else s = Math.min(0.22, s * 0.8);
+  l = Math.min(0.86, Math.max(0.54, l));
+  return c.setHSL(h, s, l, THREE.SRGBColorSpace);
 }
-const FLAT_ROOF = new THREE.Color('#8f8a84');
+const FLAT_ROOF = new THREE.Color('#948c82');
 const TERRACE = new THREE.Color('#b3a998');
 
 /** Height in metres from OSM tags, with sensible defaults per building type. */
