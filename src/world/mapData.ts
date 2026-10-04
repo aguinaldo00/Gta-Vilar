@@ -103,6 +103,16 @@ export interface MapShop {
   n: string;
 }
 
+export interface MapFurniture {
+  k: string;
+  x: number;
+  z: number;
+  /** Heading the item faces (rotation about Y; local +Z). */
+  a: number;
+  /** Subtype: recycling streams ("glass,paper"), "digital" for animated screens, information kind. */
+  t?: string;
+}
+
 export interface MapRoad {
   p: Coords;
   k: string;
@@ -157,7 +167,18 @@ export interface MapData {
   heights?: Float32Array;
   buildings: MapBuilding[];
   /** Walls, fences and hedges (OSM, plus plot walls found in the LiDAR: src "lidar"); h in metres. */
-  barriers?: { p: Coords; k: 'wall' | 'fence' | 'hedge' | 'retaining_wall'; h?: number; src?: 'lidar' }[];
+  barriers?: {
+    p: Coords;
+    k: 'wall' | 'fence' | 'hedge' | 'retaining_wall';
+    h?: number;
+    src?: 'lidar' | 'step';
+    top?: number;
+    up?: 1 | -1;
+  }[];
+  /** Street furniture at its mapped position (signs, containers, bins, poles, billboards...). */
+  furniture?: MapFurniture[];
+  /** Overhead power lines (pole to pole). */
+  powerlines?: { p: Coords; k: 'line' | 'minor' }[];
   /** Parked cars seen by the LiDAR: flat [x, z, heading, length, ...]. */
   cars?: number[];
   /** Bollards, flat [x, z, ...]. */

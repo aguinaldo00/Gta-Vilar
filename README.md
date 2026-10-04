@@ -52,7 +52,11 @@ The data pipeline runs in two steps. The browser never parses OSM.
      - the ground smoothed along streets and squares (kerbs and gutters in the LiDAR made the ground poke through the asphalt)
      - OSM footprints where the 2025 point cloud only sees bare ground are dropped (demolished)
      - `roofs.py`: one roof per row of buildings that share their eaves (±1 m). The pitch is the median gradient of the LiDAR roof surface, the eaves its low edge, the ridge its 97th percentile and the colour the median of the orthophoto. Shared walls are hidden only when the neighbour really is as tall.
-     - `walls.py`: walls, fences and hedges: the OSM barriers plus the thin, straight runs of low points (away from buildings, tree crowns, carriageways and rows of parked cars)
+     - `walls.py`: walls, fences and hedges: the OSM barriers plus the thin, straight runs of low points (away from buildings, tree crowns, carriageways and rows of parked cars), cut open wherever a street, lane or path crosses them
+     - `steps.py`: terrace edges, where the LiDAR ground drops ≥ 0.75 m in one step between two flat levels (terraced plots, raised platforms, the river walk); drawn as a retaining wall whose top is flush with the upper level
+     - `cars.py`: 1,653 parked cars from the LiDAR (blobs of low points with a car's size and flat top, oriented by their principal axis, rows split into cars)
+     - `catastro.py` + `facades.py`: the **Catastro** INSPIRE buildings (year, use, dwellings) and its facade photo of each building → facade style (traditional, stone, mid-century, brick, terraces, modern, civic, industrial, galería) and wall colour; `data/facades.json` holds the manual review of 176 old-town facades from those photos, which wins over the automatic guess
+     - `passages.py`: buildings over a passage (`tunnel=building_passage`, e.g. Calle el Soto → Calle Santander) are lifted to the clear height and their ground floor is cut around the corridor
    - `fetch_ortho.py`: **PNOA orthophoto** tiles (WMS) → `public/maps/ortho/{i}_{j}.jpg`, 256 m tiles, draped on the ground (and sampled for the roof colours).
    - `fetch_surroundings.py`: 24 × 24 km of **MDT25** + orthophoto → `public/maps/surroundings.*`, the real valley and hills on the horizon.
 
@@ -71,9 +75,10 @@ The data pipeline runs in two steps. The browser never parses OSM.
 | Templete, fountain, statue | Position and size (`leisure=bandstand`, `amenity=fountain`, `memorial=bench` "Al músico") | 3D design (octagonal kiosk from the photo) |
 | Old railway | Route of the Vía Verde Santander–Mediterráneo, station building "Antigua Estación de Horna-Villarcayo", Mikado locomotive | The locomotive model and the short stretch of track under it |
 | Shops, bars and services | **224 establishments** (`shop`, `amenity` bar/pub/restaurant/café/bank/pharmacy/post office/police…, `office`, `craft`, `healthcare`, hotels, including closed ones such as Bar Capitol) with their real name, on the ground-floor wall of **their own building** facing the street of their `addr:street` (110 of 127 shops with an address face that street; the rest are in buildings that do not touch it) | Shop front by trade (shop window, door or roller shutter, awning, terrace), sign colours (brand colours for banks and chains, otherwise by trade) |
-| Churches | Footprints and positions of Santa Marina, its campanile (`tower:type=bell_tower`), the Ermita de San Roque and the Ermita de San Vicente | Santa Marina as the 1967 "tent" with the stained-glass gables and the concrete campanile with three crosses (from published descriptions); stone hermitages with espadaña |
+| Churches | Footprints and positions of Santa Marina, its campanile (`tower:type=bell_tower`), the Ermita de San Roque and the Ermita de San Vicente | Santa Marina from photos and the LiDAR: A-frame "tent" roof falling from 19.5 m over the front to ~9 m over the apse, front gable as a concrete lattice of oval stained glass, flat porch on paired pillars over a stone base with steps, white needle campanile with its cross; stone hermitages with espadaña |
 | Sports | 29 pitches with their sport: football (Campo El Soto, Campo Genín), futsal, basketball, tennis, pádel, frontones, Bolera Nela, petanque, table tennis; Polideportivo; sports-ground fences | Court markings, goals, hoops, nets, frontón walls, the nine bolos; the polideportivo's vaulted roof |
 | Parkings, fuel, buses | 37 car parks (with `orientation`), Estación de Servicio Rivera, Estación de Autobuses, bus stops | Bay layout and parked cars; canopy, pumps and totem; bus shelters |
+| Street furniture | 502 items: stop and give-way signs (on the right kerb, facing the traffic they control), recycling containers by stream, bins, planters, fountains, hydrants, info boards, cameras, cabinets, post boxes, AED, chargers, billboards and the municipal digital screen; 40 power lines | Models; sign posts placed on the kerb |
 | Picnic, playgrounds, pines | 7 picnic tables + picnic sites (riverside tables in El Soto), 13 playgrounds, conifers (`leaf_type=needleleaved`) | Extra tables around each picnic site; swings and slide; hedges on field boundaries; field patchwork where OSM has no land use |
 | Terrain and heights | — (from the **PNOA-LiDAR** and **MDT05/MDT25**) | Real relief at 2 m; building walls up to the measured eave and roofs up to the measured ridge; river levels and bed depth from the LiDAR ground. Façades are still stylised (no open data on façade colour or window layout); the orthophoto on roofs has some relief displacement; the NW LiDAR tile is missing, so that corner uses the 5 m MDT |
 
@@ -151,6 +156,8 @@ src/
 │   ├── Landmarks.ts         Ayuntamiento, Torre, templete, fountain, "Al músico", bell towers, Mikado
 │   ├── Churches.ts          Santa Marina (tent church + campanile), Ermitas de San Roque and San Vicente
 │   ├── Commerce.ts          Shop fronts and signs with the real names (one sign atlas), terraces
+│   ├── StreetFurniture.ts   Traffic signs, containers, bins, posts, power lines with sagging wires
+│   ├── Screens.ts           Digital screens: a programme of slides (clock, live feed, shops, stats), extendable
 │   ├── Facilities.ts        Polideportivo, petrol station, bus station, car parks with parked cars, fences
 │   ├── Sports.ts            Courts and pitches by sport, picnic tables, playgrounds
 │   ├── Batcher.ts           Merging per material and chunk
@@ -165,10 +172,18 @@ tests/
 
 `window.__game` exposes the running `Game`, and `game.update(dt)` advances the simulation deterministically (used by the e2e tests).
 
+**Digital screens.** The animated billboards of the map (the municipal screen in the Plaza Mayor) run a programme of slides. A slide is `{ name, seconds, live?, draw(g, info) }` drawn on a 512 × 288 2D canvas (`info` has the time, date, zone, speed, top speed, distance and shops); `live: true` shows the camera feed of the player under it. Add one from code or the console:
+
+```js
+__game.world.screens.add({ name: 'fiestas', seconds: 8, draw: (g) => { g.fillStyle = '#c0392b'; g.fillRect(0, 0, 512, 288); g.fillStyle = '#fff'; g.font = 'bold 36px sans-serif'; g.fillText('Fiestas de Santa Marina', 40, 150); } });
+```
+
 ## Licence and attribution
 
 Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database License (ODbL 1.0).
 
 Elevation, LiDAR and orthophoto: PNOA-LiDAR 2025, MDT05, MDT25 and PNOA orthophoto © [Instituto Geográfico Nacional](https://www.ign.es) (CNIG), with the Junta de Castilla y León for the LiDAR, under CC BY 4.0 ([scne.es](https://www.scne.es)).
 
-Both attributions are also shown on the game's start screen.
+Buildings (year, use, facade photos): © [Dirección General del Catastro](https://www.catastro.hacienda.gob.es), INSPIRE Buildings, under CC BY 4.0.
+
+These attributions are also shown on the game's start screen.

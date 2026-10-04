@@ -15,6 +15,8 @@ const PLINTH = 0.45;
 const MESH_CELL = 0.12;
 /** Long runs are cut into pieces this long so they follow the ground. */
 const PIECE = 4;
+/** Depth of the platform block drawn along a terrace edge (covers the heightmap ramp), m. */
+const STEP_BODY = 2.2;
 const WALL_TINTS = ['#ebe5d6', '#d9caa8', '#c9bba0', '#e2d9c6'].map((c) => new THREE.Color(c));
 const CONCRETE = new THREE.Color('#b9b4aa');
 const HEDGE = new THREE.Color('#3f6a30');
@@ -136,6 +138,24 @@ export function buildBarriers(ctx: BuildContext): void {
         const { masonry, hedges, mesh } = at((x0 + x1) / 2, (z0 + z1) / 2);
         // End faces only where the run starts and stops (pieces in between are joined).
         const caps: [boolean, boolean] = [i === 1 && k === 0, i === pts.length - 1 && k === n - 1];
+        if (b.src === 'step' && b.top !== undefined) {
+          // Terrace edge: a platform block whose top is flush with the upper ground, its
+          // face on the step line and its body over the ramp of the 2 m heightmap.
+          const ux = ((z1 - z0) / len) * n * (b.up ?? 1),
+            uz = (-(x1 - x0) / len) * n * (b.up ?? 1);
+          const o = STEP_BODY / 2 - 0.25;
+          const top = b.top + 0.04;
+          prism(masonry, x0 + ux * o, z0 + uz * o, x1 + ux * o, z1 + uz * o, STEP_BODY, f0, f1, top, top, tint, 1.5, caps);
+          if (coping) prism(masonry, x0, z0, x1, z1, 0.5, top - 0.02, top - 0.02, top + 0.06, top + 0.06, CONCRETE, 1.5, caps);
+          collision.addBox((x0 + x1) / 2 + ux * o, (z0 + z1) / 2 + uz * o, len / n + 0.05, STEP_BODY, {
+            rot: Math.atan2(-(z1 - z0), x1 - x0),
+            bottom: f0,
+            top,
+            mask: Layer.Solid,
+            absolute: true,
+          });
+          continue;
+        }
         if (b.k === 'hedge') {
           prism(hedges, x0, z0, x1, z1, t, f0, f1, g0 + h, g1 + h, HEDGE, 1, caps);
         } else if (b.k === 'fence') {

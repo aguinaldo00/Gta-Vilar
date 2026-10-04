@@ -1451,6 +1451,118 @@ function roadAngleNear(p: Pt): number {
   return ang;
 }
 
+// ------------------------------------------------------- street furniture
+
+/**
+ * Street furniture at its mapped position: traffic signs (STOP and give way
+ * stand on the right-hand kerb facing the traffic that approaches the
+ * junction), recycling containers by type, bins, planters, fountains,
+ * hydrants, information panels, cameras, cabinets, post boxes, defibrillators,
+ * chargers, billboards (the Ayuntamiento's digital screen: animated) and the
+ * poles of the overhead power lines, with the lines themselves.
+ */
+interface FurnitureOut {
+  k: string;
+  x: number;
+  z: number;
+  /** Heading the item faces (rotation about Y; local +Z). */
+  a: number;
+  /** Subtype: recycling streams ("glass,paper"), sign code, "digital" screens. */
+  t?: string;
+}
+const furniture: FurnitureOut[] = [];
+const highwayWaysOf = new Map<string, string[]>();
+for (const [id, w] of ways) {
+  if (!w.tags.highway || !ROAD_WIDTH[w.tags.highway]) continue;
+  for (const n of w.nds) (highwayWaysOf.get(n) ?? highwayWaysOf.set(n, []).get(n)!).push(id);
+}
+const roadWidthOf = (wid: string) => {
+  const t = ways.get(wid)!.tags;
+  const tw = parseFloat(t.width);
+  return Number.isFinite(tw) && tw > 1 && tw < 30 ? tw : (ROAD_WIDTH[t.highway] ?? 5);
+};
+/** Sign on the kerb: right-hand side of the traffic heading to the nearer junction of its way, facing it. */
+function signPose(nid: string, p: Pt, tags: Tags): { x: number; z: number; a: number } {
+  const wid = highwayWaysOf.get(nid)?.[0];
+  if (!wid) {
+    // A standalone sign beside the road: face along the nearest street.
+    const a = roadAngleNear(p);
+    return { x: p[0], z: p[1], a };
+  }
+  const nds = ways.get(wid)!.nds;
+  const i = nds.indexOf(nid);
+  const pts = nds.map(nodePt);
+  // Traffic flows towards the closer end (the junction), unless the sign says otherwise.
+  const toEnd = i >= nds.length / 2;
+  let forward = toEnd;
+  if (tags.direction === 'forward') forward = true;
+  else if (tags.direction === 'backward') forward = false;
+  const a0 = pts[Math.max(0, forward ? i - 1 : i)] ?? p,
+    b0 = pts[Math.min(nds.length - 1, forward ? i : i + 1)] ?? p;
+  let dx = (forward ? b0[0] - a0[0] : a0[0] - b0[0]) || 0,
+    dz = (forward ? b0[1] - a0[1] : a0[1] - b0[1]) || 0;
+  const len = Math.hypot(dx, dz) || 1;
+  dx /= len;
+  dz /= len;
+  const off = roadWidthOf(wid) / 2 + 0.7;
+  // Right of travel (Spain drives on the right) is (-dz, dx); the face looks back at the traffic.
+  return { x: p[0] - dz * off, z: p[1] + dx * off, a: Math.atan2(-dx, -dz) };
+}
+const RECYCLING: [RegExp, string][] = [
+  [/^recycling:(glass|glass_bottles)$/, 'glass'],
+  [/^recycling:(paper|cardboard)$/, 'paper'],
+  [/^recycling:(plastic|plastic_packaging|plastic_bottles|plastic_bottle_tops|cans|pmd|beverage_cartons)$/, 'plastic'],
+  [/^recycling:(organic|food_waste)$/, 'organic'],
+  [/^recycling:(clothes|shoes)$/, 'clothes'],
+  [/^recycling:(batteries)$/, 'batteries'],
+];
+for (const [nid, n] of nodes) {
+  const t = n.tags;
+  if (!t) continue;
+  const p = project(n.lat, n.lon);
+  if (!inB(p)) continue;
+  const put = (k: string, extra: Partial<FurnitureOut> = {}) =>
+    furniture.push({ k, x: q(p[0]), z: q(p[1]), a: Math.round(roadAngleNear(p) * 1000) / 1000, ...extra });
+  if (t.highway === 'stop' || t.traffic_sign === 'ES:R2' || t.highway === 'give_way' || t.traffic_sign === 'ES:R1') {
+    const k = t.highway === 'stop' || t.traffic_sign === 'ES:R2' ? 'stop' : 'give_way';
+    const pose = signPose(nid, p, t);
+    furniture.push({ k, x: q(pose.x), z: q(pose.z), a: Math.round(pose.a * 1000) / 1000 });
+  } else if (t.amenity === 'recycling') {
+    const streams = [
+      ...new Set(
+        Object.keys(t)
+          .filter((k) => t[k] === 'yes')
+          .map((k) => RECYCLING.find(([re]) => re.test(k))?.[1])
+          .filter((v): v is string => !!v),
+      ),
+    ];
+    // Without recycling:* tags the container's colour tells the stream.
+    const byColour: Record<string, string> = { blue: 'paper', yellow: 'plastic', green: 'glass', brown: 'organic', orange: 'organic' };
+    if (!streams.length && byColour[t.colour]) streams.push(byColour[t.colour]);
+    put('recycling', { t: (streams.length ? streams : ['other']).join(',') });
+  } else if (t.amenity === 'waste_basket') put('bin');
+  else if (t.amenity === 'waste_disposal') put('container');
+  else if (t.man_made === 'planter') put('planter');
+  else if (t.amenity === 'drinking_water' || t.man_made === 'water_tap') put('fountain');
+  else if (t.emergency === 'fire_hydrant') put('hydrant');
+  else if (t.tourism === 'information' && ['board', 'map', 'guidepost'].includes(t.information)) put('info', { t: t.information });
+  else if (t.man_made === 'surveillance') put('camera');
+  else if (t.man_made === 'street_cabinet') put('cabinet');
+  else if (t.amenity === 'post_box') put('postbox');
+  else if (t.emergency === 'defibrillator') put('aed');
+  else if (t.amenity === 'charging_station') put('charger');
+  else if (t.advertising === 'billboard' || t.advertising === 'screen' || t.advertising === 'column')
+    put('billboard', t.animated || t.advertising === 'screen' ? { t: 'digital' } : {});
+  else if (t.power === 'pole' || t.power === 'tower') put(t.power);
+}
+// Overhead power lines, pole to pole.
+const powerlines: { p: number[]; k: string }[] = [];
+for (const [id, w] of ways) {
+  const pw = w.tags.power;
+  if (pw !== 'line' && pw !== 'minor_line') continue;
+  for (const part of clipLine(wayPts(id))) if (part.length > 1) powerlines.push({ p: flat(part), k: pw === 'line' ? 'line' : 'minor' });
+}
+
 // Picnic tables: only the ones mapped in OSM (none are invented around picnic sites).
 const tables: number[] = [];
 for (const n of nodes.values()) {
@@ -1507,6 +1619,8 @@ const out = {
   playgrounds,
   barriers,
   bollards,
+  furniture,
+  powerlines,
 };
 mkdirSync(dirname(OUT), { recursive: true });
 const json = JSON.stringify(out);
@@ -1519,6 +1633,8 @@ console.log(
   `trees ${trees.length / 2}  lamps ${lamps.length / 2}  benches ${benches.length / 2}  crossings ${crossings.length / 3}  pois ${pois.length}`,
 );
 console.log('shop fronts', JSON.stringify(shopStats));
-console.log(`barriers ${barriers.length} (OSM)  bollards ${bollards.length / 2}`);
+console.log(
+  `barriers ${barriers.length} (OSM)  bollards ${bollards.length / 2}  furniture ${furniture.length}  power lines ${powerlines.length}`,
+);
 console.log(`shops ${shops.length}  picnic tables ${tables.length / 4}  playgrounds ${playgrounds.length / 2}`);
 console.log(`→ ${OUT} (${(json.length / 1024).toFixed(0)} KB)`);

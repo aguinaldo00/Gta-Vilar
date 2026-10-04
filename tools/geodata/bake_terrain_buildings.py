@@ -31,8 +31,9 @@ from shapely.geometry import Polygon
 from skimage import measure
 
 from heightpng import write_height_png
+from steps import bake_steps
 from roofs import bake_roofs, fix_hidden_walls
-from walls import bake_barriers, total_length
+from walls import bake_barriers, open_crossings, total_length
 from passages import open_passages
 from cars import detect_cars
 from facades import bake_facades
@@ -420,6 +421,8 @@ def main(map_path, lidar_path, mdt_path):
     walls_path = os.path.join(os.path.dirname(lidar_path), "lidar_walls.npz")
     walls_npz = np.load(walls_path) if os.path.exists(walls_path) else None
     n_walls, n_cuts = bake_barriers(m, walls_npz, footprint | np.isfinite(roof))
+    n_steps = bake_steps(m, dtm, footprint | np.isfinite(roof), H0, (minX, minZ, W, H))
+    open_crossings(m)
     n_cars = detect_cars(m, walls_npz, footprint | np.isfinite(roof)) if walls_npz is not None else 0
     trees = lidar_trees(m, dtm, H0)
     river_levels(m, dtm, H0)
@@ -433,12 +436,13 @@ def main(map_path, lidar_path, mdt_path):
         "OpenStreetMap contributors (ODbL 1.0)",
         "PNOA-LiDAR 2025 © Instituto Geográfico Nacional / Junta de Castilla y León (CC BY 4.0)",
         "MDT05 © Instituto Geográfico Nacional (CC BY 4.0)",
+        "Catastro INSPIRE Buildings © Dirección General del Catastro (CC BY 4.0)",
     ]
     json.dump(m, open(map_path, "w"), separators=(",", ":"))
     print(f"datum H0 = {H0:.2f} m; relief {grid.min():.1f} .. {grid.max():.1f} m; streets smoothed over {street_share * 100:.1f}% of the map")
     print(f"OSM buildings the LiDAR shows as bare ground (removed): {demolished}")
     print(f"buildings measured by LiDAR: {measured}; added from LiDAR: {added}; trees from LiDAR: {trees}")
-    print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses")
+    print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges")
     print(f"parked cars seen by the LiDAR: {n_cars}")
     print(f"facades: {f_matched} footprints matched to the cadastre, {f_photo} coloured from its facade photo")
     print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}; buildings opened over passages: {passages}")

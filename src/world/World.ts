@@ -18,7 +18,9 @@ import { Materials } from './Materials';
 import type { MapData } from './mapData';
 import { buildRoads, RoadNetwork, VEHICLE_ROADS } from './Roads';
 import { buildRoofs } from './Roofs';
+import { DigitalScreens } from './Screens';
 import { buildSports } from './Sports';
+import { buildStreetFurniture } from './StreetFurniture';
 import { buildGround, groundMaterial, OrthoTiles, TerrainModel } from './Terrain';
 import { buildVegetation } from './Vegetation';
 import { waterTime } from './Water';
@@ -50,6 +52,8 @@ export class World {
   readonly roads: RoadNetwork;
   readonly bounds: MapData['meta']['bounds'];
   readonly stats: { meshes: number; triangles: number; byStage?: Record<string, number> } = { meshes: 0, triangles: 0 };
+  /** The Ayuntamiento's digital screen and the billboards (add slides with screens.add). */
+  readonly screens: DigitalScreens;
   private readonly animators: Animator[] = [];
   private readonly named: NamedArea[] = [];
   private readonly landmarkZones: { name: string; x: number; z: number; r: number }[] = [];
@@ -99,6 +103,13 @@ export class World {
     buildRoofs(ctx);
     batch.stage = 'barriers';
     buildBarriers(ctx);
+    batch.stage = 'furniture';
+    buildStreetFurniture(ctx);
+    this.screens = new DigitalScreens(
+      ctx,
+      map.shops.filter((sh) => !sh.s),
+      quality.detail === 1,
+    );
     batch.stage = 'churches';
     buildChurches(ctx);
     batch.stage = 'commerce';

@@ -241,6 +241,16 @@ export class Game {
     );
 
     this.world.update(dt, this.time, this.player.pos, this.camera);
+    this.world.screens.update(
+      dt,
+      this.renderer,
+      this.scene,
+      this.camera.position,
+      this.player.pos,
+      v ? v.heading : this.player.facing,
+      v ? Math.abs(v.speed) * 3.6 : 0,
+      this.world.zoneAt(this.player.pos.x, this.player.pos.z),
+    );
     this.audio.update(v);
 
     const zone = this.world.zoneAt(this.player.pos.x, this.player.pos.z);
