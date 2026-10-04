@@ -5,10 +5,14 @@ import type { BuildContext } from './context';
 import { toPts } from './geo';
 import { beamMatrix } from './geometry';
 import type { MapFurniture } from './mapData';
-import { Unit } from './props';
+import { flag, Unit } from './props';
 
-/** Sign faces in one atlas (alpha-tested): STOP octagon, give-way triangle, trail map, Correos, DEA. */
-const SIGN_CELLS = ['stop', 'give_way', 'map', 'board', 'aed'] as const;
+/**
+ * Sign faces in one atlas (alpha-tested): STOP octagon, give-way triangle,
+ * trail map, information, DEA, S-13 pedestrian crossing, R-303 no left turn,
+ * P-15a speed bump.
+ */
+const SIGN_CELLS = ['stop', 'give_way', 'map', 'board', 'aed', 'S-13', 'R-303', 'P-15a'] as const;
 type SignCell = (typeof SIGN_CELLS)[number];
 
 function signAtlas(): THREE.CanvasTexture {
@@ -99,10 +103,148 @@ function signAtlas(): THREE.CanvasTexture {
     g.fillRect(x0 + 60, 38, 8, 40);
     g.fillRect(x0 + 44, 54, 40, 8);
   }
+  // S-13 pedestrian crossing: blue square, white triangle, walking figure.
+  {
+    const x0 = at('S-13');
+    g.fillStyle = '#ffffff';
+    g.fillRect(x0 + 2, 2, C - 4, C - 4);
+    g.fillStyle = '#1d4f9c';
+    g.fillRect(x0 + 6, 6, C - 12, C - 12);
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(x0 + C / 2, 16);
+    g.lineTo(x0 + C - 16, C - 18);
+    g.lineTo(x0 + 16, C - 18);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#111111';
+    g.fillRect(x0 + 30, C - 36, 68, 5);
+    for (let i = 0; i < 4; i++) g.fillRect(x0 + 34 + i * 16, C - 31, 9, 8);
+    g.beginPath();
+    g.arc(x0 + 66, 48, 6, 0, Math.PI * 2);
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = '#111111';
+    g.beginPath();
+    g.moveTo(x0 + 64, 56);
+    g.lineTo(x0 + 60, 76);
+    g.lineTo(x0 + 52, 90);
+    g.moveTo(x0 + 60, 76);
+    g.lineTo(x0 + 70, 90);
+    g.moveTo(x0 + 52, 66);
+    g.lineTo(x0 + 72, 64);
+    g.stroke();
+  }
+  // R-303 no left turn: white disc, red ring and bar over a black left-turn arrow.
+  {
+    const x0 = at('R-303');
+    const cx = x0 + C / 2;
+    g.fillStyle = '#c8102e';
+    g.beginPath();
+    g.arc(cx, C / 2, 60, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(cx, C / 2, 47, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#111111';
+    g.lineWidth = 9;
+    g.beginPath();
+    g.moveTo(cx + 12, 104);
+    g.lineTo(cx + 12, 62);
+    g.quadraticCurveTo(cx + 12, 48, cx - 4, 48);
+    g.lineTo(cx - 22, 48);
+    g.stroke();
+    g.fillStyle = '#111111';
+    g.beginPath();
+    g.moveTo(cx - 34, 48);
+    g.lineTo(cx - 18, 34);
+    g.lineTo(cx - 18, 62);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = '#c8102e';
+    g.lineWidth = 11;
+    g.beginPath();
+    g.moveTo(cx - 33, C / 2 - 33);
+    g.lineTo(cx + 33, C / 2 + 33);
+    g.stroke();
+  }
+  // P-15a speed bump: red-bordered triangle with the bump profile.
+  {
+    const x0 = at('P-15a');
+    const tri = (inset: number, fill: string) => {
+      g.fillStyle = fill;
+      g.beginPath();
+      g.moveTo(x0 + C / 2, 6 + inset * 1.9);
+      g.lineTo(x0 + C - 4 - inset * 1.7, C - 10 - inset);
+      g.lineTo(x0 + 4 + inset * 1.7, C - 10 - inset);
+      g.closePath();
+      g.fill();
+    };
+    tri(0, '#c8102e');
+    tri(13, '#ffffff');
+    g.fillStyle = '#111111';
+    g.fillRect(x0 + 34, 92, 60, 6);
+    g.beginPath();
+    g.ellipse(x0 + C / 2, 92, 16, 12, 0, Math.PI, 0);
+    g.fill();
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
   return t;
+}
+
+/** Lit-by-the-sun panel with lines of text (direction signs, milestones, kiosk names). */
+function textPanel(w: number, h: number, draw: (g: CanvasRenderingContext2D, W: number, H: number) => void): THREE.Material {
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * 128);
+  c.height = Math.round(h * 128);
+  draw(c.getContext('2d')!, c.width, c.height);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.55 });
+}
+
+/** One white direction plate ("BILBAO >", "< BURGOS", "^" ahead; "*" prefix: brown tourist plate). */
+function directionPlate(line: string): THREE.Material {
+  const tourist = line.startsWith('*');
+  const text = tourist ? line.slice(1) : line;
+  return textPanel(2.2, 0.36, (g, W, H) => {
+    g.fillStyle = tourist ? '#7a4a24' : '#ffffff';
+    g.fillRect(0, 0, W, H);
+    g.strokeStyle = tourist ? '#ffffff' : '#222222';
+    g.lineWidth = 5;
+    g.strokeRect(5, 5, W - 10, H - 10);
+    g.fillStyle = tourist ? '#ffffff' : '#111111';
+    g.font = `bold ${Math.round(H * 0.6)}px Arial, Helvetica, sans-serif`;
+    g.textBaseline = 'middle';
+    const arrow = text.match(/[<>^]/)?.[0];
+    const label = text.replace(/[<>^]/g, '').trim();
+    g.textAlign = arrow === '<' ? 'right' : 'left';
+    g.fillText(label, arrow === '<' ? W - 24 : 24, H / 2 + 2);
+    if (arrow) {
+      const ax = arrow === '<' ? 40 : W - 48;
+      g.beginPath();
+      if (arrow === '^') {
+        g.moveTo(ax, 10);
+        g.lineTo(ax + 18, 30);
+        g.lineTo(ax - 18, 30);
+        g.closePath();
+        g.fill();
+        g.fillRect(ax - 5, 28, 10, H - 38);
+      } else {
+        const d = arrow === '<' ? -1 : 1;
+        g.moveTo(ax + d * 22, H / 2);
+        g.lineTo(ax, H / 2 - 16);
+        g.lineTo(ax, H / 2 + 16);
+        g.closePath();
+        g.fill();
+        g.fillRect(Math.min(ax, ax - d * 26), H / 2 - 5, 26, 10);
+      }
+    }
+  });
 }
 
 /** Unit quad facing +Z showing one atlas cell. */
@@ -235,6 +377,96 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         lb.add(B, mats.white, 0, 0.75, 0, 0, 0.45, 1.5, 0.3);
         lb.add(B, mats.glow('#3ad06a'), 0, 1.3, 0.16, 0, 0.3, 0.06, 0.02);
         break;
+      case 'sign': {
+        // Single plate on a post (S-13 crossings, R-303, P-15a...).
+        const cell = (SIGN_CELLS as readonly string[]).includes(f.t ?? '') ? (f.t as SignCell) : 'S-13';
+        post(lb, 2.5);
+        lb.add(quads[cell], signMat, 0, 2.2, 0.05, 0, 0.6, 0.6, 1);
+        lb.add(B, grey, 0, 2.2, 0.03, 0, 0.5, 0.5, 0.02);
+        collision.addCircle(f.x, f.z, 0.08, { top: 2.5, mask: Layer.Bodies });
+        break;
+      }
+      case 'direction': {
+        // Stacked direction plates on two posts.
+        const lines = (f.t ?? '').split('|').filter(Boolean);
+        const top = 1.0 + lines.length * 0.42;
+        for (const x of [-0.9, 0.9]) lb.add(Unit.cyl, grey, x, (top + 0.1) / 2, 0, 0, 0.08, top + 0.1, 0.08);
+        lines.forEach((line, i) => {
+          lb.add(Unit.box, directionPlate(line), 0, top - 0.2 - i * 0.42, 0.06, 0, 2.2, 0.36, 0.03);
+        });
+        collision.addBox(f.x, f.z, 2.0, 0.2, { rot: f.a, top, mask: Layer.Bodies });
+        break;
+      }
+      case 'milestone': {
+        // Kilometre post: green plate with the road and the kilometre (BU-561 km 0).
+        const [ref, km] = (f.t ?? '|').split('|');
+        const plate = textPanel(0.5, 0.7, (g, W, H) => {
+          g.fillStyle = '#ffffff';
+          g.fillRect(0, 0, W, H);
+          g.fillStyle = ref.startsWith('CL') ? '#2f6f3a' : '#1f7a45';
+          g.fillRect(5, 5, W - 10, H - 10);
+          g.fillStyle = '#ffffff';
+          g.textAlign = 'center';
+          g.font = 'bold 15px Arial, sans-serif';
+          g.fillText(ref, W / 2, 28);
+          g.fillRect(10, 36, W - 20, 2);
+          g.font = 'bold 13px Arial, sans-serif';
+          g.fillText('km', W / 2, 56);
+          g.font = 'bold 22px Arial, sans-serif';
+          g.fillText(km, W / 2, 80);
+        });
+        post(lb, 1.2, 0.03);
+        lb.add(Unit.box, plate, 0, 0.95, 0.04, 0, 0.5, 0.7, 0.03);
+        break;
+      }
+      case 'kiosk': {
+        // Press kiosk (granite base, cream walls, flat roof with an awning) or the ONCE booth.
+        const once = /ONCE/i.test(f.t ?? '');
+        const wall = mats.tint(once ? '#f4f4f0' : '#e7dfcc');
+        const w = once ? 1.8 : 2.8,
+          d = once ? 1.5 : 2.0;
+        lb.add(B, once ? mats.tint('#9aa0a3') : mats.stone, 0, 0.35, 0, 0, w, 0.7, d);
+        lb.add(B, wall, 0, 1.45, 0, 0, w - 0.06, 1.5, d - 0.06);
+        lb.add(B, mats.tint(once ? '#00843d' : '#7b6a55'), 0, 2.3, 0, 0, w + 0.5, 0.18, d + 0.5);
+        if (!once) {
+          // Magazines on the front and the side, under an awning.
+          lb.add(B, mats.awnings[0], 0, 2.05, d / 2 + 0.35, 0, w + 0.2, 0.06, 0.7, 0.35);
+          lb.add(B, mats.tint('#c7543b'), -w / 4, 1.5, d / 2 + 0.01, 0, w / 2 - 0.2, 1.0, 0.02);
+          lb.add(B, mats.tint('#3b6db0'), w / 4, 1.5, d / 2 + 0.01, 0, w / 2 - 0.2, 1.0, 0.02);
+        } else lb.add(B, mats.glass, 0, 1.45, d / 2, 0, 1.0, 0.7, 0.03);
+        const name = textPanel(w, 0.3, (g, W, H) => {
+          g.fillStyle = once ? '#00843d' : '#1c2a44';
+          g.fillRect(0, 0, W, H);
+          g.fillStyle = '#ffffff';
+          g.font = `bold ${Math.round(H * 0.6)}px Arial, sans-serif`;
+          g.textAlign = 'center';
+          g.textBaseline = 'middle';
+          g.fillText((f.t ?? 'PRENSA').toUpperCase(), W / 2, H / 2 + 2);
+        });
+        lb.add(B, name, 0, 2.55, d / 2 - 0.1, 0, w, 0.3, 0.04);
+        collision.addBox(f.x, f.z, w, d, { rot: f.a, top: 2.4, mask: Layer.Solid });
+        break;
+      }
+      case 'flagpole': {
+        const y = terrain.heightAt(f.x, f.z);
+        lb.add(Unit.cyl, mats.stone, 0, 0.25, 0, 0, 0.7, 0.5, 0.7);
+        flag(ctx, 'es', f.x, y + 0.5, f.z, 11.5, f.a, 0, 2.2);
+        collision.addCircle(f.x, f.z, 0.35, { top: 12, mask: Layer.Solid });
+        break;
+      }
+      case 'statue': {
+        // Bronze walking figure in a long coat, head bowed (as "Pasos" in the Plaza Mayor), on a low base.
+        const br = mats.bronze;
+        lb.add(B, mats.stone, 0, 0.1, 0, 0, 0.9, 0.2, 0.9);
+        lb.add(Unit.cyl, br, -0.12, 0.55, 0.12, 0, 0.16, 0.75, 0.16, 0.18);
+        lb.add(Unit.cyl, br, 0.12, 0.55, -0.1, 0, 0.16, 0.75, 0.16, -0.2);
+        lb.add(new THREE.CylinderGeometry(0.2, 0.36, 1.05, 10), br, 0, 1.25, 0.02, 0, 1, 1, 1, 0.08);
+        lb.add(Unit.sphere, br, 0, 1.92, 0.12, 0, 0.24, 0.27, 0.24);
+        lb.add(Unit.cyl, br, 0.27, 1.35, 0.05, 0, 0.1, 0.62, 0.1, 0.12);
+        lb.add(Unit.cyl, br, -0.27, 1.35, 0.05, 0, 0.1, 0.62, 0.1, 0.12);
+        collision.addCircle(f.x, f.z, 0.45, { top: 2, mask: Layer.Solid });
+        break;
+      }
       case 'billboard':
         break; // Screens.ts (posters and the digital screen)
       case 'pole':

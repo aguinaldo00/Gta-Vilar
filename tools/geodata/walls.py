@@ -194,6 +194,9 @@ def open_crossings(m):
     out, cuts = [], 0
     for b in m["barriers"]:
         p = b["p"]
+        if b.get("fix"):
+            out.append(b)  # checked against photos (data/corrections.json): its gaps are already right
+            continue
         line = LineString([(p[i], p[i + 1]) for i in range(0, len(p), 2)])
         hits = [corridors[int(k)] for k in tree.query(line) if corridors[int(k)].intersects(line)]
         if not hits:

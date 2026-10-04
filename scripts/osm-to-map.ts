@@ -17,6 +17,25 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import polygonClipping, { type MultiPolygon as ClipMulti } from 'polygon-clipping';
+
+/**
+ * Corrections checked against street-level photos (data/corrections.json):
+ * shop points moved onto their real facade, renamed shops, and street
+ * furniture and railings that OSM does not map.
+ */
+interface Corrections {
+  shops?: Record<string, { at?: [number, number]; name?: string; w?: number; street?: string }>;
+  furniture?: { k: string; x: number; z: number; a: number; t?: string; replaces?: [number, number] }[];
+  barriers?: { p: number[]; k: string; h?: number }[];
+}
+const corrections: Corrections = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL('../data/corrections.json', import.meta.url), 'utf8'));
+  } catch {
+    return {};
+  }
+})();
 
 type Tags = Record<string, string>;
 type Pt = [number, number];
@@ -519,6 +538,7 @@ for (const p of polygons) {
 // Parts: exact cadastral geometry (no simplification) so shared walls can be matched by node id.
 interface PartTmp {
   out: BuildingOut;
+  parent?: BuildingOut;
   ids: string[];
   bottom: number;
   top: number;
@@ -546,7 +566,7 @@ for (const [, w] of ways) {
   if (ht) out.ht = ht;
   if (parent?.b.mat) out.mat = parent.b.mat;
   if (parent?.b.n) out.n = parent.b.n;
-  partsTmp.push({ out, ids, bottom: mlv, top: ht ?? mlv + lv });
+  partsTmp.push({ out, parent: parent?.b, ids, bottom: mlv, top: ht ?? mlv + lv });
 }
 const edgeOwners = new Map<string, PartTmp[]>();
 const edgeKey = (a: string, b: string) => (a < b ? `${a}-${b}` : `${b}-${a}`);
@@ -564,6 +584,55 @@ for (const p of partsTmp) {
   }
   if (hid.length) p.out.hid = hid;
   buildings.push(p.out);
+}
+
+/**
+ * Outlines that their parts only partly describe. The cadastre import often
+ * maps a few small bodies (a stairwell, a rear annex) as parts and leaves the
+ * main block to the outline: since the game draws the parts instead of the
+ * outline, the main block vanished (Plaza Mayor 10, 6 storeys, had 50 of its
+ * 551 m2). The uncovered rest of the outline becomes a part of its own, with
+ * the outline's levels (heights are measured by the LiDAR in the bake).
+ */
+let filledOutlines = 0,
+  filledArea = 0;
+{
+  const byParent = new Map<BuildingOut, PartTmp[]>();
+  for (const p of partsTmp) if (p.parent) (byParent.get(p.parent) ?? byParent.set(p.parent, []).get(p.parent)!).push(p);
+  const ringOf = (o: number[]): [number, number][] => {
+    const r: [number, number][] = [];
+    for (let i = 0; i < o.length; i += 2) r.push([o[i], o[i + 1]]);
+    r.push([o[0], o[1]]);
+    return r;
+  };
+  for (const [outline, parts] of byParent) {
+    const outer = [ringOf(outline.o), ...(outline.h ?? []).map(ringOf)];
+    let rest: ClipMulti;
+    try {
+      rest = polygonClipping.difference(outer, ...parts.map((p) => [ringOf(p.out.o)]));
+    } catch {
+      continue;
+    }
+    let added = false;
+    for (const poly of rest) {
+      const ring = poly[0].slice(0, -1) as Pt[];
+      const area = Math.abs(signedArea(ring));
+      let perim = 0;
+      for (let i = 0; i < ring.length; i++)
+        perim += Math.hypot(ring[(i + 1) % ring.length][0] - ring[i][0], ring[(i + 1) % ring.length][1] - ring[i][1]);
+      // Leftover slivers along shared walls are not buildings.
+      if (area < 8 || area / perim < 0.8) continue;
+      const out: BuildingOut = { o: flat(ring), t: outline.t, lv: outline.lv ?? Math.max(...parts.map((p) => p.top)), part: 1 };
+      if (poly.length > 1) out.h = poly.slice(1).map((h) => flat(h.slice(0, -1) as Pt[]));
+      if (outline.ht) out.ht = outline.ht;
+      if (outline.mat) out.mat = outline.mat;
+      if (outline.n) out.n = outline.n;
+      buildings.push(out);
+      filledArea += area;
+      added = true;
+    }
+    if (added) filledOutlines++;
+  }
 }
 
 // ---------------------------------------------------------------- areas
@@ -815,8 +884,9 @@ const BARRIER_KIND: Record<string, string> = {
   hedge: 'hedge',
 };
 const GATES = new Set(['gate', 'sliding_gate', 'swing_gate', 'lift_gate', 'entrance']);
-const barriers: { p: number[]; k: string; h?: number }[] = [];
+const barriers: { p: number[]; k: string; h?: number; fix?: 1 }[] = [];
 const bollards: number[] = [];
+for (const b of corrections.barriers ?? []) barriers.push({ ...b, fix: 1 });
 for (const [id, w] of ways) {
   const kind = BARRIER_KIND[w.tags.barrier ?? ''];
   if (!kind || w.tags.building) continue;
@@ -1117,6 +1187,8 @@ interface Wall {
   key: string;
   /** The footprint the wall belongs to (index in `buildings`). */
   bi: number;
+  /** Last ring edge merged into this wall (the key holds the first). */
+  end: number;
 }
 const wallGrid = new Map<string, Wall[]>();
 const WG = 30;
@@ -1127,17 +1199,39 @@ buildings.forEach((b, bi) => {
   for (let i = 0; i < b.o.length; i += 2) ring.push([b.o[i], b.o[i + 1]]);
   const ccw = signedArea(ring) > 0;
   const hid = new Set(b.hid ?? []);
-  for (let i = 0; i < ring.length; i++) {
-    if (hid.has(i)) continue;
+  // Cadastral outlines split a straight facade at every party wall: runs of nearly
+  // collinear visible edges are merged so short pieces still make one facade.
+  const dirOf = (i: number) => {
     const a = ring[i],
       c = ring[(i + 1) % ring.length];
+    return Math.atan2(c[1] - a[1], c[0] - a[0]);
+  };
+  const sameDir = (i: number, j: number) => Math.abs(Math.atan2(Math.sin(dirOf(i) - dirOf(j)), Math.cos(dirOf(i) - dirOf(j)))) < 0.14;
+  let start = 0;
+  while (
+    start < ring.length &&
+    !hid.has((start + ring.length - 1) % ring.length) &&
+    sameDir((start + ring.length - 1) % ring.length, start) &&
+    start < ring.length - 1
+  )
+    start++;
+  for (let s = 0; s < ring.length; s++) {
+    const i = (start + s) % ring.length;
+    if (hid.has(i)) continue;
+    let e = i;
+    while (s + 1 < ring.length && !hid.has((e + 1) % ring.length) && sameDir(i, (e + 1) % ring.length)) {
+      e = (e + 1) % ring.length;
+      s++;
+    }
+    const a = ring[i],
+      c = ring[(e + 1) % ring.length];
     const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
     if (len < 2.5) continue;
     // Outward normal: right of the edge for CCW rings (X right, Z up), left otherwise.
     const dx = (c[0] - a[0]) / len,
       dz = (c[1] - a[1]) / len;
     const n: Pt = ccw ? [dz, -dx] : [-dz, dx];
-    const w: Wall = { a, b: c, n, len, key: `${bi}:${i}`, bi };
+    const w: Wall = { a, b: c, n, len, key: `${bi}:${i}`, bi, end: e };
     const k = `${Math.floor((a[0] + c[0]) / 2 / WG)},${Math.floor((a[1] + c[1]) / 2 / WG)}`;
     (wallGrid.get(k) ?? wallGrid.set(k, []).get(k)!).push(w);
   }
@@ -1323,6 +1417,21 @@ function placeShop(p: Pt, t: Tags, frontage?: number): void {
     }
   if (!cands.length) return;
   cands.sort((x, y) => x.s - y.s);
+  if (process.env.SHOPDBG && label.includes(process.env.SHOPDBG))
+    console.error(
+      label,
+      p.map((v) => v.toFixed(1)),
+      [...own],
+      cands
+        .slice(0, 6)
+        .map((c) => [
+          c.w.bi,
+          c.s.toFixed(1),
+          c.w.a.map((v) => v.toFixed(0)).join(','),
+          c.w.b.map((v) => v.toFixed(0)).join(','),
+          looksOntoStreet(c.w),
+        ]),
+    );
   pending.push({ w: cands[0].w, t: cands[0].t, s: cands[0].s, cands: cands.slice(0, 5), c: cat.c, n: label, frontage, street, own });
 }
 
@@ -1340,7 +1449,26 @@ interface PendingShop {
   own: Set<number>;
 }
 const pending: PendingShop[] = [];
-for (const n of nodes.values()) if (n.tags) placeShop(project(n.lat, n.lon), n.tags);
+/** Free-standing kiosks (newspapers, the ONCE lottery booth): built as kiosks, not as shop fronts. */
+const kiosks: { x: number; z: number; t: string }[] = [];
+for (const n of nodes.values()) {
+  if (!n.tags) continue;
+  const fix = n.tags.name ? corrections.shops?.[n.tags.name] : undefined;
+  const p = fix?.at ?? project(n.lat, n.lon);
+  let tags = n.tags;
+  if (fix?.name) {
+    tags = { ...tags, name: fix.name };
+    delete tags.brand;
+  }
+  // The street a corrected shop really opens onto (a corner bank's postal address can be the side street).
+  if (fix?.street !== undefined) tags = { ...tags, 'addr:street': fix.street };
+  const isKiosk = tags.shop === 'kiosk' || (tags.shop === 'lottery' && /ONCE/.test(tags.brand ?? tags.name ?? ''));
+  if (isKiosk && inB(p) && buildingsAt(p).size === 0) {
+    kiosks.push({ x: q(p[0]), z: q(p[1]), t: tags.name ?? (tags.shop === 'lottery' ? 'ONCE' : 'Prensa') });
+    continue;
+  }
+  placeShop(p, tags, fix?.w);
+}
 for (const p of polygons) {
   if (p.tags.amenity === 'place_of_worship' || p.tags.amenity === 'townhall' || p.tags.amenity === 'school') continue;
   if (!shopCategory(p.tags) || Math.abs(signedArea(p.outer)) >= 6000) continue;
@@ -1362,7 +1490,12 @@ for (const p of polygons) {
  * next wall of their building also looks onto a street and has no shop.
  */
 const wallByKey = new Map<string, Wall>();
-for (const ws of wallGrid.values()) for (const w of ws) wallByKey.set(w.key, w);
+const wallByEnd = new Map<string, Wall>();
+for (const ws of wallGrid.values())
+  for (const w of ws) {
+    wallByKey.set(w.key, w);
+    wallByEnd.set(`${w.bi}:${w.end}`, w);
+  }
 const byWall = new Map<string, PendingShop[]>();
 // Best-fitting shops first; a wall holds one front per 2.6 m, the rest go to their next best wall.
 const MIN_FRONT = 2.6;
@@ -1421,9 +1554,9 @@ for (const [key, list] of byWall) {
       [lo <= m + 1e-6, -1],
     ] as [boolean, number][]) {
       if (!atEnd || (step === 1 ? (1 - ps.t) * w.len : ps.t * w.len) > 5) continue;
-      const [bi, ei] = w.key.split(':').map(Number);
-      const n = buildings[bi].o.length / 2;
-      const next = wallByKey.get(`${bi}:${(ei + step + n) % n}`);
+      const n = buildings[w.bi].o.length / 2;
+      const ei = Number(w.key.split(':')[1]);
+      const next = step === 1 ? wallByKey.get(`${w.bi}:${(w.end + 1) % n}`) : wallByEnd.get(`${w.bi}:${(ei - 1 + n) % n}`);
       if (!next || byWall.has(next.key) || !looksOntoStreet(next)) continue;
       const len = Math.min(next.len - MARGIN, 5);
       if (step === 1) emit(next, MARGIN / next.len, MARGIN / next.len + len / next.len, ps, false);
@@ -1554,6 +1687,39 @@ for (const [nid, n] of nodes) {
   else if (t.advertising === 'billboard' || t.advertising === 'screen' || t.advertising === 'column')
     put('billboard', t.animated || t.advertising === 'screen' ? { t: 'digital' } : {});
   else if (t.power === 'pole' || t.power === 'tower') put(t.power);
+  else if (t.man_made === 'flagpole') put('flagpole', { t: (t.country ?? t['flag:name'] ?? 'ES').slice(0, 2).toUpperCase() });
+  else if (t.tourism === 'artwork' && t.artwork_type === 'statue') put('statue', t.name ? { t: t.name } : {});
+  else if (t.highway === 'milestone' && t.ref) put('milestone', { t: `${t.ref}|${t.distance ?? ''}` });
+  // Spanish S-13 pedestrian-crossing sign on both kerbs of every zebra on a street with traffic.
+  if (t.highway === 'crossing' && t.crossing !== 'no' && t.crossing !== 'unmarked') {
+    const wid = highwayWaysOf.get(nid)?.find((w) => VEHICLE.has(ways.get(w)!.tags.highway) && ways.get(w)!.tags.highway !== 'service');
+    if (wid) {
+      const nds = ways.get(wid)!.nds;
+      const i = nds.indexOf(nid);
+      const a0 = nodePt(nds[Math.max(0, i - 1)]),
+        b0 = nodePt(nds[Math.min(nds.length - 1, i + 1)]);
+      if (a0 && b0) {
+        const len = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) || 1;
+        const dx = (b0[0] - a0[0]) / len,
+          dz = (b0[1] - a0[1]) / len;
+        const off = roadWidthOf(wid) / 2 + 0.6;
+        // Right-hand kerb of each direction, a metre before the zebra, facing the traffic.
+        for (const s of [1, -1]) {
+          const x = p[0] - dz * off * s - dx * 1.2 * s,
+            z = p[1] + dx * off * s - dz * 1.2 * s;
+          furniture.push({ k: 'sign', x: q(x), z: q(z), a: Math.round(Math.atan2(-dx * s, -dz * s) * 1000) / 1000, t: 'S-13' });
+        }
+      }
+    }
+  }
+}
+for (const k of kiosks) furniture.push({ k: 'kiosk', x: k.x, z: k.z, a: Math.round(roadAngleNear([k.x, k.z]) * 1000) / 1000, t: k.t });
+for (const { replaces, ...f } of corrections.furniture ?? []) {
+  if (replaces) {
+    const i = furniture.findIndex((g) => g.k === f.k && Math.hypot(g.x - replaces[0], g.z - replaces[1]) < 2);
+    if (i >= 0) furniture.splice(i, 1);
+  }
+  furniture.push(f);
 }
 // Overhead power lines, pole to pole.
 const powerlines: { p: number[]; k: string }[] = [];
@@ -1627,7 +1793,7 @@ const json = JSON.stringify(out);
 writeFileSync(OUT, json);
 console.log(`origin ${lat0.toFixed(6)}, ${lon0.toFixed(6)}  bounds ${JSON.stringify(B)}`);
 console.log(
-  `buildings ${buildings.length} (parts ${partsTmp.length}, outlines with parts ${outlines.filter((o) => o.b.hp).length})  areas ${areas.length}  roads ${roads.length}  rails ${rails.length}  rivers ${rivers.length}  streams ${streams.length}  weirs ${weirs.length}`,
+  `buildings ${buildings.length} (parts ${partsTmp.length}, outlines with parts ${outlines.filter((o) => o.b.hp).length}, ${filledOutlines} completed with ${Math.round(filledArea)} m2 the parts left out)  areas ${areas.length}  roads ${roads.length}  rails ${rails.length}  rivers ${rivers.length}  streams ${streams.length}  weirs ${weirs.length}`,
 );
 console.log(
   `trees ${trees.length / 2}  lamps ${lamps.length / 2}  benches ${benches.length / 2}  crossings ${crossings.length / 3}  pois ${pois.length}`,

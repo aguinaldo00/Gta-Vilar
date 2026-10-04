@@ -7,8 +7,8 @@ import { hash01, toPts } from './geo';
 import { fenceMaterial } from './Sports';
 
 /** Default heights when neither OSM nor the LiDAR gives one. */
-const DEFAULT_H: Record<string, number> = { wall: 1.6, retaining_wall: 1.2, fence: 1.8, hedge: 1.5 };
-const THICK: Record<string, number> = { wall: 0.3, retaining_wall: 0.45, fence: 0.25, hedge: 0.9 };
+const DEFAULT_H: Record<string, number> = { wall: 1.6, retaining_wall: 1.2, fence: 1.8, hedge: 1.5, railing: 0.9 };
+const THICK: Record<string, number> = { wall: 0.3, retaining_wall: 0.45, fence: 0.25, hedge: 0.9, railing: 0.08 };
 /** Masonry base under railings and wire fences. */
 const PLINTH = 0.45;
 /** Size of one wire-mesh diamond, m. */
@@ -19,6 +19,7 @@ const PIECE = 4;
 const STEP_BODY = 2.2;
 const WALL_TINTS = ['#ebe5d6', '#d9caa8', '#c9bba0', '#e2d9c6'].map((c) => new THREE.Color(c));
 const CONCRETE = new THREE.Color('#b9b4aa');
+const RAILING = new THREE.Color('#1e2224');
 const HEDGE = new THREE.Color('#3f6a30');
 
 /**
@@ -152,6 +153,28 @@ export function buildBarriers(ctx: BuildContext): void {
             bottom: f0,
             top,
             mask: Layer.Solid,
+            absolute: true,
+          });
+          continue;
+        }
+        if (b.k === 'railing') {
+          // Black iron railing: round-headed posts every ~1.5 m, a top rail and a lower rail.
+          const iron = RAILING;
+          prism(masonry, x0, z0, x1, z1, 0.06, g0 + h - 0.06, g1 + h - 0.06, g0 + h, g1 + h, iron, 1, caps);
+          prism(masonry, x0, z0, x1, z1, 0.04, g0 + 0.25, g1 + 0.25, g0 + 0.3, g1 + 0.3, iron, 1, caps);
+          const posts = Math.max(1, Math.round(len / n / 1.5));
+          for (let j = 0; j <= posts; j++) {
+            if (j === 0 && !caps[0] && k > 0) continue;
+            const px = x0 + ((x1 - x0) * j) / posts,
+              pz = z0 + ((z1 - z0) * j) / posts,
+              py = g0 + ((g1 - g0) * j) / posts;
+            prism(masonry, px - 0.05, pz, px + 0.05, pz, 0.1, py - 0.2, py - 0.2, py + h + 0.08, py + h + 0.08, iron, 1);
+          }
+          collision.addBox((x0 + x1) / 2, (z0 + z1) / 2, Math.hypot(x1 - x0, z1 - z0), 0.15, {
+            rot: Math.atan2(-(z1 - z0), x1 - x0),
+            bottom: f0,
+            top: Math.max(g0, g1) + h,
+            mask: Layer.Bodies,
             absolute: true,
           });
           continue;

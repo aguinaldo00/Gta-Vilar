@@ -1,0 +1,116 @@
+{
+ "_note": "Corrections checked against street-level photos (May 2025). Shops: keyed by the OSM name; 'at' moves the shop's point (local x, z), 'name' renames it, 'c' sets the category, 'w' its frontage in metres. Furniture: items missing from OSM, same format as map.furniture. Barriers: extra railings and walls. A furniture item with 'replaces': [x, z] moves the OSM item of the same kind found within 2 m of that point.",
+ "shops": {
+  "Calé": {
+   "name": "Carnicerías Hijos del Calé",
+   "at": [
+    -94.9,
+    66.8
+   ]
+  },
+  "Mara": {
+   "name": "Frutería Mara",
+   "at": [
+    -98.3,
+    69.8
+   ]
+  },
+  "Hnas. García": {
+   "name": "Peluquería Hnas. García",
+   "at": [
+    -101.5,
+    72.6
+   ]
+  },
+  "Sonata": {
+   "name": "Da Rocha",
+   "at": [
+    -104.6,
+    75.3
+   ]
+  },
+  "Banco Santander": {
+   "at": [
+    -108.0,
+    78.3
+   ],
+   "w": 5,
+   "street": ""
+  },
+  "Frutería El Santoñés": {
+   "at": [
+    -109.6,
+    85.0
+   ],
+   "w": 5
+  }
+ },
+ "furniture": [
+  {
+   "k": "direction",
+   "x": -33.8,
+   "z": 8.9,
+   "a": 3.0,
+   "t": "BILBAO >|LAREDO >|*Ojo Guareña >"
+  },
+  {
+   "k": "direction",
+   "x": -26.9,
+   "z": 12.0,
+   "a": 3.0,
+   "t": "SANTELICES ^|< BURGOS"
+  },
+  {
+   "k": "sign",
+   "x": -36.2,
+   "z": 9.6,
+   "a": 3.0,
+   "t": "R-303"
+  },
+  {
+   "k": "sign",
+   "x": -38.4,
+   "z": 10.6,
+   "a": 3.0,
+   "t": "S-13"
+  },
+  {
+   "k": "sign",
+   "x": -28.6,
+   "z": 11.3,
+   "a": 3.0,
+   "t": "P-15a"
+  },
+  {
+   "k": "milestone",
+   "x": -32.4,
+   "z": 9.0,
+   "a": 3.0,
+   "t": "BU-561|0",
+   "replaces": [
+    -35.8,
+    5.5
+   ]
+  }
+ ],
+ "barriers": [
+  {
+   "k": "railing",
+   "p": [
+    -38.6,
+    11.0,
+    -36.5,
+    8.9,
+    -33.0,
+    7.6,
+    -29.5,
+    8.3,
+    -27.0,
+    10.6,
+    -26.0,
+    13.0
+   ],
+   "h": 0.9
+  }
+ ]
+}

@@ -169,7 +169,7 @@ export interface MapData {
   /** Walls, fences and hedges (OSM, plus plot walls found in the LiDAR: src "lidar"); h in metres. */
   barriers?: {
     p: Coords;
-    k: 'wall' | 'fence' | 'hedge' | 'retaining_wall';
+    k: 'wall' | 'fence' | 'hedge' | 'retaining_wall' | 'railing';
     h?: number;
     src?: 'lidar' | 'step';
     top?: number;

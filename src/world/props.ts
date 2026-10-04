@@ -112,16 +112,21 @@ export function flag(
   poleH: number,
   rotY: number,
   tilt = 0,
+  scale = 1,
 ): void {
   const group = new THREE.Group();
   group.position.set(x, y0, z);
   group.rotation.set(tilt, rotY, 0, 'YXZ');
   // The pole is static: batch it with the other props (one draw call for all of them).
   group.updateMatrix();
-  ctx.batch.addMatrix(new THREE.CylinderGeometry(0.035, 0.05, poleH, 6).translate(0, poleH / 2, 0), ctx.mats.white, group.matrix);
+  ctx.batch.addMatrix(
+    new THREE.CylinderGeometry(0.035 * Math.sqrt(scale), 0.05 * scale, poleH, 6).translate(0, poleH / 2, 0),
+    ctx.mats.white,
+    group.matrix,
+  );
 
-  const fw = 1.5,
-    fh = 1.0;
+  const fw = 1.5 * scale,
+    fh = 1.0 * scale;
   const geo = new THREE.PlaneGeometry(fw, fh, 12, 6);
   geo.translate(fw / 2, 0, 0);
   const mat = new THREE.MeshStandardMaterial({ map: flagTexture(kind), side: THREE.DoubleSide });
@@ -140,9 +145,9 @@ export function flag(
       const k = fx / fw;
       pos.setXYZ(
         i,
-        fx - k * 0.08,
-        fy - k * k * 0.12 + Math.sin(fx * 2 + t * 4 + phase) * 0.03 * k,
-        Math.sin(fx * 3.2 - t * 6 + phase) * 0.18 * k + Math.sin(fy * 2 + t * 3) * 0.04 * k,
+        fx - k * 0.08 * scale,
+        fy + (-k * k * 0.12 + Math.sin((fx / scale) * 2 + t * 4 + phase) * 0.03 * k) * scale,
+        (Math.sin((fx / scale) * 3.2 - t * 6 + phase) * 0.18 * k + Math.sin((fy / scale) * 2 + t * 3) * 0.04 * k) * scale,
       );
     }
     pos.needsUpdate = true;

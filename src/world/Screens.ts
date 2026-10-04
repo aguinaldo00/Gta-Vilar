@@ -189,13 +189,20 @@ export class DigitalScreens {
     const digital = f.t === 'digital';
     const y = ctx.terrain.heightAt(f.x, f.z);
     const lb = new LocalBatch(ctx.batch, f.x, y, f.z, f.a);
-    const pw = digital ? 2.4 : 4.0,
+    // The municipal LED screen stands high on a single mast over the traffic signs
+    // (Plaza Mayor, from the street-level photos); posters stand on two legs.
+    const pw = digital ? 3.3 : 4.0,
       ph = pw * (H / W),
-      cy = digital ? 1.2 + ph / 2 : 2.2 + ph / 2;
-    // Totem: posts and a dark casing.
-    for (const x of [-pw / 2 + 0.15, pw / 2 - 0.15]) lb.add(Unit.box, ctx.mats.tint('#2b2f33'), x, cy / 2, 0, 0, 0.14, cy, 0.14);
+      cy = digital ? 3.1 + ph / 2 : 2.2 + ph / 2;
+    if (digital) {
+      lb.add(Unit.cyl, ctx.mats.tint('#5d6266'), 0, cy / 2, -0.25, 0, 0.24, cy, 0.24);
+      lb.add(Unit.box, ctx.mats.tint('#5d6266'), 0, cy, -0.18, 0, 0.5, ph * 0.7, 0.12);
+      ctx.collision.addCircle(...lb.point(0, -0.25), 0.15, { top: cy + ph / 2, mask: Layer.Solid });
+    } else {
+      for (const x of [-pw / 2 + 0.15, pw / 2 - 0.15]) lb.add(Unit.box, ctx.mats.tint('#2b2f33'), x, cy / 2, 0, 0, 0.14, cy, 0.14);
+      ctx.collision.addBox(f.x, f.z, pw + 0.2, 0.3, { rot: f.a, top: cy + ph / 2, mask: Layer.Solid });
+    }
     lb.add(Unit.box, ctx.mats.tint('#1b1e21'), 0, cy, 0, 0, pw + 0.16, ph + 0.16, 0.22);
-    ctx.collision.addBox(f.x, f.z, pw + 0.2, 0.3, { rot: f.a, top: cy + ph / 2, mask: Layer.Solid });
 
     const canvas = document.createElement('canvas');
     canvas.width = W;
