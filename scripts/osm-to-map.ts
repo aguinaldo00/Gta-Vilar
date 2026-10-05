@@ -976,7 +976,7 @@ const GATES = new Set(['gate', 'sliding_gate', 'swing_gate', 'lift_gate', 'entra
 const gateNodes: Pt[] = [];
 for (const n of nodes.values()) if (n.tags && GATES.has(n.tags.barrier ?? '')) gateNodes.push(project(n.lat, n.lon));
 for (const g of corrections.gates ?? []) gateNodes.push(g.at);
-const barriers: { p: number[]; k: string; h?: number; fix?: 1; hedge?: number; c?: string }[] = [];
+const barriers: { p: number[]; k: string; h?: number; fix?: 1; hedge?: number; c?: string; wood?: 1 }[] = [];
 const bollards: number[] = [];
 for (const { cut, ...b } of corrections.barriers ?? []) barriers.push(cut ? b : { ...b, fix: 1 });
 for (const [id, w] of ways) {
@@ -1026,10 +1026,12 @@ for (const [id, w] of ways) {
     runs = next;
   }
   const height = num(w.tags.height);
+  // Wooden fences: split-rail (talanquera) fences and fences tagged material=wood.
+  const wood = kind === 'fence' && (w.tags.fence_type === 'split_rail' || w.tags.material === 'wood');
   for (const run of runs)
     for (const part of clipLine(run)) {
       if (part.length < 2) continue;
-      barriers.push({ p: flat(simplify(part, 0.2)), k: kind, ...(height ? { h: height } : {}) });
+      barriers.push({ p: flat(simplify(part, 0.2)), k: kind, ...(height ? { h: height } : {}), ...(wood ? { wood: 1 as const } : {}) });
     }
 }
 // Kind of a mapped barrier checked against photos (OSM only says "fence").

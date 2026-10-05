@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Layer } from '../physics/PhysicsWorld';
+import { addBalconies, addGreenery } from './Balconies';
 import { LocalBatch } from './Batcher';
 import { CUSTOM_CHURCHES } from './Churches';
 import type { BuildContext } from './context';
@@ -496,6 +497,12 @@ export function buildBuildings(ctx: BuildContext): void {
         batch.add(new THREE.BoxGeometry(gw + 0.2, 0.15, gd + 0.2), mats.roof, mx, gy + gh / 2 + 0.07, mz, rot);
         collision.addBox(mx, mz, gw, gd, { rot, bottom: gy - gh / 2, top: gy + gh / 2, mask: Layer.Camera, absolute: true });
       }
+    }
+
+    // Balconies the LiDAR sees standing out of the walls.
+    if (!church && !industrial) {
+      addBalconies(ctx, b, idx, ground, rowBase, storeyH, top);
+      addGreenery(ctx, b, outer, hidden, idx, { rowBase, storeyH, bayW, top });
     }
 
     // Collision: one thin box per visible wall, set just inside the footprint.

@@ -368,7 +368,15 @@ export function buildStreetFurniture(ctx: BuildContext): void {
       case 'planter':
         lb.add(B, mats.stone, 0, 0.3, 0, 0, 1.3, 0.6, 1.3);
         lb.add(B, mats.hedge, 0, 0.7, 0, 0, 1.1, 0.35, 1.1);
-        lb.add(Unit.blob, mats.flowers, 0, 0.92, 0, 0, 0.45, 0.25, 0.45);
+        // Bedding flowers in the colours of the town's planters (geraniums, petunias, marigolds).
+        for (const [dx, dz, c] of [
+          [-0.3, -0.3, '#d1243a'],
+          [0.3, -0.25, '#c2186f'],
+          [-0.25, 0.3, '#e7c12c'],
+          [0.3, 0.3, '#e86a8a'],
+          [0, 0, '#8e3fa8'],
+        ] as const)
+          lb.add(Unit.blob, mats.tint(c), dx, 0.92, dz, 0, 0.26, 0.18, 0.26);
         collision.addBox(f.x, f.z, 1.3, 1.3, { rot: f.a, top: 0.6, mask: Layer.Bodies });
         break;
       case 'cypress': {

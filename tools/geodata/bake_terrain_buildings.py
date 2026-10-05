@@ -40,6 +40,7 @@ from walls import bake_barriers, open_crossings, total_length
 from passages import open_passages
 from cars import detect_cars
 from facades import bake_facades
+from balconies import bake_balconies, bake_greenery
 
 TERRAIN_CELL = 2  # m, runtime heightmap resolution
 MIN_ROOF_CELLS = 4
@@ -599,6 +600,14 @@ def main(map_path, lidar_path, mdt_path):
     if os.path.exists(corr_path):
         n_bfix, n_pfix = apply_fixes(m, json.load(open(corr_path)))
         print(f"fixes: {n_bfix} buildings, {n_pfix} pitches")
+
+    def ground_grid(x, z):
+        r = np.clip((z - minZ).astype(np.int64), 0, dtm.shape[0] - 1)
+        c = np.clip((x - minX).astype(np.int64), 0, dtm.shape[1] - 1)
+        return dtm[r, c] - H0
+
+    n_bal, n_bal_b = bake_balconies(m, os.path.join(root, "raw", "lidar"), ground_grid, H0)
+    g_fl, g_pg, g_w = bake_greenery(m, os.path.join(root, "data", "greenery.json"))
     m["meta"]["sources"] = [
         "OpenStreetMap contributors (ODbL 1.0)",
         "PNOA-LiDAR 2025 © Instituto Geográfico Nacional / Junta de Castilla y León (CC BY 4.0)",
@@ -612,6 +621,8 @@ def main(map_path, lidar_path, mdt_path):
     print(f"tree species: {dict(sorted(species.items()))}; shrubs: {n_shrubs} from the LiDAR, {len(m.get('shrubs') or []) // 4} in all")
     print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges; {len(hedges)} hedges from the canopy; {n_green} walls/fences that the orthophoto shows green turned into hedges; {n_pruned} dropped on bridges, the river or carriageways")
     print(f"parked cars seen by the LiDAR: {n_cars}")
+    print(f"balconies seen by the LiDAR: {n_bal} on {n_bal_b} buildings")
+    print(f"greenery from the photo review: {g_fl} buildings with flowers on balconies, {g_pg} with pots or front-garden flowers; {g_w} fences turned to wood")
     print(f"facades: {f_matched} footprints matched to the cadastre, {f_photo} coloured from its facade photo")
     print(f"outline rests: {n_rest} parts added where an outline's parts left it uncovered")
     print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}; buildings opened over passages: {passages}")

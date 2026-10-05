@@ -49,6 +49,14 @@ export interface MapBuilding {
   fc?: number;
   /** Galerías seen in the facade photo: 1 the whole facade, 2 one glazed bay. */
   gal?: 0 | 1 | 2;
+  /**
+   * Balconies the LiDAR sees standing out of the walls (tools/geodata/balconies.py), stride 7:
+   * x0, z0, x1, z1 (along the wall), floor height above the building's ground, depth,
+   * flags (1 flowers in the facade photo, 2 glass railing).
+   */
+  bal?: number[];
+  /** Greenery seen in the facade photo (data/greenery.json): P pots by the door, G front-garden flowers. */
+  grn?: string;
   /** Cadastre: year of construction, current use, reference. */
   year?: number;
   use?: string;
@@ -226,6 +234,8 @@ export interface MapData {
     t?: number;
     /** Wall colour checked on photos (data/corrections.json barrierKinds), e.g. red brick. */
     c?: string;
+    /** Wooden fence: 1 tagged in OSM (split rail, material=wood), 2 seen in a cadastre facade photo. */
+    wood?: 1 | 2;
   }[];
   /** Street furniture at its mapped position (signs, containers, bins, poles, billboards...). */
   furniture?: MapFurniture[];

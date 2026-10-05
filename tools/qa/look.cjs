@@ -2,7 +2,7 @@
 //   npm run build && npx vite preview --port 4173 &
 //   HOURS=19.5 WEATHER=nublado node tools/qa/look.cjs out/ plaza 60 -40 25 0 0 [name x z h tx tz ...]
 // Camera at (x, ground + h, z) looking at (tx, ground, tz). HOURS (default 13) and
-// TOUCH=1 shoots on a phone. WEATHER (despejado, nublado, lluvia, lluvia_fuerte, niebla; default despejado) set the scene.
+// TOUCH=1 shoots on a phone; TY raises the point looked at (m above the ground). WEATHER (despejado, nublado, lluvia, lluvia_fuerte, niebla; default despejado) set the scene.
 // Prints the page errors at the end (an empty list is a pass).
 let chromium, devices;
 try {
@@ -43,16 +43,16 @@ const url = process.env.URL ?? 'http://localhost:4173/';
   );
   for (const [name, x, z, h, tx, tz] of views) {
     await page.evaluate(
-      ([x, z, h, tx, tz]) => {
+      ([x, z, h, tx, tz, ty]) => {
         const g = window.__game;
         g.player.spawn(tx, tz, g.world.heightAt(tx, tz), 0);
         for (let i = 0; i < 5; i++) g.update(1 / 60);
         g.camera.position.set(x, g.world.heightAt(x, z) + h, z);
-        g.camera.lookAt(tx, g.world.heightAt(tx, tz), tz);
+        g.camera.lookAt(tx, g.world.heightAt(tx, tz) + ty, tz);
         g.world.env.update(0, g.camera.position.clone(), g.camera);
         g.pipeline.render();
       },
-      [x, z, h, tx, tz],
+      [x, z, h, tx, tz, Number(process.env.TY ?? 0)],
     );
     await page.screenshot({ path: `${dir}/${name}.png` });
   }

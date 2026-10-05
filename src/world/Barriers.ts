@@ -191,7 +191,38 @@ const FENCE_KERB = 0.22;
 const PANEL = 2;
 const panelGeos = new Map<string, THREE.BufferGeometry>();
 let railingMat: THREE.MeshStandardMaterial | null = null;
-function railingBars(): THREE.MeshStandardMaterial {
+let woodMat: THREE.MeshStandardMaterial | null = null;
+/** Wooden fence boards (vertical planks with gaps), one texture repeat per metre. */
+function woodBoards(): THREE.MeshStandardMaterial {
+  if (woodMat) return woodMat;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const g = c.getContext('2d')!;
+  g.clearRect(0, 0, 64, 64);
+  const tones = ['#7a5434', '#83603c', '#6f4b2e', '#8a6542', '#76512f'];
+  for (let i = 0; i < 5; i++) {
+    const x = i * 12.8;
+    g.fillStyle = tones[i];
+    g.fillRect(x + 1, 0, 10.6, 64);
+    // Grain.
+    g.fillStyle = 'rgba(40,25,12,0.25)';
+    for (let k = 0; k < 4; k++) g.fillRect(x + 2 + ((k * 7 + i * 3) % 9), 0, 1, 64);
+  }
+  // Two rails behind the boards.
+  g.fillStyle = '#5e4128';
+  g.fillRect(0, 12, 64, 3);
+  g.fillRect(0, 50, 64, 3);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  woodMat = new THREE.MeshStandardMaterial({ map: t, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9, metalness: 0 });
+  woodMat.name = 'woodFence';
+  woodMat.userData.castShadow = true;
+  woodMat.userData.receiveShadow = true;
+  return woodMat;
+}
+export function railingBars(): THREE.MeshStandardMaterial {
   if (!railingMat) railingMat = barsMaterial();
   return railingMat;
 }
@@ -210,7 +241,7 @@ function breakablePanels(
   y0: number,
   y1: number,
   h: number,
-  kind: 'fence' | 'railing',
+  kind: 'fence' | 'railing' | 'wood',
   mat: THREE.Material,
 ): void {
   const len = Math.hypot(x1 - x0, z1 - z0);
@@ -223,11 +254,11 @@ function breakablePanels(
   if (!geo) {
     geo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
     const uv = geo.attributes.uv as THREE.BufferAttribute;
-    const cu = kind === 'fence' ? MESH_CELL : 0.6;
+    const cu = kind === 'fence' ? MESH_CELL : kind === 'wood' ? 1 : 0.6;
     for (let j = 0; j < uv.count; j++) uv.setXY(j, (uv.getX(j) * PANEL) / cu, (uv.getY(j) * hk) / (kind === 'fence' ? MESH_CELL : hk));
     panelGeos.set(key, geo);
   }
-  const postMat = kind === 'fence' ? ctx.mats.tint('#5d6a63') : ctx.mats.tint('#1e2224');
+  const postMat = kind === 'fence' ? ctx.mats.tint('#5d6a63') : kind === 'wood' ? ctx.mats.tint('#5a3e26') : ctx.mats.tint('#1e2224');
   for (let k = 0; k < n; k++) {
     const t = (k + 0.5) / n;
     const x = x0 + (x1 - x0) * t,
@@ -250,7 +281,7 @@ function breakablePanels(
           local: new THREE.Matrix4().compose(
             new THREE.Vector3(-seg / 2, (hk + 0.15) / 2 - 0.15, 0),
             new THREE.Quaternion(),
-            new THREE.Vector3(0.06, hk + 0.15, 0.06),
+            kind === 'wood' ? new THREE.Vector3(0.1, hk + 0.15, 0.1) : new THREE.Vector3(0.06, hk + 0.15, 0.06),
           ),
         },
         ...(kind === 'railing'
@@ -340,6 +371,38 @@ export function buildBarriers(ctx: BuildContext): void {
             mask: Layer.Solid,
             absolute: true,
           });
+          continue;
+        }
+        if (b.wood && b.k !== 'hedge') {
+          // Wooden fence (photos, OSM split rail): boards in ~2 m sections a car knocks over,
+          // on a low wall where the photo shows a wall (wall, verja) or a kerb (fence, railing).
+          const masonryWall = b.k === 'wall' || b.k === 'verja';
+          const p = masonryWall ? Math.min(0.8, Math.max(0.4, h * 0.45)) : Math.min(FENCE_KERB, h * 0.25);
+          const top = masonryWall ? Math.max(h, 1.4) : Math.max(h, 1.1);
+          prism(
+            masonry,
+            x0,
+            z0,
+            x1,
+            z1,
+            masonryWall ? Math.max(0.25, t) : 0.18,
+            f0,
+            f1,
+            g0 + p,
+            g1 + p,
+            masonryWall ? tint : CONCRETE,
+            1.5,
+            caps,
+          );
+          breakablePanels(ctx, x0, z0, x1, z1, g0 + p, g1 + p, top - p, 'wood', woodBoards());
+          if (masonryWall)
+            collision.addBox((x0 + x1) / 2, (z0 + z1) / 2, Math.hypot(x1 - x0, z1 - z0) + 0.05, Math.max(0.25, t), {
+              rot: Math.atan2(-(z1 - z0), x1 - x0),
+              bottom: f0,
+              top: Math.max(g0, g1) + p,
+              mask: Layer.Solid,
+              absolute: true,
+            });
           continue;
         }
         if (b.k === 'verja') {
