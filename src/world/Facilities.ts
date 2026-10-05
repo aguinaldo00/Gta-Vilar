@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Layer } from '../physics/PhysicsWorld';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
-import { centroid, hash01, orientedBox, type Pt, pointInRing, toPts } from './geo';
+import { centroid, hash01, orientedBox, type Pt, pointInRing, segDist, toPts } from './geo';
 import { Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
 import { fenceMaterial } from './Sports';
@@ -246,6 +246,88 @@ function sportsFences(ctx: BuildContext): void {
   }
 }
 
+/** Courts fenced with wire mesh (the town's tennis, pádel, futsal and basketball courts). */
+const COURTS = new Set(['tennis', 'padel', 'futsal', 'basketball', 'multi', 'soccer']);
+
+/**
+ * Fences round the pitches (photos with P: they were missing): a wire-mesh court fence,
+ * 3–4 m tall, round the small courts, and a 1.1 m railing round the big football pitches.
+ * Sides that already have a wall or fence (OSM, LiDAR) keep theirs, ways coming in leave
+ * a gap, and every court gets a gate in the middle of the side nearest a way.
+ */
+function pitchFences(ctx: BuildContext): void {
+  const fence = fenceMaterial();
+  const green = ctx.mats.tint('#2f4a3a');
+  const rail = ctx.mats.tint('#5d6a63');
+  const barriers = (ctx.map.barriers ?? []).map((b) => toPts(b.p));
+  for (const a of ctx.map.areas) {
+    if (a.k !== 'pitch' || a.c || !a.s || !COURTS.has(a.s)) continue;
+    const ring = toPts(a.o);
+    const area = Math.abs(
+      ring.reduce((s, [x, z], i) => s + x * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * z, 0) / 2,
+    );
+    // Full-size football pitches get the railing; the open training pitch of El Soto (photos
+    // with P: you walk straight onto it) and other mid-size ones get nothing.
+    const big = a.s === 'soccer' && area > 5000;
+    if (a.s === 'soccer' && area > 1500 && !big) continue;
+    const h = big ? 1.1 : a.s === 'tennis' || a.s === 'padel' ? 4 : 3;
+    const xs = ring.map((p) => p[0]),
+      zs = ring.map((p) => p[1]);
+    const [x0b, x1b, z0b, z1b] = [Math.min(...xs) - 4, Math.max(...xs) + 4, Math.min(...zs) - 4, Math.max(...zs) + 4];
+    const near = barriers.filter((pts) => pts.some(([x, z]) => x > x0b && x < x1b && z > z0b && z < z1b));
+    const fenced = (x: number, z: number) =>
+      near.some((pts) => pts.some((p, i) => i > 0 && segDist(x, z, pts[i - 1][0], pts[i - 1][1], p[0], p[1]) < 2.5));
+    // The gate: middle of the side whose midpoint is closest to a way.
+    let gate = -1,
+      best = Number.POSITIVE_INFINITY;
+    ring.forEach(([ax, az], i) => {
+      const [bx, bz] = ring[(i + 1) % ring.length];
+      const r = ctx.roads.nearest((ax + bx) / 2, (az + bz) / 2, 40);
+      if (r && r.d < best) {
+        best = r.d;
+        gate = i;
+      }
+    });
+    for (let i = 0; i < ring.length; i++) {
+      const [ax, az] = ring[i],
+        [bx, bz] = ring[(i + 1) % ring.length];
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 0.5) continue;
+      const n = Math.max(1, Math.round(len / 2.5));
+      for (let k = 0; k < n; k++) {
+        const t0 = k / n,
+          t1 = (k + 1) / n;
+        if (i === gate && Math.abs((t0 + t1) / 2 - 0.5) * len < 0.9) continue;
+        const x0 = ax + (bx - ax) * t0,
+          z0 = az + (bz - az) * t0,
+          x1 = ax + (bx - ax) * t1,
+          z1 = az + (bz - az) * t1;
+        const mx = (x0 + x1) / 2,
+          mz = (z0 + z1) / 2;
+        const r = ctx.roads.nearest(mx, mz, 3);
+        if ((r && r.d < 0.8) || fenced(mx, mz)) continue;
+        const seg = len / n,
+          ang = Math.atan2(-(z1 - z0), x1 - x0);
+        const y = ctx.terrain.heightAt(mx, mz);
+        if (big) {
+          ctx.batch.add(Unit.box, rail, mx, y + h, mz, ang, seg, 0.06, 0.06);
+          ctx.batch.add(Unit.box, rail, mx, y + h * 0.5, mz, ang, seg, 0.04, 0.04);
+          ctx.batch.add(Unit.box, rail, x0, ctx.terrain.heightAt(x0, z0) + h / 2, z0, 0, 0.06, h, 0.06);
+          ctx.collision.addBox(mx, mz, seg, 0.12, { rot: ang, top: h, mask: Layer.Player });
+        } else {
+          const g = new THREE.PlaneGeometry(1, 1);
+          const uv = g.attributes.uv as THREE.BufferAttribute;
+          for (let j = 0; j < uv.count; j++) uv.setXY(j, uv.getX(j) * seg * 2, uv.getY(j) * h * 2);
+          ctx.batch.add(g, fence, mx, y + h / 2, mz, ang, seg, h, 1);
+          ctx.batch.add(Unit.box, green, x0, ctx.terrain.heightAt(x0, z0) + h / 2, z0, 0, 0.07, h + 0.1, 0.07);
+          ctx.batch.add(Unit.box, green, mx, y + h, mz, ang, seg, 0.05, 0.05);
+          ctx.collision.addBox(mx, mz, seg, 0.15, { rot: ang, top: h, mask: Layer.Bodies });
+        }
+      }
+    }
+  }
+}
+
 /** Estación de Servicio Rivera: canopy, pump islands, price totem. */
 function gasolinera(
   ctx: BuildContext,
@@ -438,4 +520,5 @@ export function buildFacilities(
   busStations(ctx, sign, signMat);
   carParks(ctx);
   sportsFences(ctx);
+  pitchFences(ctx);
 }

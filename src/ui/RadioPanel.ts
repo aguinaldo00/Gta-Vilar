@@ -113,8 +113,7 @@ export class RadioPanel {
   offerExternal(on: boolean): void {
     // No keyboard on phones: the button names no key there (the touch layer is set up after the panel).
     const ext = this.root.querySelector('.r-ext');
-    if (on && ext)
-      ext.textContent = document.body.classList.contains('touch') ? '▶ Escuchar en otra pestaña' : '▶ Escuchar en otra ventana (V)';
+    if (on && ext) ext.textContent = document.body.classList.contains('touch') ? '▶ Abrir la radio' : '▶ Escuchar en otra ventana (V)';
     this.root.classList.toggle('ext', on);
   }
 }

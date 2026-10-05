@@ -233,6 +233,32 @@
         #menu .m-list button { font-size: 20px; padding: 6px 16px; }
         #menu .m-logo { width: 46vw; }
       }
+      /* Phones in landscape: logo on the left, menu on the right, both whole on a short screen. */
+      @media (max-height: 500px) and (orientation: landscape) {
+        #menu .m-logo { left: 30%; top: 50%; width: min(42vw, 105vh); }
+        #menu .m-list { right: 6vw; left: auto; top: 50%; bottom: auto; transform: translateY(-50%); min-width: 0; width: 34vw; }
+        #menu .m-list button { font-size: 19px; padding: 7px 14px; letter-spacing: 2px; }
+        #menu .m-panel { right: 3vw; width: min(520px, 60vw); max-height: 88vh; padding: 16px 20px; }
+      }
+      /* Phones in portrait: logo high, menu low and centred, large enough to tap. */
+      @media (max-width: 760px) and (orientation: portrait) {
+        #menu .m-logo { top: 30%; width: 78vw; }
+        #menu .m-list { width: 72vw; }
+        #menu .m-list button { font-size: 22px; text-align: center; padding: 10px 14px; }
+        #menu .m-list button:focus, #menu .m-list button:hover { padding-left: 14px; }
+      }
+      /* No game controls over the menu. */
+      body:has(#menu:not([hidden]):not(.leaving)) #touch { visibility: hidden; }
+      /* Phones: the place name low in the middle, clear of the speed and the buttons. */
+      body.touch #zone { top: auto; right: auto; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); font-size: 22px; transform: translate(-50%, 10px); }
+      body.touch #zone.show { transform: translateX(-50%); }
+      /* Phones: the "listen in another tab" button as a small pill under the station. */
+      body.touch #radio .r-ext { font-size: 11px; padding: 4px 10px; letter-spacing: 1px; opacity: .85; }
+      body.touch #radio.on.settled { transform: translateX(-50%) scale(.78); opacity: .75; }
+      @media (orientation: portrait) {
+        body.touch #minimap { width: 104px; height: 104px; }
+        body.touch #radio { top: 120px; }
+      }
     </style>
   </head>
   <body>

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Layer } from '../physics/PhysicsWorld';
 import { LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
-import { centroid, orientedBox, toPts } from './geo';
+import { centroid, orientedBox, pointInRing, toPts } from './geo';
 import { beamMatrix, boxGeo, hipRoof, scaleUV } from './geometry';
 import type { MapPoi } from './mapData';
 import { flag, signBoard, Unit } from './props';
@@ -77,7 +77,7 @@ function poi(ctx: BuildContext, k: MapPoi['k']): MapPoi | undefined {
  * Plaza Mayor and the templete (see the reference photos).
  */
 function buildAyuntamiento(ctx: BuildContext): void {
-  const fp = ctx.map.buildings.find((b) => b.t === 'townhall');
+  const fp = ctx.map.buildings.find((b) => b.t === 'townhall' && !b.gf);
   if (!fp) return;
   const ring = toPts(fp.o);
   const obb = orientedBox(ring);
@@ -206,7 +206,7 @@ function buildAyuntamiento(ctx: BuildContext): void {
 
 /** Torre del Corregimiento on its footprint: square stone tower with battlements. */
 function buildTorre(ctx: BuildContext): void {
-  const fp = ctx.map.buildings.find((b) => b.t === 'torre');
+  const fp = ctx.map.buildings.find((b) => b.t === 'torre' && !b.gf);
   if (!fp) return;
   const obb = orientedBox(toPts(fp.o));
   const h = (fp.lv ?? 4) * 4.6;
@@ -214,8 +214,63 @@ function buildTorre(ctx: BuildContext): void {
   const { mats } = ctx;
   const sw = obb.w,
     sd = obb.d;
-  P.add(boxGeo(sw + 0.5, 1.2, sd + 0.5, 2), mats.plinth, 0, 0.6, 0);
-  P.add(boxGeo(sw, h, sd, 2), mats.stone, 0, h / 2, 0);
+  // An archway through the base where a covered way crosses the footprint (photos with P:
+  // the way from the Plaza Mayor sidewalk to the Plaza de España goes under the tower).
+  const ring = toPts(fp.o);
+  const ux = Math.cos(obb.angle),
+    uz = -Math.sin(obb.angle);
+  let along: 'x' | 'z' | null = null;
+  let oh = 0;
+  for (const r of ctx.map.roads) {
+    if (!r.tp) continue;
+    const pts = toPts(r.p);
+    for (let i = 1; i < pts.length && !along; i++) {
+      const [ax, az] = pts[i - 1],
+        [bx, bz] = pts[i];
+      const len = Math.hypot(bx - ax, bz - az) || 1;
+      const inside = [0.25, 0.5, 0.75].some((t) => pointInRing(ax + (bx - ax) * t, az + (bz - az) * t, ring));
+      if (!inside) continue;
+      const dx = (bx - ax) / len,
+        dz = (bz - az) / len;
+      along = Math.abs(dx * ux + dz * uz) > 0.7 ? 'x' : 'z';
+      oh = Math.min(r.tp, 3.4);
+    }
+    if (along) break;
+  }
+  if (along) {
+    // Length of the vault (across the tower), opening width, and the side piers.
+    const L = along === 'x' ? sw : sd,
+      S = along === 'x' ? sd : sw;
+    const gw = Math.min(3, S - 1.4);
+    const pier = (S - gw) / 2;
+    const at = (a: number, c: number): [number, number] => (along === 'x' ? [a, c] : [c, a]);
+    const dims = (l: number, s: number): [number, number] => (along === 'x' ? [l, s] : [s, l]);
+    for (const side of [-1, 1]) {
+      const off = side * (gw / 2 + pier / 2);
+      const [px, pz] = at(0, off);
+      const [bw, bd] = dims(L, pier);
+      P.add(boxGeo(bw, oh, bd, 2), mats.stone, px, oh / 2, pz);
+      const [qw, qd] = dims(L + 0.5, pier + 0.25);
+      P.add(boxGeo(qw, 1.2, qd, 2), mats.plinth, px, 0.6, pz);
+      P.box(px, pz, bw, bd, { top: oh });
+    }
+    const [uw, ud] = dims(L, S);
+    P.add(boxGeo(uw, h - oh, ud, 2), mats.stone, 0, oh + (h - oh) / 2, 0);
+    P.box(0, 0, uw + 0.5, ud + 0.5, { bottom: oh, top: h + 2 });
+    // Voussoirs round the arch on both faces, and the paved floor through it.
+    for (const end of [-1, 1]) {
+      for (let k = 0; k <= 6; k++) {
+        const a = Math.PI * (k / 6);
+        const [vx, vz] = at((end * L) / 2 + end * 0.04, -Math.cos(a) * (gw / 2 + 0.15));
+        P.add(Unit.box, mats.stoneTrim, vx, oh - 0.45 + Math.sin(a) * 0.45, vz, along === 'x' ? 0 : Math.PI / 2, 0.12, 0.3, 0.45);
+      }
+    }
+    const [fw, fd] = dims(L + 0.1, gw);
+    P.add(Unit.box, mats.plinth, 0, 0.03, 0, 0, fw, 0.06, fd);
+  } else {
+    P.add(boxGeo(sw + 0.5, 1.2, sd + 0.5, 2), mats.plinth, 0, 0.6, 0);
+    P.add(boxGeo(sw, h, sd, 2), mats.stone, 0, h / 2, 0);
+  }
   P.add(boxGeo(sw + 0.7, 0.7, sd + 0.7, 2), mats.stone, 0, h + 0.35, 0);
   const top = h + 0.7;
   const hx = (sw + 0.7) / 2 - 0.3,
@@ -241,10 +296,12 @@ function buildTorre(ctx: BuildContext): void {
     P.add(Unit.box, mats.glass, sw / 2 + 0.05, wy, 0, 0, 0.1, wh, ww);
     P.add(Unit.box, mats.glass, -sw / 2 - 0.05, wy, 0, 0, 0.1, wh, ww);
   }
-  P.add(Unit.box, mats.darkWood, 0, 1.7, sd / 2 + 0.05, 0, 1.6, 2.8, 0.1);
-  P.add(Unit.cone, mats.darkWood, 0, 3.4, sd / 2 + 0.05, 0, 1.6, 1.0, 0.1);
+  if (along !== 'z') {
+    P.add(Unit.box, mats.darkWood, 0, 1.7, sd / 2 + 0.05, 0, 1.6, 2.8, 0.1);
+    P.add(Unit.cone, mats.darkWood, 0, 3.4, sd / 2 + 0.05, 0, 1.6, 1.0, 0.1);
+  }
   P.add(Unit.box, mats.stoneTrim, 0, 5.2, sd / 2 + 0.08, 0, 1.2, 1.5, 0.15);
-  P.box(0, 0, sw + 0.5, sd + 0.5, { top: h + 2 });
+  if (!along) P.box(0, 0, sw + 0.5, sd + 0.5, { top: h + 2 });
 }
 
 /** The templete (octagonal music kiosk) at its mapped position. */
@@ -418,7 +475,7 @@ function buildMikado(ctx: BuildContext): void {
 
 /** Name board of the old Horna-Villarcayo station, facing the Vía Verde. */
 function buildStationSign(ctx: BuildContext): void {
-  const st = ctx.map.buildings.find((b) => b.t === 'station');
+  const st = ctx.map.buildings.find((b) => b.t === 'station' && !b.gf);
   if (!st) return;
   const [cx, cz] = centroid(toPts(st.o));
   const hit = ctx.roads.nearest(cx, cz, 80, (r) => r.k === 'viaverde');
