@@ -25,6 +25,13 @@ const AUTO_CENTER_DELAY = 1.2;
  */
 export class FollowCamera {
   yaw = 0;
+  /** Seconds left of a quick swing back behind the player (double tap on phones). */
+  private recentering = 0;
+
+  /** Swings the camera back behind the player or the car. */
+  recenter(): void {
+    this.recentering = 0.6;
+  }
   pitch = 0.3;
   private dist = 5.5;
   private readonly pivot = new THREE.Vector3();
@@ -55,7 +62,10 @@ export class FollowCamera {
     this.yaw -= mouse.dx * sens;
     this.pitch = clamp(this.pitch + mouse.dy * sens * 0.85, -0.3, 1.25);
 
-    if (t.inVehicle && sinceLook > AUTO_CENTER_DELAY && Math.abs(t.speed) > 2) {
+    if (this.recentering > 0) {
+      this.recentering -= dt;
+      this.yaw = dampAngle(this.yaw, t.heading + Math.PI, 9, dt);
+    } else if (t.inVehicle && sinceLook > AUTO_CENTER_DELAY && Math.abs(t.speed) > 2) {
       this.yaw = dampAngle(this.yaw, t.heading + Math.PI, 2.4, dt);
       this.pitch = damp(this.pitch, 0.2, 1.5, dt);
     }

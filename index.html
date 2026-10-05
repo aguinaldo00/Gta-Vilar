@@ -247,6 +247,21 @@
         #menu .m-list button { font-size: 22px; text-align: center; padding: 10px 14px; }
         #menu .m-list button:focus, #menu .m-list button:hover { padding-left: 14px; }
       }
+      /* Buttons and stick sized by the screen: thumb-sized on phones, not tiny on tablets. */
+      body.touch .touch-btn { width: clamp(70px, 12vmin, 116px); height: clamp(70px, 12vmin, 116px); font-size: clamp(13px, 2.1vmin, 20px); }
+      body.touch #btn-use { width: clamp(60px, 10vmin, 96px); height: clamp(60px, 10vmin, 96px); right: calc(clamp(96px, 16vmin, 150px) + env(safe-area-inset-right)); bottom: calc(clamp(30px, 6vmin, 56px) + env(safe-area-inset-bottom)); }
+      body.touch #btn-jump { bottom: calc(clamp(22px, 4vmin, 40px) + env(safe-area-inset-bottom)); }
+      body.touch #btn-where { width: clamp(40px, 7vmin, 60px); height: clamp(40px, 7vmin, 60px); }
+      #btn-respawn { right: calc(18px + env(safe-area-inset-right)); top: calc(42% + clamp(50px, 9vmin, 76px)); width: clamp(40px, 7vmin, 60px); height: clamp(40px, 7vmin, 60px); font: 700 clamp(18px, 3.4vmin, 28px) Arial, sans-serif; background: rgba(255,255,255,.75); }
+      body.touch .stick-base { width: clamp(110px, 26vmin, 190px); height: clamp(110px, 26vmin, 190px); margin: calc(clamp(110px, 26vmin, 190px) / -2) 0 0 calc(clamp(110px, 26vmin, 190px) / -2); }
+      body.touch .stick-knob { width: 45%; height: 45%; }
+      /* Tablets: the HUD a little larger. */
+      @media (min-width: 900px) and (min-height: 600px) {
+        body.touch #minimap { width: 170px; height: 170px; }
+        body.touch #clock { font-size: 34px; }
+        body.touch #speed { font-size: 44px; }
+        body.touch #zone { font-size: 30px; }
+      }
       /* No game controls over the menu. */
       body:has(#menu:not([hidden]):not(.leaving)) #touch { visibility: hidden; }
       /* Phones: the place name low in the middle, clear of the speed and the buttons. */

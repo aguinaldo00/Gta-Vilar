@@ -9,7 +9,7 @@ try {
 (async () => {
   const dir = process.argv[2] ?? '.';
   const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-  for (const dev of ['Pixel 7', 'Pixel 7 landscape']) {
+  for (const dev of (process.env.DEVICES ?? 'Pixel 7,Pixel 7 landscape').split(',')) {
     const ctx = await b.newContext({ ...devices[dev] });
     const p = await ctx.newPage();
     p.setDefaultTimeout(300000);
@@ -17,7 +17,7 @@ try {
     await p.goto(process.env.URL ?? 'http://localhost:4173/');
     await p.waitForFunction(() => window.__game?.climate, null, { timeout: 300000 });
     await p.waitForTimeout(1500);
-    const tag = dev.includes('landscape') ? 'h' : 'v';
+    const tag = `${dev.includes('iPad') ? 'tab_' : ''}${dev.includes('landscape') ? 'h' : 'v'}`;
     await p.screenshot({ path: `${dir}/m_${tag}_menu.png` });
     await p.evaluate(() => {
       const g = window.__game;

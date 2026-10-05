@@ -25,7 +25,7 @@ import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 import { PositionReport, reportText } from './ui/PositionReport';
 import { RadioPanel } from './ui/RadioPanel';
-import { TouchControls } from './ui/TouchControls';
+import { buzz, TouchControls } from './ui/TouchControls';
 import { ClimateSystem, WEATHER_LABEL, WEATHERS, type Weather } from './world/Climate';
 import type { MapData } from './world/mapData';
 import { RainFX } from './world/RainFX';
@@ -102,6 +102,13 @@ export class Game {
    * play: the player has control.
    */
   mode: 'menu' | 'intro' | 'play' = 'menu';
+  /** Few cores or little memory on a touch device: the lighter settings. */
+  readonly lowEnd: boolean;
+  private readonly basePixelRatio: number;
+  /** Dynamic resolution (0.55–1 of the base pixel ratio). */
+  renderScale = 1;
+  private frameAvg = 1 / 60;
+  private adaptClock = 0;
   /** Arrival shot progress 0–1 (set by the ArrivalSequence while mode is 'intro'). */
   arrival = 0;
   private menuTime = 0;
@@ -116,9 +123,23 @@ export class Game {
   ) {
     const isTouch = TouchControls.supported();
     const quality = { ...(isTouch ? config.quality.touch : config.quality.desktop) };
+    // Modest phones and tablets (few cores or little memory): a lighter world from the start.
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    this.lowEnd = isTouch && ((navigator.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 3);
+    if (this.lowEnd) {
+      quality.pixelRatio = Math.min(quality.pixelRatio, 1);
+      quality.shadowMapSize = Math.min(quality.shadowMapSize, 512);
+      quality.drawDistance = Math.min(quality.drawDistance, 300);
+      quality.treeBudget = Math.min(quality.treeBudget, 1000);
+      quality.grassRadius = Math.min(quality.grassRadius, 14);
+      quality.groundTexture = Math.min(quality.groundTexture, 1024);
+    }
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatio));
+    // Phone screens are dense enough without multisampling, which costs them dearly.
+    const antialias = !isTouch || window.devicePixelRatio < 1.5;
+    this.renderer = new THREE.WebGLRenderer({ antialias, powerPreference: 'high-performance' });
+    this.basePixelRatio = Math.min(window.devicePixelRatio, quality.pixelRatio);
+    this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -164,6 +185,13 @@ export class Game {
       .catch(() => undefined);
     this.skids = new SkidMarks(this.scene);
     this.followCam = new FollowCamera(this.camera);
+    if (this.touch) this.touch.onRecenter = () => this.followCam.recenter();
+    // A knock felt in the hand on phones.
+    if (this.touch) this.events.on('vehicle:impact', (e) => buzz(Math.min(90, 20 + e.strength * 4)));
+    // Nothing runs while the tab is hidden (battery), and the clock does not jump on return.
+    document.addEventListener('visibilitychange', () => {
+      this.last = -1;
+    });
     this.minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement, map);
     this.loop = new FixedStepLoop(config.game.simulation.fixedStep, config.game.simulation.maxSubSteps);
 
@@ -365,12 +393,32 @@ export class Game {
 
   private readonly frame = (nowMs: number): void => {
     requestAnimationFrame(this.frame);
+    if (document.hidden) return;
     const now = nowMs / 1000;
     const dt = this.last < 0 ? this.loop.step : Math.min(0.1, now - this.last);
     this.last = now;
+    this.adaptResolution(dt);
     this.update(dt, now);
     this.pipeline.render();
   };
+
+  /**
+   * Dynamic resolution: when frames run long (a phone heating up, a busy street) the render
+   * scale drops in steps down to 55 %, and climbs back when there is time to spare.
+   */
+  private adaptResolution(dt: number): void {
+    this.frameAvg += (dt - this.frameAvg) * 0.05;
+    this.adaptClock += dt;
+    if (this.adaptClock < 2) return;
+    this.adaptClock = 0;
+    const slow = this.frameAvg > 1 / 38,
+      fast = this.frameAvg < 1 / 56;
+    const next = slow ? Math.max(0.55, this.renderScale * 0.85) : fast ? Math.min(1, this.renderScale * 1.1) : this.renderScale;
+    if (Math.abs(next - this.renderScale) < 0.01) return;
+    this.renderScale = next;
+    this.renderer.setPixelRatio(this.basePixelRatio * next);
+    this.resize();
+  }
 
   /** Advances the game by `dt` seconds (also used by automated tests). */
   update(dt: number, now = performance.now() / 1000): void {
@@ -434,7 +482,12 @@ export class Game {
     this.world.breakables.update(dt, this.vehicles);
     this.world.parkedCars.update(dt, this.vehicles);
     if (!this.pedestrians) {
-      this.pedestrians = new PedestrianSystem(this.world, this.scene, this.touch ? 70 : 160, this.touch ? 14 : 36);
+      this.pedestrians = new PedestrianSystem(
+        this.world,
+        this.scene,
+        this.touch ? (this.lowEnd ? 40 : 70) : 160,
+        this.touch ? (this.lowEnd ? 8 : 14) : 36,
+      );
       this.pedestrians.setVoices(this.audioConf?.voices);
     }
     this.pedestrians.update(dt, this.camera.position, this.followCam.yaw, this.climate.lightsOn, this.vehicles);

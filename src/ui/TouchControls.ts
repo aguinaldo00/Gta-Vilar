@@ -1,7 +1,16 @@
 import type { RawInput } from '../input/RawInput';
 
-const STICK_RADIUS = 60;
-const LOOK_SENS = 1.8;
+/** Joystick travel and look speed scale with the screen (a tablet is not a big phone). */
+const stickRadius = () => Math.max(48, Math.min(90, Math.min(window.innerWidth, window.innerHeight) * 0.13));
+const lookSens = () => 1.8 * Math.min(1, 900 / Math.max(window.innerWidth, window.innerHeight));
+/** A short buzz on the phone (where the browser allows it). */
+export const buzz = (ms: number): void => {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    /* not allowed */
+  }
+};
 
 /**
  * On-screen controls for phones and tablets: a floating joystick on the left
@@ -26,6 +35,9 @@ export class TouchControls {
   private lx = 0;
   private ly = 0;
   private driving = false;
+  private lastLookTap = 0;
+  /** Called on a double tap on the look side of the screen (swing the camera back behind). */
+  onRecenter: (() => void) | null = null;
 
   constructor(private readonly input: RawInput) {
     document.body.classList.add('touch');
@@ -41,6 +53,8 @@ export class TouchControls {
     this.useBtn = this.button('btn-use', 'ROBAR', 'Touch.use');
     // Where am I (the P key): to report a detail to fix.
     this.button('btn-where', '📍', 'KeyP');
+    // Back on the street when stuck (the R key): phones have no keyboard.
+    this.button('btn-respawn', '⟲', 'KeyR');
     document.body.appendChild(this.layer);
 
     this.layer.addEventListener('pointerdown', (e) => this.onDown(e));
@@ -67,6 +81,7 @@ export class TouchControls {
       e.stopPropagation();
       b.setPointerCapture(e.pointerId);
       b.classList.add('active');
+      buzz(12);
       this.input.pressVirtual(code);
     });
     const release = (e: PointerEvent) => {
@@ -94,6 +109,12 @@ export class TouchControls {
       this.lookId = e.pointerId;
       this.lx = e.clientX;
       this.ly = e.clientY;
+      // Double tap on the look side: the camera swings back behind.
+      if (e.timeStamp - this.lastLookTap < 300) {
+        this.onRecenter?.();
+        buzz(8);
+      }
+      this.lastLookTap = e.timeStamp;
     } else return;
     this.layer.setPointerCapture(e.pointerId);
   }
@@ -103,15 +124,16 @@ export class TouchControls {
       let dx = e.clientX - this.ox;
       let dy = e.clientY - this.oy;
       const d = Math.hypot(dx, dy);
-      if (d > STICK_RADIUS) {
-        dx *= STICK_RADIUS / d;
-        dy *= STICK_RADIUS / d;
+      const R = stickRadius();
+      if (d > R) {
+        dx *= R / d;
+        dy *= R / d;
       }
       this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-      this.input.stickX = dx / STICK_RADIUS;
-      this.input.stickY = -dy / STICK_RADIUS;
+      this.input.stickX = dx / R;
+      this.input.stickY = -dy / R;
     } else if (e.pointerId === this.lookId) {
-      this.input.addLook((e.clientX - this.lx) * LOOK_SENS, (e.clientY - this.ly) * LOOK_SENS);
+      this.input.addLook((e.clientX - this.lx) * lookSens(), (e.clientY - this.ly) * lookSens());
       this.lx = e.clientX;
       this.ly = e.clientY;
     }
