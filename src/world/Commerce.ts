@@ -242,6 +242,16 @@ export function buildCommerce(ctx: BuildContext): Signs {
   const signMat = new THREE.MeshStandardMaterial({ map: atlas.texture, roughness: 0.55 });
   signMat.name = 'signs';
   signMat.userData.castShadow = false;
+  // Lit signs (the Estanco's box sign, photos): the same atlas glowing on its own.
+  const signLit = new THREE.MeshStandardMaterial({
+    map: atlas.texture,
+    emissiveMap: atlas.texture,
+    emissive: '#ffffff',
+    emissiveIntensity: 0.9,
+    roughness: 0.4,
+  });
+  signLit.name = 'signsLit';
+  signLit.userData.castShadow = false;
   // Shop windows: dark reflective glass with a warm interior glow.
   const glass = new THREE.MeshStandardMaterial({
     color: '#141a1f',
@@ -262,7 +272,8 @@ export function buildCommerce(ctx: BuildContext): Signs {
     const st = styleOf(s, h);
     if (s.aw) st.awning = s.aw;
     // The shop front stands on the pavement in front of the wall.
-    const ground = ctx.terrain.heightAt(s.x + Math.sin(s.a) * 1.5, s.z + Math.cos(s.a) * 1.5);
+    // A raised door (s.dy, photos: the Juzgados over its steps) starts at its landing.
+    const ground = ctx.terrain.heightAt(s.x + Math.sin(s.a) * 1.5, s.z + Math.cos(s.a) * 1.5) + (s.dy ?? 0);
     const lb = new LocalBatch(batch, s.x, ground, s.z, s.a);
     const W = s.w;
     const frame = mats.tint(st.frame);
@@ -301,7 +312,11 @@ export function buildCommerce(ctx: BuildContext): Signs {
     const sh = Math.min(0.9, Math.max(0.32, sw / 8));
     const sy = st.front === 'shutter' ? 3.25 + sh / 2 : 2.75 + sh / 2;
     lb.add(B, mats.tint(st.bg), 0, sy, 0.05, 0, sw + 0.1, sh + 0.1, 0.1);
-    lb.addMatrix(signPlane(atlas.cell(s.n, st)), signMat, new THREE.Matrix4().makeScale(sw, sh, 1).setPosition(0, sy, 0.102));
+    lb.addMatrix(
+      signPlane(atlas.cell(s.n, st)),
+      s.lit ? signLit : signMat,
+      new THREE.Matrix4().makeScale(sw, sh, 1).setPosition(0, sy, 0.102),
+    );
 
     // Awning over the shop window.
     if (st.awning && st.front === 'glass') {

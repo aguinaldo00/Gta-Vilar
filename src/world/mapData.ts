@@ -111,6 +111,10 @@ export interface MapShop {
   tr?: 1;
   /** Awning colour (photos). */
   aw?: string;
+  /** Raised door: height of its landing above the street (photos). */
+  dy?: number;
+  /** Lit sign (photos). */
+  lit?: 1;
   /** Point on the wall. */
   x: number;
   z: number;
@@ -158,6 +162,12 @@ export interface MapRoad {
   sw?: number;
   /** Indices of junction vertices. */
   j?: number[];
+  /** Passage under a building: clear height (m). */
+  tp?: number;
+  /** Surface checked on photos (gravel). */
+  sf?: string;
+  /** Bridge structure checked on photos (metal). */
+  bs?: string;
 }
 
 export interface MapPoi {

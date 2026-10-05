@@ -78,7 +78,15 @@
         -54.85,
         -0.635,
         3.0
-      ]
+      ],
+      "_": "Estanco (foto con P): también tiene fachada en la esquina, con cartel luminoso",
+      "back": [
+        16.1,
+        -57.65,
+        -2.37,
+        3.5
+      ],
+      "lit": true
     },
     "Uni-dos Foncal": {
       "front": [
@@ -89,19 +97,38 @@
       ]
     },
     "Casa Arcadio": {
-      "terrace": false
+      "terrace": false,
+      "_": "Casa Arcadio (foto con P): sin terraza en la avenida; su terraza rústica está en la fachada del otro lado, con cristalera al bar",
+      "back": [
+        -51.38,
+        -82.4,
+        -0.756,
+        6
+      ]
     },
     "Las Acacias": {
       "terrace": false,
-      "_": "Calle de las Acacias (fotos): ni Arcadio ni Las Acacias tienen terraza delante; Las Acacias tiene su toldo en el suelo rojo de la esquina hacia el camino del Soto"
+      "_": "Las Acacias (fotos con P): desde la esquina de la Avenida de Julio Danvila y por la fachada del suelo rojo hasta la mitad; sin terraza delante; su toldo de carpa está en el suelo rojo",
+      "front": [
+        -48.35,
+        -104.0,
+        -2.33,
+        10.5
+      ],
+      "back": [
+        -41.15,
+        -106.3,
+        2.386,
+        5.5
+      ]
     },
     "Sierra": {
       "_": "Bar Sierra (fotos): junto a la gasolinera, toldo granate y terraza hacia San Roque; también se entra por Calle Sigifredo Albajara",
       "front": [
-        106.25,
-        -163.65,
+        106.95,
+        -163.2,
         0.82,
-        6
+        7
       ],
       "back": [
         90.1,
@@ -119,6 +146,59 @@
         -126.6,
         -2.335,
         5
+      ]
+    },
+    "Juzgados": {
+      "_": "Juzgados (fotos con P): la entrada da a la Plaza de España, elevada sobre escaleras; por Plaza Mayor solo sale el pasaje",
+      "front": [
+        15.7,
+        -36.05,
+        2.85,
+        6
+      ],
+      "dy": 1.0
+    },
+    "Policlínica Inmáster": {
+      "_": "Policlínica Inmaster (foto con P): en la fachada del suelo rojo, hacia el parque",
+      "front": [
+        -56.9,
+        -95.0,
+        -2.33,
+        9
+      ]
+    },
+    "El Miguillas": {
+      "_": "El Miguillas (foto con P): el local llega hasta la esquina de la Plaza Mayor, con terracita",
+      "front": [
+        -92.55,
+        41.75,
+        0.743,
+        9.4
+      ],
+      "back": [
+        -99.8,
+        37.1,
+        -1.42,
+        8
+      ],
+      "terrace": true
+    },
+    "Pony's": {
+      "_": "Pony's (foto con P): fachada enfrente de la plaza de la fuente",
+      "front": [
+        -44.04,
+        59.9,
+        2.72,
+        4.5
+      ]
+    },
+    "Plaza Mayor 25": {
+      "_": "Tienda Plaza Mayor (foto con P): fachada a la plaza de la fuente",
+      "front": [
+        -58.5,
+        57.45,
+        3.077,
+        5.5
       ]
     }
   },
@@ -255,10 +335,11 @@
     },
     {
       "k": "terrace",
-      "x": -25.1,
+      "x": -22.4,
       "z": 63.0,
-      "a": 2.59,
-      "t": "9.4x8.6"
+      "a": -0.381,
+      "t": "7x5",
+      "_": "Terraza cubierta de Los Hermanos (ortofoto y foto con P): entre la fachada y la calle del Rapa Nui, alineada con los edificios, sin pisar la calzada"
     },
     {
       "_": "Contenedores del Uni-Dos: en el carril junto al bordillo antes de los pilares, viniendo de Calle de Bilbao (foto)",
@@ -290,6 +371,29 @@
         -187.8,
         160.9
       ]
+    },
+    {
+      "_": "Jardinera con ciprés en el centro de la Plaza de España (foto con P)",
+      "k": "cypress",
+      "x": 16.8,
+      "z": -45.4,
+      "a": 0
+    },
+    {
+      "_": "Entrada elevada de los Juzgados: escaleras a la plaza y rampa con barandilla metálica (fotos con P)",
+      "k": "entrance",
+      "x": 15.7,
+      "z": -36.05,
+      "a": 2.85,
+      "t": "1.0,-1"
+    },
+    {
+      "_": "Terraza rústica de Casa Arcadio (foto con P): plataforma, bancos y mesas grandes de madera, cristalera hacia el bar",
+      "k": "woodterrace",
+      "x": -53.17,
+      "z": -80.5,
+      "a": -0.756,
+      "t": "8x4.4"
     }
   ],
   "barriers": [
@@ -479,6 +583,44 @@
         -76.6,
         -91.5
       ]
+    },
+    {
+      "_": "Muro del aparcamiento rojo a lo largo de la Avenida de Julio Danvila (foto con P)",
+      "k": "wall",
+      "h": 0.7,
+      "p": [
+        -1.7,
+        -95.8,
+        -53.0,
+        -144.1
+      ],
+      "cut": true
+    },
+    {
+      "_": "Calle el Soto: murete de piedrecitas junto al camino hacia el pasaje de Calle Santander (fotos con P)",
+      "k": "wall",
+      "h": 0.55,
+      "c": "#a59c8e",
+      "p": [
+        -125.5,
+        -9.8,
+        -131.1,
+        -26.9
+      ],
+      "cut": true
+    },
+    {
+      "_": "Calle el Soto: murete de piedrecitas del otro lado de la calle (fotos con P)",
+      "k": "wall",
+      "h": 0.55,
+      "c": "#a59c8e",
+      "p": [
+        -142.8,
+        -25.8,
+        -127.5,
+        -27.8
+      ],
+      "cut": true
     }
   ],
   "barrierKinds": [
@@ -506,6 +648,14 @@
       ],
       "k": "wall",
       "c": "#9a4b35"
+    },
+    {
+      "_": "Campo de fútbol de El Soto (foto con P y ortofoto): no hay valla alrededor, se pasa libremente",
+      "near": [
+        -244.7,
+        -233.9
+      ],
+      "k": "none"
     }
   ],
   "extraShops": [
@@ -542,6 +692,10 @@
     [
       -1277.0,
       7.5
+    ],
+    [
+      -4.4,
+      35.3
     ]
   ],
   "buildingFixes": [
@@ -642,6 +796,51 @@
         -30.2
       ],
       "fc": "#9e4436"
+    },
+    {
+      "_": "Complejo de la Residencia, Parque de San Roque (foto): un único edificio de ladrillo naranja; tejado y remates grises",
+      "at": [
+        260.57,
+        -429.5
+      ],
+      "fc": "#c4643c",
+      "fs": 3
+    },
+    {
+      "_": "Complejo de la Residencia, Parque de San Roque (foto): un único edificio de ladrillo naranja; tejado y remates grises",
+      "at": [
+        265.27,
+        -434.1
+      ],
+      "fc": "#c4643c",
+      "fs": 3
+    },
+    {
+      "_": "Complejo de la Residencia, Parque de San Roque (foto): un único edificio de ladrillo naranja; tejado y remates grises",
+      "at": [
+        255.71,
+        -424.6
+      ],
+      "fc": "#c4643c",
+      "fs": 3
+    },
+    {
+      "_": "Complejo de la Residencia, Parque de San Roque (foto): un único edificio de ladrillo naranja; tejado y remates grises",
+      "at": [
+        250.92,
+        -419.75
+      ],
+      "fc": "#c4643c",
+      "fs": 3
+    },
+    {
+      "_": "Complejo de la Residencia, Parque de San Roque (foto): un único edificio de ladrillo naranja; tejado y remates grises",
+      "at": [
+        246.37,
+        -415.3
+      ],
+      "fc": "#c4643c",
+      "fs": 3
     }
   ],
   "pitchFixes": [
@@ -704,6 +903,19 @@
         38.4,
         -248.4
       ]
+    },
+    {
+      "_": "Calle Santander es peatonal (foto con P)",
+      "at": [
+        -106.12,
+        29.03
+      ]
+    },
+    {
+      "at": [
+        -103.32,
+        43.63
+      ]
     }
   ],
   "gates": [
@@ -755,6 +967,50 @@
         -60.6,
         -91.1
       ]
+    }
+  ],
+  "ways": [
+    {
+      "_": "Puente de Villacanes (foto con P): de hierro verde oscuro y más ancho que el camino",
+      "near": [
+        -110.0,
+        -829.0
+      ],
+      "w": 5,
+      "bs": "metal"
+    },
+    {
+      "_": "Camino del parque de El Soto (foto con P): de piedras aglomeradas y más ancho",
+      "near": [
+        -145.8,
+        -57.7
+      ],
+      "w": 3,
+      "sf": "gravel"
+    },
+    {
+      "_": "Calle Santander (foto con P): peatonal, de fachada a fachada",
+      "near": [
+        -105.0,
+        30.0
+      ],
+      "w": 7
+    },
+    {
+      "_": "Soportal de los Juzgados a lo largo de la acera de Plaza Mayor, que sale a la Plaza de España junto a la Torre (fotos con P)",
+      "p": [
+        -1.2,
+        -25.5,
+        1.3,
+        -33.4,
+        2.6,
+        -38.6,
+        1.4,
+        -42.9
+      ],
+      "k": "footway",
+      "w": 2.2,
+      "tp": 3.0
     }
   ]
 }

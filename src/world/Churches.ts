@@ -338,7 +338,7 @@ function campanile(ctx: BuildContext, x: number, z: number): void {
  * rectangular doorway with its inscription and the espadaña (bell gable) on
  * the front, as at San Roque (rebuilt in 1784) and San Vicente.
  */
-function ermita(ctx: BuildContext, name: string, bells: number): void {
+function ermita(ctx: BuildContext, name: string, bells: number, plaza = false): void {
   const b = ctx.map.buildings.find((x) => x.n === name);
   if (!b) return;
   const ring = toPts(b.o);
@@ -388,10 +388,49 @@ function ermita(ctx: BuildContext, name: string, bells: number): void {
   lb.add(Unit.box, mats.iron, L / 2 - 0.4, ey + eh + 1.7, 0, 0, 0.1, 1.4, 0.1);
   lb.add(Unit.box, mats.iron, L / 2 - 0.4, ey + eh + 1.9, 0, 0, 0.1, 0.1, 0.7);
   solid(ctx, f, 0, 0, L, W + 1.4, ridge);
+  if (plaza) ermitaPlaza(ctx, f, L, W);
+}
+
+/**
+ * San Roque (photos with P): clipped hedges along both sides of the ermita, and in front of
+ * the door a small paved square with four benches facing each other, a litter bin, and low
+ * stone walls to sit on round its edge, open towards the path.
+ */
+function ermitaPlaza(ctx: BuildContext, f: ReturnType<typeof frame>, L: number, W: number): void {
+  const { lb, rot } = f;
+  const { mats, collision } = ctx;
+  const hedge = mats.tint('#2e5228');
+  const stone = mats.tint('#d9cfb8');
+  const wood = mats.tint('#7a5534');
+  const add = (x: number, z: number, w: number, d: number, h: number, mat: THREE.Material, mask: number = Layer.Solid) => {
+    lb.add(Unit.box, mat, x, h / 2, z, 0, w, h, d);
+    const [wx, wz] = lb.point(x, z);
+    collision.addBox(wx, wz, w, d, { rot: rot, top: h, mask });
+  };
+  // Hedges along the long sides, a metre off the walls.
+  for (const s of [-1, 1]) add(-0.5, s * (W / 2 + 1.4), L - 1.5, 0.8, 1.0, hedge, Layer.Bodies);
+  // The square: 7 m deep, as wide as the front.
+  const x0 = L / 2 + 0.8,
+    x1 = L / 2 + 7.8,
+    hw = Math.max(4, W / 2 + 0.5);
+  lb.add(Unit.box, stone, (x0 + x1) / 2, 0.02, 0, 0, x1 - x0, 0.04, 2 * hw);
+  // Sitting walls on both sides, leaving the front open to the path.
+  for (const s of [-1, 1]) add((x0 + x1) / 2, s * hw, x1 - x0, 0.45, 0.45, stone, Layer.Bodies);
+  // Four benches facing across the square, and the bin by the door.
+  for (const s of [-1, 1])
+    for (const bx of [x0 + 2, x0 + 5]) {
+      const z = s * (hw - 1.1);
+      lb.add(Unit.box, wood, bx, 0.45, z, 0, 1.8, 0.07, 0.45);
+      lb.add(Unit.box, wood, bx, 0.75, z + s * 0.22, 0, 1.8, 0.4, 0.06);
+      for (const lx of [-0.75, 0.75]) lb.add(Unit.box, mats.iron, bx + lx, 0.22, z, 0, 0.06, 0.45, 0.4);
+      const [wx, wz] = lb.point(bx, z);
+      collision.addBox(wx, wz, 1.8, 0.5, { rot, top: 0.5, mask: Layer.Bodies });
+    }
+  lb.add(Unit.cyl, mats.tint('#3b4a3a'), x0 + 0.6, 0.45, hw - 0.6, 0, 0.25, 0.9, 0.25);
 }
 
 export function buildChurches(ctx: BuildContext): void {
   santaMarina(ctx);
-  ermita(ctx, 'Ermita de San Roque', 2);
+  ermita(ctx, 'Ermita de San Roque', 2, true);
   ermita(ctx, 'Ermita de San Vicente', 1);
 }

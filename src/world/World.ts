@@ -259,7 +259,8 @@ export class World {
    * or pavement (sidewalks, squares, the rest of the town).
    */
   surfaceAt(x: number, z: number): 'water' | 'asphalt' | 'gravel' | 'grass' | 'pavement' {
-    if (this.terrain.waterAt(x, z) !== null) return 'water';
+    // On a bridge deck the tyres and feet are on the way, not in the river below it.
+    if (this.terrain.deck(x, z) === -Infinity && this.terrain.waterAt(x, z) !== null) return 'water';
     const road = this.roads.nearest(x, z, 0.5);
     if (road && road.d < 0) {
       const k = road.road.k;

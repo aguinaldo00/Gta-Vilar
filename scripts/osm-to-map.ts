@@ -45,6 +45,8 @@ interface Corrections {
   gates?: { at: [number, number] }[];
   /** Ways under a building checked on photos: clear height and width (a footway that cars use). */
   passages?: { near: [number, number]; tp?: number; w?: number }[];
+  /** Ways checked on photos: a new one (`p`), or the one through `near`; width, kind, passage height, surface. */
+  ways?: { near?: [number, number]; p?: number[]; k?: string; w?: number; tp?: number; sf?: string; bs?: string }[];
   redPaving?: { near?: [number, number]; k?: string; p?: number[] }[];
   extraShops?: { n: string; c: string; x: number; z: number; a: number; w: number }[];
 }
@@ -830,6 +832,10 @@ interface RoadOut {
   b?: 1;
   sw?: number;
   j?: number[];
+  /** Surface checked on photos (gravel: the agglomerated stone paths of El Soto). */
+  sf?: string;
+  /** Bridge structure checked on photos (metal: the dark green iron bridge of Villacanes). */
+  bs?: string;
 }
 const roads: RoadOut[] = [];
 const rails: { p: number[] }[] = [];
@@ -902,6 +908,31 @@ for (const fix of corrections.passages ?? []) {
   if (!best) continue;
   if (fix.tp) best.tp = fix.tp;
   if (fix.w) best.w = fix.w;
+}
+for (const fix of corrections.ways ?? []) {
+  if (fix.p) {
+    roads.push({ p: fix.p, k: fix.k ?? 'footway', w: fix.w ?? 2, ...(fix.tp ? { tp: fix.tp } : {}), ...(fix.sf ? { sf: fix.sf } : {}) });
+    continue;
+  }
+  let best: RoadOut | null = null,
+    bestD = 1.5;
+  for (const r of roads)
+    for (let i = 2; i < r.p.length; i += 2) {
+      const d = segDist(fix.near!, [r.p[i - 2], r.p[i - 1]], [r.p[i], r.p[i + 1]]);
+      if (d < bestD) {
+        bestD = d;
+        best = r;
+      }
+    }
+  if (!best) {
+    console.warn(`ways: nothing at ${fix.near}`);
+    continue;
+  }
+  if (fix.k) best.k = fix.k;
+  if (fix.w) best.w = fix.w;
+  if (fix.tp) best.tp = fix.tp;
+  if (fix.sf) best.sf = fix.sf;
+  if (fix.bs) best.bs = fix.bs;
 }
 
 // ---------------------------------------------------------------- water
@@ -1008,11 +1039,13 @@ for (const fix of corrections.barrierKinds ?? []) {
     let near = false;
     for (let i = 0; i < b.p.length; i += 2) if (Math.hypot(b.p[i] - fix.near[0], b.p[i + 1] - fix.near[1]) < 3) near = true;
     if (!near) continue;
+    // 'none': a barrier the photos and the orthophoto do not show (dropped below).
     b.k = fix.k;
     if (fix.h) b.h = fix.h;
     if (fix.c) b.c = fix.c;
   }
 }
+for (let i = barriers.length - 1; i >= 0; i--) if (barriers[i].k === 'none') barriers.splice(i, 1);
 for (const n of nodes.values()) {
   if (n.tags?.barrier !== 'bollard') continue;
   const p = project(n.lat, n.lon);
@@ -1404,6 +1437,10 @@ interface ShopOut {
   tr?: 1;
   /** Awning colour (photos). */
   aw?: string;
+  /** Raised door (photos). */
+  dy?: number;
+  /** Lit sign (photos). */
+  lit?: 1;
   x: number;
   z: number;
   a: number;
@@ -1602,6 +1639,16 @@ for (const e of corrections.extraShops ?? []) shops.push({ x: e.x, z: e.z, a: e.
 for (const p of polygons) {
   if (p.tags.amenity === 'place_of_worship' || p.tags.amenity === 'townhall' || p.tags.amenity === 'school') continue;
   if (!shopCategory(p.tags) || Math.abs(signedArea(p.outer)) >= 6000) continue;
+  // Keyed by the OSM name or by the label it is shown with (the courthouse area is "Juzgados").
+  const cat0 = shopCategory(p.tags)!;
+  const pfix = (p.tags.name ? corrections.shops?.[p.tags.name] : undefined) ?? corrections.shops?.[shortName(p.tags, cat0.label)];
+  if (pfix?.front) {
+    // A front checked on photos (the Juzgados, mapped as an area): only there.
+    const cat = cat0;
+    const [x, z, a, w] = pfix.front;
+    shops.push({ x, z, a, w, c: cat.c, n: shortName(p.tags, cat.label) });
+    continue;
+  }
   // Frontage: the longest side of the mapped unit.
   let side = 0;
   for (let i = 0; i < p.outer.length; i++) {
@@ -1905,10 +1952,22 @@ for (const [key, f] of Object.entries(corrections.shops ?? {})) {
     if (f.terrace === false) sh.nt = 1;
     if (f.terrace === true && !sh.s) sh.tr = 1;
     if (f.awning) sh.aw = f.awning;
+    if (f.dy && !sh.s) sh.dy = f.dy;
+    if (f.lit) sh.lit = 1;
   }
   if (f.back && mine.length) {
     const [x, z, a, w] = f.back;
-    shops.push({ s: 1, x, z, a, w, c: mine[0].c, n: name, ...(f.awning ? { aw: f.awning } : {}) });
+    shops.push({ s: 1, x, z, a, w, c: mine[0].c, n: name, ...(f.awning ? { aw: f.awning } : {}), ...(f.lit ? { lit: 1 } : {}) });
+  }
+}
+
+// The same business mapped twice (two "Las Acacias" nodes) with a checked front: one sign.
+{
+  const seen = new Set<string>();
+  for (let i = shops.length - 1; i >= 0; i--) {
+    const k = `${shops[i].n}|${shops[i].x}|${shops[i].z}`;
+    if (seen.has(k)) shops.splice(i, 1);
+    else seen.add(k);
   }
 }
 

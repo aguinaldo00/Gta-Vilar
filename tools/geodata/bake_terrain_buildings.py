@@ -453,7 +453,7 @@ def apply_fixes(m, corr):
             print(f"buildingFixes: nothing at {f['at']}")
             continue
         b = min(hits, key=lambda b: Polygon(list(zip(b["o"][0::2], b["o"][1::2]))).area)
-        for k in ("t", "rc", "ch", "face", "tent"):
+        for k in ("t", "rc", "ch", "face", "tent", "fs"):
             if k in f:
                 b[k] = f[k]
         # Facade colour seen in the photos ("#rrggbb"), over the cadastre photo's.
@@ -478,14 +478,50 @@ def apply_fixes(m, corr):
         m["cars"] = [v for i in range(0, len(c), 4) if not any((c[i] - x) ** 2 + (c[i + 1] - z) ** 2 < 4 for x, z in drop) for v in c[i : i + 4]]
     return nb, na
 
+def add_outline_rests(m):
+    """An outline drawn through its parts (hp) whose parts leave some of it uncovered (the apse
+    and east wing of Santa Marina): the rest becomes a part of its own, measured like the others,
+    so no wall goes missing."""
+    from shapely.ops import unary_union
+    from shapely.strtree import STRtree
+
+    def poly(b):
+        return Polygon(list(zip(b["o"][0::2], b["o"][1::2]))).buffer(0)
+
+    parts = [poly(b) for b in m["buildings"] if b.get("part")]
+    tree = STRtree(parts) if parts else None
+    added = []
+    for b in m["buildings"]:
+        if not b.get("hp") or tree is None:
+            continue
+        o = poly(b)
+        mine = [parts[j] for j in tree.query(o) if parts[j].intersection(o).area > 0.5 * parts[j].area]
+        if not mine:
+            continue
+        rest = o.difference(unary_union(mine).buffer(0.3)).buffer(-0.5).buffer(0.5)
+        for g in getattr(rest, "geoms", [rest]):
+            if g.is_empty or g.area < 15 or g.buffer(-1.5).is_empty:
+                continue
+            g = g.simplify(0.3)
+            ring = [round(v, 2) for x, z in list(g.exterior.coords)[:-1] for v in (x, z)]
+            nb = {"o": ring, "t": "house" if b.get("t") == "church" else b.get("t", "house"), "part": 1, "src": "rest"}
+            for k in ("lv", "fs", "fc", "cref", "year", "use"):
+                if k in b:
+                    nb[k] = b[k]
+            added.append(nb)
+    m["buildings"].extend(added)
+    return len(added)
+
+
 def main(map_path, lidar_path, mdt_path):
     global LIDAR
     m, lid, mdt, mdt_geo = load_inputs(map_path, lidar_path, mdt_path)
     LIDAR = lid
     # Start from the OSM-only buildings (re-runs must not stack LiDAR additions).
-    m["buildings"] = [b for b in m["buildings"] if b.get("src") != "lidar" and not b.get("gf")]
+    m["buildings"] = [b for b in m["buildings"] if b.get("src") not in ("lidar", "rest") and not b.get("gf")]
     for b in m["buildings"]:
         b.pop("lift", None)
+    n_rest = add_outline_rests(m)
     dtm, covered = merged_dtm(m, lid, mdt, mdt_geo)
     dtm, street_share = smooth_streets(m, dtm)
     minX, minZ, W, H = game_grid(m)
@@ -571,6 +607,7 @@ def main(map_path, lidar_path, mdt_path):
     print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges; {len(hedges)} hedges from the canopy; {n_green} walls/fences that the orthophoto shows green turned into hedges; {n_pruned} dropped on bridges, the river or carriageways")
     print(f"parked cars seen by the LiDAR: {n_cars}")
     print(f"facades: {f_matched} footprints matched to the cadastre, {f_photo} coloured from its facade photo")
+    print(f"outline rests: {n_rest} parts added where an outline's parts left it uncovered")
     print(f"roofs: {n_roofs} for {n_foot} footprints ({roof_stats}); shared walls shown again: {shown}; buildings opened over passages: {passages}")
     print(f"terrain {m['meta']['terrain']['cols']}x{m['meta']['terrain']['rows']} -> {out_png} ({os.path.getsize(out_png) // 1024} KB)")
 

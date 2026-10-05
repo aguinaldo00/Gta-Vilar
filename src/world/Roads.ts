@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { Layer } from '../physics/PhysicsWorld';
-import { CHUNK } from './Batcher';
+import { CHUNK, LocalBatch } from './Batcher';
 import type { BuildContext } from './context';
 import { type Pt, type Segment, SpatialGrid, segBounds, segDist, segmentsOf, subdivideTris, toPts, triangulate } from './geo';
 import type { MapData, MapRoad } from './mapData';
+import { Unit } from './props';
 
 export const VEHICLE_ROADS = new Set([
   'motorway',
@@ -309,7 +310,8 @@ export function buildRoads(ctx: BuildContext): void {
     // Layer heights keep junction overlaps free of z-fighting: paths < sidewalks < paving < asphalt < paint.
     const roadY = 0.05 + rank * 0.004;
     if (r.sw && !bridge) sidewalks(sidewalk, kerbs, pts, r.w / 2, SIDEWALK_W, ground(roadY), onCarriageway);
-    if (ASPHALT.has(r.k)) ribbon(asphalt, pts, r.w / 2, h(roadY));
+    if (r.sf === 'gravel') ribbon(gravel, pts, r.w / 2, h(0.03));
+    else if (ASPHALT.has(r.k)) ribbon(asphalt, pts, r.w / 2, h(roadY));
     else if (PAVED.has(r.k)) ribbon(paving, pts, r.w / 2, h(0.04));
     else if (r.k === 'viaverde') ribbon(gravel, pts, r.w / 2, h(0.025));
     else ribbon(dirt, pts, r.w / 2, h(0.02));
@@ -397,6 +399,10 @@ function buildBridge(ctx: BuildContext, r: MapRoad, pts: Pt[]): void {
   if (!overWater) return;
   const vehicle = VEHICLE_ROADS.has(r.k) || r.k === 'track';
   const wood = !vehicle;
+  if (r.bs === 'metal') {
+    metalBridge(ctx, r, pts);
+    return;
+  }
   for (let i = 1; i < pts.length; i++) {
     const [ax, az] = pts[i - 1],
       [bx, bz] = pts[i];
@@ -429,6 +435,47 @@ function buildBridge(ctx: BuildContext, r: MapRoad, pts: Pt[]): void {
     for (const [x, z] of [pts[0], pts[pts.length - 1]]) {
       const y = terrain.heightAt(x, z);
       collision.addCircle(x, z, r.w / 2 + 0.2, { bottom: y - 1, top: y + 1, mask: Layer.Vehicle, absolute: true });
+    }
+  }
+}
+
+/**
+ * Iron bridge (Villacanes, from the photos): a deck on steel girders and, on each side,
+ * a dark green lattice parapet of posts, top and bottom rails and crossed diagonals.
+ */
+function metalBridge(ctx: BuildContext, r: MapRoad, pts: Pt[]): void {
+  const { batch, mats, terrain, collision } = ctx;
+  const green = mats.tint('#23402e');
+  const deckMat = mats.tint('#5d5f5c');
+  const ph = 1.1;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, az] = pts[i - 1],
+      [bx, bz] = pts[i];
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 0.1) continue;
+    const mx = (ax + bx) / 2,
+      mz = (az + bz) / 2;
+    const rot = Math.atan2(bx - ax, bz - az);
+    const deck = terrain.deck(mx, mz) > -Infinity ? terrain.deck(mx, mz) : terrain.heightAt(mx, mz);
+    const lb = new LocalBatch(batch, mx, deck, mz, rot);
+    lb.add(Unit.box, deckMat, 0, -0.12, 0, 0, r.w + 0.3, 0.24, len);
+    for (const gx of [-r.w / 3, 0, r.w / 3]) lb.add(Unit.box, green, gx, -0.55, 0, 0, 0.25, 0.65, len);
+    for (const side of [-1, 1]) {
+      const x = side * (r.w / 2 + 0.05);
+      lb.add(Unit.box, green, x, ph, 0, 0, 0.12, 0.1, len);
+      lb.add(Unit.box, green, x, 0.12, 0, 0, 0.12, 0.14, len);
+      const n = Math.max(1, Math.round(len / 1.6));
+      const step = len / n;
+      for (let k = 0; k <= n; k++) lb.add(Unit.box, green, x, ph / 2, -len / 2 + k * step, 0, 0.1, ph, 0.1);
+      const diag = Math.hypot(step, ph - 0.2),
+        tilt = Math.atan2(ph - 0.2, step);
+      for (let k = 0; k < n; k++) {
+        const z = -len / 2 + (k + 0.5) * step;
+        lb.add(Unit.box, green, x, ph / 2 + 0.05, z, 0, 0.05, 0.05, diag, tilt);
+        lb.add(Unit.box, green, x, ph / 2 + 0.05, z, 0, 0.05, 0.05, diag, -tilt);
+      }
+      const [cx, cz] = lb.point(x, 0);
+      collision.addBox(cx, cz, 0.2, len, { rot, bottom: deck - 1, top: deck + ph, mask: Layer.Solid, absolute: true });
     }
   }
 }

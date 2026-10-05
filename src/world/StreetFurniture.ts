@@ -359,6 +359,114 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         lb.add(Unit.blob, mats.flowers, 0, 0.92, 0, 0, 0.45, 0.25, 0.45);
         collision.addBox(f.x, f.z, 1.3, 1.3, { rot: f.a, top: 0.6, mask: Layer.Bodies });
         break;
+      case 'cypress': {
+        // Round stone planter with a tall clipped cypress (the middle of the Plaza de España).
+        lb.add(Unit.cyl16, mats.stone, 0, 0.3, 0, 0, 2.6, 0.6, 2.6);
+        lb.add(Unit.cyl16, mats.tint('#4a3a2a'), 0, 0.58, 0, 0, 2.3, 0.06, 2.3);
+        lb.add(Unit.cyl, mats.tint('#4a3426'), 0, 1.0, 0, 0, 0.18, 1.0, 0.18);
+        lb.add(new THREE.ConeGeometry(0.75, 5.5, 10), mats.tint('#2c4a2a'), 0, 3.6, 0);
+        lb.add(Unit.sphere, mats.tint('#2c4a2a'), 0, 1.15, 0, 0, 1.45, 0.9, 1.45);
+        collision.addCircle(f.x, f.z, 1.3, { top: 0.6, mask: Layer.Solid });
+        break;
+      }
+      case 'entrance': {
+        // Raised entrance (the Juzgados, photos with P): landing of height H against the wall
+        // (local +z out of the facade), steps down to the square in front, a ramp alongside
+        // it with a small metal railing, and a railing round the open edges of the landing.
+        // t = "H" or "H,side": side -1 puts the ramp on the other hand of the steps.
+        const [hs, ss] = (f.t ?? '1').split(',');
+        const H = Number.parseFloat(hs) || 1;
+        const sd = ss === '-1' ? -1 : 1;
+        const stone = mats.tint('#cfc6b4');
+        const rail = mats.tint('#3c4044');
+        const solid = (x: number, z: number, w: number, d: number, top: number) => {
+          const [wx, wz] = lb.point(sd * x, z);
+          collision.addBox(wx, wz, w, d, { rot: f.a, top, mask: Layer.Solid });
+        };
+        // Landing: u in [-2.5, 3.5], n in [0, 2.6].
+        lb.add(B, stone, sd * 0.5, H / 2, 1.3, 0, 6, H, 2.6);
+        solid(0.5, 1.3, 6, 2.6, H);
+        // Steps down in front of the door, u in [-2.5, 1.5].
+        const n = Math.max(2, Math.round(H / 0.18));
+        const rise = H / n,
+          tread = 0.32;
+        for (let k = 0; k < n - 1; k++) {
+          const top = H - rise * (k + 1);
+          const z = 2.6 + tread * (k + 0.5);
+          lb.add(B, stone, sd * -0.5, top / 2, z, 0, 4, top, tread);
+          solid(-0.5, z, 4, tread, top);
+        }
+        // Ramp beside it, along the facade, from the landing (u 3.5) down to u 9.5.
+        const rl = 6,
+          slope = Math.atan2(H, rl);
+        lb.add(B, stone, sd * (3.5 + rl / 2), H / 2 - 0.05, 2.0, 0, Math.hypot(rl, H), 0.12, 1.2, 0, -sd * slope);
+        for (let k = 0; k < 6; k++) {
+          const x = 3.5 + (rl * (k + 0.5)) / 6;
+          const top = H * (1 - (k + 0.5) / 6);
+          lb.add(B, stone, sd * x, top / 2 - 0.05, 2.0, 0, rl / 6, top, 1.1);
+          solid(x, 2.0, rl / 6, 1.2, top);
+        }
+        // Railings: along the ramp's outer edge, and the landing's edge beside the steps.
+        const railRun = (ax: number, y0: number, bx: number, y1: number, z: number) => {
+          const x0 = sd * ax,
+            x1 = sd * bx;
+          const len = Math.hypot(x1 - x0, y1 - y0),
+            tilt = Math.atan2(y1 - y0, x1 - x0);
+          lb.add(B, rail, (x0 + x1) / 2, (y0 + y1) / 2 + 0.95, z, 0, len, 0.05, 0.05, 0, tilt);
+          const posts = Math.max(1, Math.round(len / 1.2));
+          for (let k = 0; k <= posts; k++) {
+            const t = k / posts;
+            lb.add(B, rail, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t + 0.475, z, 0, 0.05, 0.95, 0.05);
+          }
+          const [wx, wz] = lb.point((x0 + x1) / 2, z);
+          collision.addBox(wx, wz, len, 0.1, { rot: f.a, top: Math.max(y0, y1) + 1, mask: Layer.Player });
+        };
+        railRun(3.5, H, 3.5 + rl, 0, 2.6);
+        railRun(1.5, H, 3.5, H, 2.6);
+        // Edge of the landing on the far side of the steps.
+        lb.add(B, rail, sd * -2.5, H + 0.95, 1.3, 0, 0.05, 0.05, 2.6);
+        for (const z of [0.2, 1.3, 2.5]) lb.add(B, rail, sd * -2.5, H + 0.475, z, 0, 0.05, 0.95, 0.05);
+        break;
+      }
+      case 'woodterrace': {
+        // Rustic bar terrace (Casa Arcadio, photos with P): a timber deck against the bar's
+        // glazed front (local -z), a glass screen round its open sides with a gap to get in,
+        // and big wooden tables with benches. t = "WxD".
+        const [tw, td] = (f.t ?? '8x4.4').split('x').map(Number);
+        const timber = mats.tint('#8a6440');
+        const dark = mats.tint('#5e4129');
+        const deck = 0.25;
+        lb.add(B, timber, 0, deck / 2, 0, 0, tw, deck, td);
+        for (let x = -tw / 2 + 0.15; x < tw / 2; x += 0.3) lb.add(B, dark, x, deck + 0.005, 0, 0, 0.02, 0.01, td);
+        collision.addBox(f.x, f.z, tw, td, { rot: f.a, top: deck, mask: Layer.Solid });
+        const glass = mats.galeria;
+        const frameM = mats.tint('#3a2a1c');
+        const screen = (x: number, z: number, w: number, d: number) => {
+          lb.add(B, glass, x, deck + 0.75, z, 0, w, 1.3, d);
+          lb.add(B, frameM, x, deck + 1.42, z, 0, w + 0.04, 0.06, d + 0.04);
+          const [wx, wz] = lb.point(x, z);
+          collision.addBox(wx, wz, Math.max(w, 0.1), Math.max(d, 0.1), { rot: f.a, top: deck + 1.4, mask: Layer.Player });
+        };
+        // Front screen in two halves with a 1.4 m opening, and both ends.
+        const half = (tw - 1.4) / 2;
+        screen(-tw / 2 + half / 2, td / 2, half, 0.05);
+        screen(tw / 2 - half / 2, td / 2, half, 0.05);
+        for (const sx of [-1, 1]) screen((sx * tw) / 2, 0, 0.05, td);
+        // Tables with a bench on each side, across the deck.
+        const n = Math.max(1, Math.floor((tw - 0.6) / 2.6));
+        for (let i = 0; i < n; i++) {
+          const x = -tw / 2 + 0.3 + (tw - 0.6) * ((i + 0.5) / n);
+          lb.add(B, timber, x, deck + 0.75, -0.2, 0, 0.9, 0.08, 2.0);
+          for (const lz of [-0.95, 0.55]) lb.add(B, dark, x, deck + 0.37, lz, 0, 0.8, 0.74, 0.1);
+          for (const bx of [-0.75, 0.75]) {
+            lb.add(B, timber, x + bx, deck + 0.45, -0.2, 0, 0.3, 0.06, 2.0);
+            lb.add(B, dark, x + bx, deck + 0.22, -0.2, 0, 0.25, 0.44, 0.1);
+          }
+          const [wx, wz] = lb.point(x, -0.2);
+          collision.addBox(wx, wz, 2.0, 2.0, { rot: f.a, top: deck + 0.8, mask: Layer.Bodies });
+        }
+        break;
+      }
       case 'fountain':
         lb.add(Unit.cyl, mats.stone, 0, 0.45, 0, 0, 0.35, 0.9, 0.35);
         lb.add(B, mats.ironGreen, 0, 0.95, 0.12, 0, 0.06, 0.06, 0.25);
