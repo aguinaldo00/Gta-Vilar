@@ -246,8 +246,18 @@ export interface MapData {
   weirs: { p: Coords; n?: string }[];
   /** Flat [x, z, ...]. */
   trees: number[];
-  /** Trees found in the LiDAR canopy: flat [x, z, height, crown radius, ...] (metres). */
+  /**
+   * Trees found in the LiDAR canopy: flat [x, z, height, crown radius, species, tint, ...] (metres;
+   * species codes in src/world/TreeSpecies.ts; tint = crown colour from the orthophoto, 0xRRGGBB).
+   * Older maps have 4 values per tree (`ltreeStride` absent).
+   */
   ltrees?: number[];
+  /** Values per tree in `ltrees` (4 or 6). */
+  ltreeStride?: number;
+  /** Mapped species of OSM trees: flat [x, z, species code, ...]. */
+  treeSpecies?: number[];
+  /** Shrubs (OSM natural=shrub, pampas grass, and low crowns in the LiDAR): flat [x, z, code, height, ...]. */
+  shrubs?: number[];
   /** Conifers (leaf_type=needleleaved), flat [x, z, ...]. */
   pines: number[];
   lamps: number[];

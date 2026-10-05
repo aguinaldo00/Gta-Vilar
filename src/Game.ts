@@ -130,7 +130,7 @@ export class Game {
       quality.pixelRatio = Math.min(quality.pixelRatio, 1);
       quality.shadowMapSize = Math.min(quality.shadowMapSize, 512);
       quality.drawDistance = Math.min(quality.drawDistance, 300);
-      quality.treeBudget = Math.min(quality.treeBudget, 1000);
+      quality.treeBudget = Math.min(quality.treeBudget, 3500);
       quality.grassRadius = Math.min(quality.grassRadius, 14);
       quality.groundTexture = Math.min(quality.groundTexture, 1024);
     }

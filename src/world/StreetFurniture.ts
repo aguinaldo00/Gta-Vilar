@@ -315,6 +315,18 @@ export function buildStreetFurniture(ctx: BuildContext): void {
     collision.addCircle(f.x, f.z, 0.08, { top: h, mask: Layer.Player });
   };
 
+  // Light street furniture a car knocks over (Breakables): parts as [key, geometry, material, x, y, z, sx, sy, sz].
+  type Part = [string, THREE.BufferGeometry, THREE.Material, number, number, number, number, number, number];
+  const breakable = (f: MapFurniture, r: number, parts: Part[]) =>
+    ctx.breakables.add(
+      f.x,
+      terrain.heightAt(f.x, f.z),
+      f.z,
+      f.a,
+      r,
+      parts.map(([key, geo, mat, x, y, z, sx, sy, sz]) => ({ key, geo, mat, local: mtx(x, y, z, sx, sy, sz) })),
+    );
+
   for (const f of ctx.map.furniture ?? []) {
     const lb = at(f);
     switch (f.k) {
@@ -478,10 +490,16 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         lb.add(Unit.cyl, mats.tint('#d8c21a'), 0, 0.45, 0, 0, 0.32, 0.06, 0.32, 0, Math.PI / 2);
         break;
       case 'info': {
+        // Information panel on two wooden legs: a car knocks it over.
         const cell: SignCell = f.t === 'map' ? 'map' : 'board';
-        for (const x of [-0.6, 0.6]) lb.add(B, mats.wood, x, 0.8, 0, 0, 0.1, 1.6, 0.1);
-        lb.add(quads[cell], signMat, 0, 1.25, 0.06, 0, 1.2, f.t === 'guidepost' ? 0.4 : 0.9, 1);
-        lb.add(B, mats.wood, 0, 1.25, 0.02, 0, 1.3, f.t === 'guidepost' ? 0.45 : 1.0, 0.06);
+        const ph = f.t === 'guidepost' ? 0.4 : 0.9;
+        breakable(f, 0.7, [
+          ['info-leg', B, mats.wood, -0.6, 0.8, 0, 0.1, 1.6, 0.1],
+          ['info-leg', B, mats.wood, 0.6, 0.8, 0, 0.1, 1.6, 0.1],
+          [`info-${cell}-${ph}`, quads[cell], signMat, 0, 1.25, 0.06, 1.2, ph, 1],
+          [`info-back-${ph}`, B, mats.wood, 0, 1.25, 0.02, 1.3, ph + 0.05, 0.06],
+        ]);
+        collision.addBox(f.x, f.z, 1.3, 0.15, { rot: f.a, top: 1.8, mask: Layer.Player });
         break;
       }
       case 'camera':
@@ -498,9 +516,12 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         lb.add(B, mats.tint('#0b2d63'), 0, 1.12, 0.2, 0, 0.3, 0.08, 0.02);
         break;
       case 'aed':
-        post(lb, 1.9, 0.04);
-        lb.add(B, mats.tint('#00843d'), 0, 1.2, 0.08, 0, 0.45, 0.6, 0.18);
-        lb.add(quads.aed, signMat, 0, 1.85, 0.06, 0, 0.4, 0.4, 1);
+        breakable(f, 0.25, [
+          ['aed-post', Unit.cyl, grey, 0, 0.95, 0, 0.08, 1.9, 0.08],
+          ['aed-box', B, mats.tint('#00843d'), 0, 1.2, 0.08, 0.45, 0.6, 0.18],
+          ['aed-sign', quads.aed, signMat, 0, 1.85, 0.06, 0.4, 0.4, 1],
+        ]);
+        collision.addCircle(f.x, f.z, 0.2, { top: 1.9, mask: Layer.Player });
         break;
       case 'charger':
         lb.add(B, mats.white, 0, 0.75, 0, 0, 0.45, 1.5, 0.3);
@@ -514,11 +535,11 @@ export function buildStreetFurniture(ctx: BuildContext): void {
         // Stacked direction plates on two posts.
         const lines = (f.t ?? '').split('|').filter(Boolean);
         const top = 1.0 + lines.length * 0.42;
-        for (const x of [-0.9, 0.9]) lb.add(Unit.cyl, grey, x, (top + 0.1) / 2, 0, 0, 0.08, top + 0.1, 0.08);
-        lines.forEach((line, i) => {
-          lb.add(Unit.box, directionPlate(line), 0, top - 0.2 - i * 0.42, 0.06, 0, 2.2, 0.36, 0.03);
-        });
-        collision.addBox(f.x, f.z, 2.0, 0.2, { rot: f.a, top, mask: Layer.Bodies });
+        breakable(f, 1.0, [
+          ...[-0.9, 0.9].map((x): Part => [`dir-post-${top}`, Unit.cyl, grey, x, (top + 0.1) / 2, 0, 0.08, top + 0.1, 0.08]),
+          ...lines.map((line, i): Part => [`dir-${line}`, Unit.box, directionPlate(line), 0, top - 0.2 - i * 0.42, 0.06, 2.2, 0.36, 0.03]),
+        ]);
+        collision.addBox(f.x, f.z, 2.0, 0.2, { rot: f.a, top, mask: Layer.Player });
         break;
       }
       case 'milestone': {

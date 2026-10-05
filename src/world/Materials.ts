@@ -376,7 +376,7 @@ vec2 storeyCell(vec2 uv) {
 }
 
 /** Crowns bend with the wind: displacement grows with height above the trunk, phase varies per tree. */
-function windSway(m: Lambert): Lambert {
+export function windSway<M extends THREE.Material>(m: M): M {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = waterTime;
     shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;').replace(

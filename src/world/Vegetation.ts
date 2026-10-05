@@ -4,11 +4,9 @@ import { Layer } from '../physics/PhysicsWorld';
 import type { BuildContext } from './context';
 import { NIGHT } from './DayNight';
 import { hash01, type Pt, pointInRing, ringBounds, ringDist, SpatialGrid, toPts } from './geo';
-import { bench, planeTree, Unit } from './props';
+import { bench, Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
-
-type Kind = 'round' | 'poplar' | 'pine';
-const INSTANCE_CELL = 384;
+import { TreeField } from './TreeField';
 
 /** Merged unit geometry with baked vertex colours. */
 function coloured(parts: [THREE.BufferGeometry, string][]): THREE.BufferGeometry {
@@ -27,115 +25,6 @@ function coloured(parts: [THREE.BufferGeometry, string][]): THREE.BufferGeometry
   });
   return mergeGeometries(geos)!;
 }
-
-/** Re-maps a geometry's UVs into the bark strip of the tree atlas. */
-function bark(g: THREE.BufferGeometry): THREE.BufferGeometry {
-  const uv = g.attributes.uv as THREE.BufferAttribute;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.82 + uv.getX(i) * 0.16, uv.getY(i));
-  return g.index ? g.toNonIndexed() : g;
-}
-
-/**
- * Tree as one geometry for one material: bark trunk and branches plus a crown
- * of randomly oriented leaf cards. Card normals point away from the crown
- * centre so the crown shades like a soft volume, not like flat planes.
- */
-function leafTree(
-  seed: number,
-  trunkH: number,
-  trunkR: number,
-  crown: THREE.Vector3,
-  radii: THREE.Vector3,
-  cards: number,
-  size: number,
-): THREE.BufferGeometry {
-  let r = seed;
-  const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
-  const parts: THREE.BufferGeometry[] = [
-    bark(new THREE.CylinderGeometry(trunkR * 0.6, trunkR, trunkH, 6, 1, true).translate(0, trunkH / 2, 0)),
-  ];
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2 + rnd();
-    const len = Math.min(radii.x, radii.y) * 0.9;
-    const b = new THREE.CylinderGeometry(trunkR * 0.25, trunkR * 0.45, len, 4, 1, true).translate(0, len / 2, 0);
-    b.rotateZ(0.7 + rnd() * 0.3)
-      .rotateY(a)
-      .translate(0, trunkH * 0.85, 0);
-    parts.push(bark(b));
-  }
-  const o = new THREE.Object3D();
-  for (let i = 0; i < cards; i++) {
-    // Point inside the crown ellipsoid, biased to its surface.
-    const u = rnd() * 2 - 1,
-      phi = rnd() * Math.PI * 2,
-      k = 0.55 + rnd() * 0.45;
-    const sq = Math.sqrt(1 - u * u);
-    o.position.set(crown.x + sq * Math.cos(phi) * radii.x * k, crown.y + u * radii.y * k, crown.z + sq * Math.sin(phi) * radii.z * k);
-    o.rotation.set((rnd() - 0.5) * 0.9, rnd() * Math.PI, (rnd() - 0.5) * 0.6);
-    o.scale.setScalar(size * (0.8 + rnd() * 0.4));
-    o.updateMatrix();
-    const card = new THREE.PlaneGeometry(1, 1);
-    const uv = card.attributes.uv as THREE.BufferAttribute;
-    for (let j = 0; j < uv.count; j++) uv.setX(j, uv.getX(j) * 0.75);
-    card.applyMatrix4(o.matrix);
-    const pos = card.attributes.position as THREE.BufferAttribute;
-    const nrm = card.attributes.normal as THREE.BufferAttribute;
-    for (let j = 0; j < pos.count; j++) {
-      const n = new THREE.Vector3(pos.getX(j) - crown.x, (pos.getY(j) - crown.y) * 0.6 + radii.y * 0.4, pos.getZ(j) - crown.z).normalize();
-      nrm.setXYZ(j, n.x, n.y, n.z);
-    }
-    parts.push(card.toNonIndexed());
-  }
-  return mergeGeometries(parts)!;
-}
-
-/** Conifer: tall bare trunk and tiers of drooping leaf cards narrowing to the top. */
-function pineTree(): THREE.BufferGeometry {
-  let r = 41;
-  const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
-  const parts: THREE.BufferGeometry[] = [bark(new THREE.CylinderGeometry(0.12, 0.3, 11, 6, 1, true).translate(0, 5.5, 0))];
-  const o = new THREE.Object3D();
-  const tiers = 6;
-  for (let t = 0; t < tiers; t++) {
-    const y = 4.2 + t * 1.25,
-      rad = 2.6 * (1 - t / tiers) + 0.4;
-    const n = 5 - Math.floor(t / 2);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + rnd();
-      o.position.set(Math.cos(a) * rad * 0.55, y, Math.sin(a) * rad * 0.55);
-      o.rotation.set(-1.15 + rnd() * 0.3, -a + Math.PI / 2, 0, 'YXZ');
-      o.scale.set(rad * 1.3, rad * 1.1, 1);
-      o.updateMatrix();
-      const card = new THREE.PlaneGeometry(1, 1);
-      const uv = card.attributes.uv as THREE.BufferAttribute;
-      for (let j = 0; j < uv.count; j++) uv.setX(j, uv.getX(j) * 0.75);
-      card.applyMatrix4(o.matrix);
-      const pos = card.attributes.position as THREE.BufferAttribute,
-        nrm = card.attributes.normal as THREE.BufferAttribute;
-      for (let j = 0; j < pos.count; j++) {
-        const nv = new THREE.Vector3(pos.getX(j), 1.2, pos.getZ(j)).normalize();
-        nrm.setXYZ(j, nv.x, nv.y, nv.z);
-      }
-      parts.push(card.toNonIndexed());
-    }
-  }
-  return mergeGeometries(parts)!;
-}
-
-/** Approximate height of each model at scale 1 (to fit LiDAR tree heights). */
-const MODEL_HEIGHT: Record<Kind, number> = { round: 7.4, poplar: 12.4, pine: 12.5 };
-
-/** Instance tint per model (pines are darker and bluer). */
-const TINT: Record<Kind, [number, number, number]> = { round: [1, 1, 1], poplar: [1, 1, 1], pine: [0.5, 0.68, 0.58] };
-
-/** Tree models; `cards` scales the crown (fewer, larger leaf cards on phones). */
-const MODELS: Record<Kind, (cards: number) => THREE.BufferGeometry> = {
-  pine: pineTree,
-  round: (k) =>
-    leafTree(11, 2.9, 0.28, new THREE.Vector3(0, 5.0, 0), new THREE.Vector3(2.8, 2.4, 2.8), Math.round(18 * k), 3.3 / Math.sqrt(k)),
-  poplar: (k) =>
-    leafTree(23, 3.0, 0.22, new THREE.Vector3(0, 7.6, 0), new THREE.Vector3(1.7, 4.8, 1.7), Math.round(18 * k), 2.5 / Math.sqrt(k)),
-};
 
 /** Street lamp: batched as static geometry (cheap, and it shares the props draw call). */
 const LAMP = (): THREE.BufferGeometry =>
@@ -203,28 +92,26 @@ function plazaFurniture(ctx: BuildContext, plazas: Pt[][]): void {
   }
 }
 
-const DENSITY: Record<string, { per: number; kind: Kind | 'mix' }> = {
-  forest: { per: 90, kind: 'mix' },
-  park: { per: 260, kind: 'mix' },
-  garden: { per: 220, kind: 'round' },
-  orchard: { per: 60, kind: 'round' },
-  scrub: { per: 90, kind: 'round' },
-  cemetery: { per: 400, kind: 'poplar' },
+const DENSITY: Record<string, { per: number; code: number | 'mix' }> = {
+  forest: { per: 90, code: 'mix' },
+  park: { per: 260, code: 'mix' },
+  garden: { per: 220, code: 0 },
+  orchard: { per: 60, code: 18 },
+  scrub: { per: 90, code: 0 },
+  cemetery: { per: 400, code: 16 },
 };
 
+/** Within this distance of the town centre, small trees and shrubs are breakables (where cars go). */
+const BREAKABLE_RADIUS = 1300;
+
 /**
- * Trees from OSM (natural=tree, tree rows) plus forest/park infill, street
- * lamps and benches at their real positions. Repeated models are drawn with
- * one InstancedMesh per model and chunk.
+ * Trees (every crown the LiDAR saw, with its species and crown colour from the bake),
+ * shrubs, street lamps and benches at their real positions. Returns the tree field, whose
+ * update() switches distant squares to the light tree model.
  */
-export function buildVegetation(ctx: BuildContext): void {
-  const { collision, terrain, roads, rng } = ctx;
-  const instances = new Map<string, { kind: Kind; mats: THREE.Matrix4[] }>();
-  const m = new THREE.Matrix4(),
-    q = new THREE.Quaternion(),
-    s = new THREE.Vector3(),
-    p = new THREE.Vector3(),
-    up = new THREE.Vector3(0, 1, 0);
+export function buildVegetation(ctx: BuildContext): TreeField {
+  const { terrain, roads, rng } = ctx;
+  const field = new TreeField(ctx);
 
   // Footprints of buildings, to keep infill trees out of houses.
   const footprints = new SpatialGrid<Pt[]>(40);
@@ -238,15 +125,6 @@ export function buildVegetation(ctx: BuildContext): void {
     (roads.nearest(x, z, clearance)?.d ?? Infinity) < clearance ||
     terrain.base(x, z) < -0.15;
 
-  const place = (kind: Kind, x: number, z: number, scale: number, collide = true) => {
-    const key = `${kind}|${Math.floor(x / INSTANCE_CELL)}|${Math.floor(z / INSTANCE_CELL)}`;
-    let e = instances.get(key);
-    if (!e) instances.set(key, (e = { kind, mats: [] }));
-    q.setFromAxisAngle(up, hash01(x, z) * Math.PI * 2);
-    e.mats.push(m.compose(p.set(x, terrain.heightAt(x, z), z), q, s.setScalar(scale)).clone());
-    if (collide) collision.addCircle(x, z, 0.35 * scale, { top: 6 * scale, mask: Layer.Bodies });
-  };
-
   // Plaza Mayor: pollarded plane trees, like in the photos.
   const plazas = ctx.map.areas.filter((a) => a.k === 'pedestrian' && a.n === 'Plaza Mayor').map((a) => toPts(a.o));
   const inPlaza = (x: number, z: number) => plazas.some((r) => pointInRing(x, z, r));
@@ -255,11 +133,15 @@ export function buildVegetation(ctx: BuildContext): void {
   const churches = ctx.map.buildings.filter((b) => b.t === 'church').map((b) => toPts(b.o));
   const insideBuilding = (x: number, z: number) =>
     footprints.query(x - 2, z - 2, x + 2, z + 2, tmp).some((r) => pointInRing(x, z, r)) || churches.some((r) => ringDist(x, z, r) < 4);
-  // Real trees: every crown the LiDAR saw, at its position and height (thinned on phones).
+  const breakableAt = (x: number, z: number) => Math.hypot(x, z) < BREAKABLE_RADIUS;
+
+  // Real trees: every crown the LiDAR saw, at its position, height, crown size, species and colour.
   const lidar = ctx.map.ltrees ?? [];
-  const nL = lidar.length / 4;
-  const keep = Math.min(1, (ctx.quality.treeBudget * 2) / Math.max(1, nL));
-  for (let i = 0; i < lidar.length; i += 4) {
+  const stride = ctx.map.ltreeStride ?? 4;
+  const nL = lidar.length / stride;
+  const keep = Math.min(1, ctx.quality.treeBudget / Math.max(1, nL));
+  const seen = new SpatialGrid<Pt>(16);
+  for (let i = 0; i + stride - 1 < lidar.length; i += stride) {
     let x = lidar[i],
       z = lidar[i + 1];
     const h = lidar[i + 2],
@@ -277,27 +159,60 @@ export function buildVegetation(ctx: BuildContext): void {
       z = onRoad.z + (oz / len) * (onRoad.road.w / 2 + 1.2);
     }
     if (inPlaza(x, z) || insideBuilding(x, z)) continue;
-    // Tall and narrow (or by the river) reads as a poplar (chopo); the rest as broad-leaved trees.
-    const poplar = (h > 12 && r < h * 0.28) || (h > 9 && terrain.riverDistance(x, z).d < 30);
-    const kind: Kind = poplar ? 'poplar' : 'round';
-    place(kind, x, z, Math.min(2.6, Math.max(0.45, h / MODEL_HEIGHT[kind])), h > 3);
+    // Species from the bake; older maps: tall and narrow (or by the river) reads as a poplar.
+    let code = stride >= 6 ? lidar[i + 4] : 0;
+    if (stride < 6) code = (h > 12 && r < h * 0.28) || (h > 9 && terrain.riverDistance(x, z).d < 30) ? 3 : 0;
+    const tint = stride >= 6 ? lidar[i + 5] : undefined;
+    field.tree(code, x, terrain.heightAt(x, z), z, h, r, tint, breakableAt(x, z));
+    seen.insert([x, z], { minX: x, maxX: x, minZ: z, maxZ: z });
   }
+  const tmpP: Pt[] = [];
+  const hasLidarTree = (x: number, z: number) =>
+    seen.query(x - 4, z - 4, x + 4, z + 4, tmpP).some(([a, b]) => Math.hypot(a - x, b - z) < 4);
 
   for (let i = 0; i < ctx.map.trees.length; i += 2) {
     const x = ctx.map.trees[i],
       z = ctx.map.trees[i + 1];
     if (insideBuilding(x, z)) continue;
     if (inPlaza(x, z)) {
-      planeTree(ctx, x, z, terrain.heightAt(x, z) + 0.03);
+      // Pollarded planes of the Plaza Mayor (the LiDAR crowns there are skipped above).
+      field.tree(2, x, terrain.heightAt(x, z) + 0.03, z, 6.5 + hash01(x, z), 2.8, undefined, false);
       continue;
     }
     // Mapped (OSM) trees are already in the LiDAR canopy.
     if (nL > 0) continue;
     const nearRiver = terrain.riverDistance(x, z).d < 40;
-    place(nearRiver && hash01(x, z) < 0.7 ? 'poplar' : 'round', x, z, 0.8 + hash01(z, x) * 0.5);
+    field.tree(
+      nearRiver && hash01(x, z) < 0.7 ? 3 : 0,
+      x,
+      terrain.heightAt(x, z),
+      z,
+      7 + hash01(z, x) * 4,
+      3.5,
+      undefined,
+      breakableAt(x, z),
+    );
   }
-  for (let i = 0; i < ctx.map.pines.length; i += 2)
-    place('pine', ctx.map.pines[i], ctx.map.pines[i + 1], 0.8 + hash01(ctx.map.pines[i + 1], 3) * 0.5);
+  // Conifers mapped in OSM that the LiDAR did not see as a tree (young pines, garden conifers).
+  for (let i = 0; i < ctx.map.pines.length; i += 2) {
+    const x = ctx.map.pines[i],
+      z = ctx.map.pines[i + 1];
+    if (hasLidarTree(x, z) || insideBuilding(x, z)) continue;
+    field.tree(15, x, terrain.heightAt(x, z), z, 9 + hash01(z, 3) * 6, 3, undefined, breakableAt(x, z));
+  }
+
+  // Shrubs: OSM (box, cherry laurel, barberry, pampas grass) and the low crowns of the LiDAR.
+  const shrubs = ctx.map.shrubs ?? [];
+  const shrubKeep = ctx.quality.detail ? 1 : 0.55;
+  for (let i = 0; i + 3 < shrubs.length; i += 4) {
+    const x = shrubs[i],
+      z = shrubs[i + 1];
+    if (shrubs[i + 2] === 5 && hash01(x * 1.3, z * 0.7) > shrubKeep) continue;
+    if (inPlaza(x, z) || insideBuilding(x, z)) continue;
+    const road = roads.nearest(x, z, 1, (rd) => VEHICLE_ROADS.has(rd.k));
+    if (road && road.d < 0.3) continue;
+    field.shrub(shrubs[i + 2], x, terrain.heightAt(x, z), z, shrubs[i + 3]);
+  }
 
   // Infill for wooded areas, parks, orchards and scrub (only without LiDAR trees).
   let budget = nL > 0 ? 0 : ctx.quality.treeBudget;
@@ -313,11 +228,10 @@ export function buildVegetation(ctx: BuildContext): void {
       const x = rng.range(b.minX, b.maxX),
         z = rng.range(b.minZ, b.maxZ);
       if (!pointInRing(x, z, ring) || holes.some((h) => pointInRing(x, z, h)) || blocked(x, z, 2.5)) continue;
-      let kind: Kind = d.kind === 'mix' ? (terrain.riverDistance(x, z).d < 50 || rng.chance(0.3) ? 'poplar' : 'round') : d.kind;
-      if (a.l === 'n') kind = 'pine';
-      else if (a.n && /chopera/i.test(a.n)) kind = 'poplar';
+      let code = d.code === 'mix' ? (terrain.riverDistance(x, z).d < 50 || rng.chance(0.3) ? 4 : 0) : d.code;
+      if (a.l === 'n') code = 15;
       const scrub = a.k === 'scrub';
-      place(kind, x, z, scrub ? rng.range(0.35, 0.6) : rng.range(0.75, 1.3), !scrub);
+      field.tree(code, x, terrain.heightAt(x, z), z, scrub ? rng.range(2, 4) : rng.range(6, 12), 3.5, undefined, scrub);
       budget--;
     }
   }
@@ -361,7 +275,7 @@ export function buildVegetation(ctx: BuildContext): void {
     ctx.breakables.add(x, terrain.heightAt(x, z), z, 0, fancy ? 0.3 : 0.15, [
       { key: fancy ? 'lamp-ornate' : 'lamp', geo: fancy ? ornate : lamp, mat: lampMat },
     ]);
-    collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Player });
+    ctx.collision.addCircle(x, z, 0.15, { top: 4.5, mask: Layer.Player });
     ctx.lamps.push(x, terrain.heightAt(x, z) + (fancy ? 4.1 : 4.3), z);
   }
 
@@ -374,22 +288,5 @@ export function buildVegetation(ctx: BuildContext): void {
     bench(ctx, x, z, terrain.heightAt(x, z), rot);
   }
 
-  const geos = Object.fromEntries((Object.keys(MODELS) as Kind[]).map((k) => [k, MODELS[k](ctx.quality.detail ? 1 : 0.6)])) as Record<
-    Kind,
-    THREE.BufferGeometry
-  >;
-  for (const { kind, mats } of instances.values()) {
-    const im = new THREE.InstancedMesh(geos[kind], ctx.mats.leavesWind, mats.length);
-    im.customDepthMaterial = ctx.mats.leavesDepth;
-    for (let i = 0; i < mats.length; i++) im.setMatrixAt(i, mats[i]);
-    for (let i = 0; i < mats.length; i++) {
-      const v = 0.85 + hash01(i, mats.length) * 0.3;
-      const [tr, tg, tb] = TINT[kind];
-      im.setColorAt(i, new THREE.Color(v * tr, v * tg, v * tb));
-    }
-    im.computeBoundingSphere();
-    im.castShadow = ctx.quality.treeShadows;
-    im.receiveShadow = true;
-    ctx.scene.add(im);
-  }
+  return field;
 }

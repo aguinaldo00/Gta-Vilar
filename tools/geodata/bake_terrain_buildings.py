@@ -32,6 +32,7 @@ from skimage import measure
 
 from heightpng import write_height_png
 from steps import bake_steps
+from trees import classify_trees, lidar_shrubs
 from hedges import bake_hedges, classify_by_ortho, ortho_mosaic, prune_barriers
 from roofs import ortho_sampler
 from roofs import bake_roofs, fix_hidden_walls
@@ -319,7 +320,8 @@ def lidar_trees(m, dtm, H0, hedges=()):
         rad = float(np.sqrt((win > h * 0.5).sum() / np.pi))
         out += [round(minX + c + 0.5, 1), round(minZ + r + 0.5, 1), round(min(h, 32), 1), round(min(max(rad, 1.5), 7), 1)]
     m["ltrees"] = out
-    return len(out) // 4
+    m.pop("ltreeStride", None)
+    return len(out) // 4, chm, ndimage.binary_dilation(np.asarray(img, bool), iterations=1)
 
 
 def river_levels(m, dtm, H0):
@@ -561,12 +563,13 @@ def main(map_path, lidar_path, mdt_path):
     walls_path = os.path.join(os.path.dirname(lidar_path), "lidar_walls.npz")
     walls_npz = np.load(walls_path) if os.path.exists(walls_path) else None
     n_walls, n_cuts = bake_barriers(m, walls_npz, footprint | np.isfinite(roof))
+    ortho = ortho_mosaic(m, os.path.join(os.path.dirname(map_path), "ortho"), (minX, minZ, W, H))
     hedges = bake_hedges(
         m,
         dtm,
         lidar_on_grid(m, lid, "veg"),
         low_points_top(m, walls_npz),
-        ortho_mosaic(m, os.path.join(os.path.dirname(map_path), "ortho"), (minX, minZ, W, H)),
+        ortho,
         footprint | np.isfinite(roof),
         (minX, minZ, W, H),
     )
@@ -577,7 +580,9 @@ def main(map_path, lidar_path, mdt_path):
     n_steps = bake_steps(m, dtm, footprint | np.isfinite(roof), H0, (minX, minZ, W, H))
     open_crossings(m)
     n_cars = detect_cars(m, walls_npz, footprint | np.isfinite(roof)) if walls_npz is not None else 0
-    trees = lidar_trees(m, dtm, H0, hedges)
+    trees, chm, hedge_mask = lidar_trees(m, dtm, H0, hedges)
+    species = classify_trees(m, ortho, (minX, minZ, W, H))
+    n_shrubs = lidar_shrubs(m, chm, footprint | np.isfinite(roof), (minX, minZ, W, H), hedge_mask)
     river_levels(m, dtm, H0)
     carve_water(m, dtm, H0)
     out_png = os.path.join(os.path.dirname(map_path), os.path.splitext(os.path.basename(map_path))[0] + ".terrain.png")
@@ -604,6 +609,7 @@ def main(map_path, lidar_path, mdt_path):
     print(f"datum H0 = {H0:.2f} m; relief {grid.min():.1f} .. {grid.max():.1f} m; streets smoothed over {street_share * 100:.1f}% of the map")
     print(f"OSM buildings the LiDAR shows as bare ground (removed): {demolished}")
     print(f"buildings measured by LiDAR: {measured}; added from LiDAR: {added}; trees from LiDAR: {trees}")
+    print(f"tree species: {dict(sorted(species.items()))}; shrubs: {n_shrubs} from the LiDAR, {len(m.get('shrubs') or []) // 4} in all")
     print(f"barriers: {sum(1 for b in m['barriers'] if not b.get('src'))} from OSM, {n_walls} from the LiDAR ({total_length(m['barriers']) / 1000:.1f} km); {n_cuts} opened where a way crosses; {n_steps} terrace edges; {len(hedges)} hedges from the canopy; {n_green} walls/fences that the orthophoto shows green turned into hedges; {n_pruned} dropped on bridges, the river or carriageways")
     print(f"parked cars seen by the LiDAR: {n_cars}")
     print(f"facades: {f_matched} footprints matched to the cadastre, {f_photo} coloured from its facade photo")

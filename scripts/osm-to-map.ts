@@ -1074,11 +1074,59 @@ function roadAngleAt(nid: string): number | null {
   return null;
 }
 
+/**
+ * Tree species codes shared with the bake (tools/geodata/trees.py) and the game
+ * (src/world/TreeSpecies.ts): 1 plane, 2 pollarded plane, 3 Lombardy poplar, 4 black poplar,
+ * 5 white poplar, 6 willow, 7 alder, 8 ash, 9 false acacia, 10 horse chestnut, 11 lime,
+ * 12 catalpa, 13 oak, 14 holm oak, 15 pine, 16 cypress, 17 yew, 18 fruit tree, 19 purple plum.
+ */
+const SPECIES_CODE: [RegExp, number][] = [
+  [/^Platanus/, 1],
+  [/^Populus nigra.*[Ii]talica/, 3],
+  [/^Populus alba/, 5],
+  [/^Populus/, 4],
+  [/^Salix/, 6],
+  [/^Alnus/, 7],
+  [/^Fraxinus|^Ulmus/, 8],
+  [/^Robinia/, 9],
+  [/^Aesculus/, 10],
+  [/^Tilia/, 11],
+  [/^Catalpa/, 12],
+  [/^Quercus ilex/, 14],
+  [/^Quercus/, 13],
+  [/^Pinus/, 15],
+  [/^Cupressus|^Chamaecyparis|^Thuja|^Cupressocyparis/, 16],
+  [/^Taxus/, 17],
+  [/^Prunus cerasifera/, 19],
+  [/^Malus|^Pyrus|^Prunus|^Juglans|^Ficus/, 18],
+];
+/** Shrub codes: 0 generic, 1 box, 2 cherry laurel, 3 purple barberry, 4 pampas grass (5: found in the LiDAR by the bake); shrubs are [x, z, code, height]. */
+const SHRUB_CODE: [RegExp, number][] = [
+  [/^Buxus/, 1],
+  [/^Prunus laurocerasus|^Laurus|^Photinia|^Ligustrum/, 2],
+  [/^Berberis/, 3],
+  [/^Cortaderia/, 4],
+];
+const codeOf = (table: [RegExp, number][], t: Tags) => {
+  const name = t.species ?? t.genus ?? t.taxon ?? '';
+  return table.find(([re]) => re.test(name))?.[1] ?? 0;
+};
+const treeSpecies: number[] = [];
+const shrubs: number[] = [];
+
 for (const [id, n] of nodes) {
   if (!n.tags) continue;
   const p = project(n.lat, n.lon);
   if (!inB(p)) continue;
   const t = n.tags;
+  if (t.natural === 'tree') {
+    const code = codeOf(SPECIES_CODE, t) || (t.leaf_type === 'needleleaved' ? 15 : 0);
+    if (code) treeSpecies.push(q(p[0]), q(p[1]), code);
+  }
+  if (t.natural === 'shrub' || (t.natural === 'plant' && /^Cortaderia/.test(t.species ?? ''))) {
+    const code = codeOf(SHRUB_CODE, t);
+    shrubs.push(q(p[0]), q(p[1]), code, code === 4 ? 2 : 1.3);
+  }
   if (t.natural === 'tree' && t.leaf_type === 'needleleaved') pines.push(q(p[0]), q(p[1]));
   else if (t.natural === 'tree') trees.push(q(p[0]), q(p[1]));
   else if (t.highway === 'street_lamp') {
@@ -1991,6 +2039,8 @@ const out = {
   weirs,
   trees,
   pines,
+  treeSpecies,
+  shrubs,
   lamps,
   benches,
   crossings,

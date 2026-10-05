@@ -4,6 +4,7 @@ import { CHUNK } from './Batcher';
 import { Mesh3 } from './Buildings';
 import type { BuildContext } from './context';
 import { hash01, toPts } from './geo';
+import { Unit } from './props';
 import { VEHICLE_ROADS } from './Roads';
 import { fenceMaterial } from './Sports';
 
@@ -11,7 +12,6 @@ import { fenceMaterial } from './Sports';
 const DEFAULT_H: Record<string, number> = { wall: 1.6, retaining_wall: 1.2, fence: 1.8, hedge: 1.5, railing: 0.9, verja: 1.7 };
 const THICK: Record<string, number> = { wall: 0.3, retaining_wall: 0.45, fence: 0.25, hedge: 0.9, railing: 0.08, verja: 0.35 };
 /** Masonry base under railings and wire fences. */
-const PLINTH = 0.45;
 /** Size of one wire-mesh diamond, m. */
 const MESH_CELL = 0.12;
 /** Long runs are cut into pieces this long so they follow the ground. */
@@ -20,7 +20,6 @@ const PIECE = 4;
 const STEP_BODY = 2.2;
 const WALL_TINTS = ['#ebe5d6', '#d9caa8', '#c9bba0', '#e2d9c6'].map((c) => new THREE.Color(c));
 const CONCRETE = new THREE.Color('#b9b4aa');
-const RAILING = new THREE.Color('#1e2224');
 const STONE = new THREE.Color('#d8cdb4');
 const WHITE = new THREE.Color('#ffffff');
 /** Clipped hedge greens: privet, laurel, arizónica (cypress), box. */
@@ -186,6 +185,91 @@ function prism(
   }
 }
 
+/** Height of the kerb under a wire fence: below a car's clearance (0.3 m), so it drives over it. */
+const FENCE_KERB = 0.22;
+/** Reference length of a breakable fence panel (its texture is laid out for this). */
+const PANEL = 2;
+const panelGeos = new Map<string, THREE.BufferGeometry>();
+let railingMat: THREE.MeshStandardMaterial | null = null;
+function railingBars(): THREE.MeshStandardMaterial {
+  if (!railingMat) railingMat = barsMaterial();
+  return railingMat;
+}
+
+/**
+ * A fence line as panels of about PANEL metres, each a breakable (a car knocks it flat):
+ * the panel (wire mesh or iron bars) and a post at its start. y0 / y1: bottom of the panel
+ * at each end; h: panel height.
+ */
+function breakablePanels(
+  ctx: BuildContext,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  y0: number,
+  y1: number,
+  h: number,
+  kind: 'fence' | 'railing',
+  mat: THREE.Material,
+): void {
+  const len = Math.hypot(x1 - x0, z1 - z0);
+  const n = Math.max(1, Math.round(len / PANEL));
+  const seg = len / n;
+  const a = Math.atan2(x1 - x0, z1 - z0) - Math.PI / 2;
+  const hk = Math.max(0.5, Math.round(h * 4) / 4);
+  const key = `${kind}-${hk}`;
+  let geo = panelGeos.get(key);
+  if (!geo) {
+    geo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
+    const uv = geo.attributes.uv as THREE.BufferAttribute;
+    const cu = kind === 'fence' ? MESH_CELL : 0.6;
+    for (let j = 0; j < uv.count; j++) uv.setXY(j, (uv.getX(j) * PANEL) / cu, (uv.getY(j) * hk) / (kind === 'fence' ? MESH_CELL : hk));
+    panelGeos.set(key, geo);
+  }
+  const postMat = kind === 'fence' ? ctx.mats.tint('#5d6a63') : ctx.mats.tint('#1e2224');
+  for (let k = 0; k < n; k++) {
+    const t = (k + 0.5) / n;
+    const x = x0 + (x1 - x0) * t,
+      z = z0 + (z1 - z0) * t,
+      y = y0 + (y1 - y0) * t;
+    ctx.breakables.add(
+      x,
+      y,
+      z,
+      a,
+      seg / 2,
+      [
+        { key, geo, mat, castShadow: false, local: new THREE.Matrix4().makeScale(seg, hk, 1) },
+        {
+          key: `${kind}-post`,
+          geo: Unit.box,
+          mat: postMat,
+          castShadow: false,
+          range: ctx.quality.detail ? 260 : 160,
+          local: new THREE.Matrix4().compose(
+            new THREE.Vector3(-seg / 2, (hk + 0.15) / 2 - 0.15, 0),
+            new THREE.Quaternion(),
+            new THREE.Vector3(0.06, hk + 0.15, 0.06),
+          ),
+        },
+        ...(kind === 'railing'
+          ? [
+              {
+                key: 'railing-rail',
+                geo: Unit.box,
+                mat: postMat,
+                local: new THREE.Matrix4().compose(new THREE.Vector3(0, hk, 0), new THREE.Quaternion(), new THREE.Vector3(seg, 0.06, 0.06)),
+              },
+            ]
+          : []),
+      ],
+      0.9,
+    );
+    ctx.collision.addBox(x, z, seg, 0.15, { rot: Math.atan2(-(z1 - z0), x1 - x0), top: h + 0.3, mask: Layer.Player });
+  }
+}
+
 /**
  * Walls, fences and hedges: the OSM barriers and the plot walls found in the
  * LiDAR (tools/geodata/walls.py), cut into pieces that follow the ground,
@@ -237,7 +321,7 @@ export function buildBarriers(ctx: BuildContext): void {
         // Footing below the ground on both ends; tops follow the slope.
         const f0 = Math.min(g0, g1) - 0.3,
           f1 = f0;
-        const { masonry, hedges, mesh, bars } = at((x0 + x1) / 2, (z0 + z1) / 2);
+        const { masonry, hedges, bars } = at((x0 + x1) / 2, (z0 + z1) / 2);
         // End faces only where the run starts and stops (pieces in between are joined).
         const caps: [boolean, boolean] = [i === 1 && k === 0, i === pts.length - 1 && k === n - 1];
         if (b.src === 'step' && b.top !== undefined) {
@@ -325,38 +409,8 @@ export function buildBarriers(ctx: BuildContext): void {
           continue;
         }
         if (b.k === 'railing') {
-          // Black iron railing: round-headed posts every ~1.5 m, a top rail and a lower rail.
-          const iron = RAILING;
-          prism(masonry, x0, z0, x1, z1, 0.06, g0 + h - 0.06, g1 + h - 0.06, g0 + h, g1 + h, iron, 1, caps);
-          prism(masonry, x0, z0, x1, z1, 0.04, g0 + 0.25, g1 + 0.25, g0 + 0.3, g1 + 0.3, iron, 1, caps);
-          // Bars between the rails.
-          bars.quad(
-            [x0, g0 + 0.3, z0],
-            [x1, g1 + 0.3, z1],
-            [x1, g1 + h - 0.06, z1],
-            [x0, g0 + h - 0.06, z0],
-            [0, 0],
-            [len / n / 0.6, 0],
-            [len / n / 0.6, h - 0.36],
-            [0, h - 0.36],
-            [-(z1 - z0), 0, x1 - x0],
-            WHITE,
-          );
-          const posts = Math.max(1, Math.round(len / n / 1.5));
-          for (let j = 0; j <= posts; j++) {
-            if (j === 0 && !caps[0] && k > 0) continue;
-            const px = x0 + ((x1 - x0) * j) / posts,
-              pz = z0 + ((z1 - z0) * j) / posts,
-              py = g0 + ((g1 - g0) * j) / posts;
-            prism(masonry, px - 0.05, pz, px + 0.05, pz, 0.1, py - 0.2, py - 0.2, py + h + 0.08, py + h + 0.08, iron, 1);
-          }
-          collision.addBox((x0 + x1) / 2, (z0 + z1) / 2, Math.hypot(x1 - x0, z1 - z0), 0.15, {
-            rot: Math.atan2(-(z1 - z0), x1 - x0),
-            bottom: f0,
-            top: Math.max(g0, g1) + h,
-            mask: Layer.Bodies,
-            absolute: true,
-          });
+          // Black iron railing in ~2 m sections a car can knock over.
+          breakablePanels(ctx, x0, z0, x1, z1, g0, g1, h, 'railing', railingBars());
           continue;
         }
         if (b.k === 'hedge') {
@@ -390,21 +444,12 @@ export function buildBarriers(ctx: BuildContext): void {
           prism(hedges, x0, z0, x1, z1, tt, hb, hb1, top0 - 0.18, top1 - 0.18, green, 1.2, caps);
           prism(hedges, x0, z0, x1, z1, tt * 0.8, top0 - 0.22, top1 - 0.22, top0, top1, green, 1.2, caps);
         } else if (b.k === 'fence') {
-          const p = Math.min(PLINTH, h * 0.4);
+          // Low kerb (a car rolls over it) and the wire mesh on posts, in ~2 m panels a car
+          // knocks over (Breakables); people bump into the mesh.
+          const p = Math.min(FENCE_KERB, h * 0.25);
           prism(masonry, x0, z0, x1, z1, t, f0, f1, g0 + p, g1 + p, tint, 1.5, caps);
-          // Mesh panel (double-sided, alpha-tested) from the plinth to the top.
-          mesh.quad(
-            [x0, g0 + p, z0],
-            [x1, g1 + p, z1],
-            [x1, g1 + h, z1],
-            [x0, g0 + h, z0],
-            [0, 0],
-            [len / n / MESH_CELL, 0],
-            [len / n / MESH_CELL, (h - p) / MESH_CELL],
-            [0, (h - p) / MESH_CELL],
-            [-(z1 - z0), 0, x1 - x0],
-            tint,
-          );
+          breakablePanels(ctx, x0, z0, x1, z1, g0 + p, g1 + p, h - p, 'fence', fence);
+          continue;
         } else {
           prism(masonry, x0, z0, x1, z1, t, f0, f1, g0 + h, g1 + h, tint, 1.5, caps);
           // Coping stone along the top of free-standing walls.
@@ -415,7 +460,7 @@ export function buildBarriers(ctx: BuildContext): void {
           rot: Math.atan2(-(z1 - z0), x1 - x0),
           bottom: f0,
           top: Math.max(g0, g1) + h,
-          mask: b.k === 'fence' ? Layer.Bodies : Layer.Solid,
+          mask: Layer.Solid,
           absolute: true,
         });
       }

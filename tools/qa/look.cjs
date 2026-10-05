@@ -2,13 +2,13 @@
 //   npm run build && npx vite preview --port 4173 &
 //   HOURS=19.5 WEATHER=nublado node tools/qa/look.cjs out/ plaza 60 -40 25 0 0 [name x z h tx tz ...]
 // Camera at (x, ground + h, z) looking at (tx, ground, tz). HOURS (default 13) and
-// WEATHER (despejado, nublado, lluvia, lluvia_fuerte, niebla; default despejado) set the scene.
+// TOUCH=1 shoots on a phone. WEATHER (despejado, nublado, lluvia, lluvia_fuerte, niebla; default despejado) set the scene.
 // Prints the page errors at the end (an empty list is a pass).
-let chromium;
+let chromium, devices;
 try {
-  ({ chromium } = require('playwright'));
+  ({ chromium, devices } = require('playwright'));
 } catch {
-  ({ chromium } = require('/opt/node22/lib/node_modules/playwright'));
+  ({ chromium, devices } = require('/opt/node22/lib/node_modules/playwright'));
 }
 const [dir, ...rest] = process.argv.slice(2);
 const views = [];
@@ -18,7 +18,8 @@ const weather = process.env.WEATHER ?? 'despejado';
 const url = process.env.URL ?? 'http://localhost:4173/';
 (async () => {
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  // TOUCH=1: a phone (touch quality profile).
+  const page = await browser.newPage(process.env.TOUCH ? { ...devices['Pixel 7 landscape'] } : { viewport: { width: 1280, height: 720 } });
   page.setDefaultTimeout(300000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

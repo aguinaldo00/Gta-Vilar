@@ -28,6 +28,7 @@ import { DigitalScreens } from './Screens';
 import { buildSports } from './Sports';
 import { buildStreetFurniture } from './StreetFurniture';
 import { buildGround, groundMaterial, OrthoTiles, TerrainModel } from './Terrain';
+import type { TreeField } from './TreeField';
 import { buildVegetation } from './Vegetation';
 import { waterTime } from './Water';
 
@@ -64,6 +65,8 @@ export class World {
   /** Ground wetness 0–1 (set from the climate each frame): less tyre grip. */
   wetness = 0;
   readonly breakables = new Breakables();
+  /** Trees by species, with near / far models. */
+  trees!: TreeField;
   /** Parked cars from the LiDAR, which a driven car can shove. */
   parkedCars!: ParkedCars;
   private readonly lampHeads: number[] = [];
@@ -141,7 +144,8 @@ export class World {
     batch.stage = 'hydro';
     buildHydro(ctx);
     batch.stage = 'vegetation';
-    buildVegetation(ctx);
+    this.trees = buildVegetation(ctx);
+    this.trees.finish(scene);
     batch.stage = 'landmarks';
     buildLandmarks(ctx);
     this.grass = new Grass(map, scene, quality.grassRadius, quality.grassSpacing, quality.groundTexture >= 4096 ? 4096 : 2048);
@@ -334,5 +338,7 @@ export class World {
     for (const a of this.animators) a(time, dt);
     this.env.update(time, focus, camera);
     this.grass.update(camera);
+    this.trees.update(camera.position);
+    this.breakables.cull(camera.position);
   }
 }
